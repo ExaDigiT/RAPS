@@ -48,17 +48,18 @@ class Scheduler:
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
 
-            # For synthetic jobs the number of requested nodes is given.
-            # Make sure the available nodes count meets job.nodes_required.
-            synthetic_bool = len(self.resource_manager.available_nodes) >= job.nodes_required
-
-            # For telemetry replay jobs a list of requested nodes is provided.
             # Make sure the requested nodes are available.
-            telemetry_bool = False
-            if job.requested_nodes:
-                telemetry_bool = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+            nodes_available = False
+            if job.requested_nodes:  # nodes specified, i.e., telemetry replay
+                nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+            else:  # synthetic
+                nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
 
-            if synthetic_bool or telemetry_bool:
+            if self.policy == PolicyType.REPLAY and current_time < job.start_time:
+                # Don't start replay jobs until they reach their start_time
+                nodes_available = False
+
+            if nodes_available:
                 self.resource_manager.assign_nodes_to_job(job, current_time)
                 running.append(job)
                 queue.remove(job)
