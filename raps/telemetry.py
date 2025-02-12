@@ -51,6 +51,7 @@ class Telemetry:
     def load_snapshot(self, snapshot: str) -> (list, dict):
         """Reads a snapshot from a compressed file and returns the jobs."""
         jobs, accounts_dict = np.load(snapshot, allow_pickle=True, mmap_mode='r')
+        print(jobs)
         return jobs['jobs'].tolist(), Accounts.initialize_accounts_from_dict(accounts_dict)
 
     def load_data(self, files):

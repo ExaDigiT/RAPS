@@ -1,7 +1,7 @@
 from enum import Enum
 
 def job_dict(nodes_required, name, account, cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
-             wall_time, end_state, scheduled_nodes, time_offset, job_id, priority=0, partition=0):
+             wall_time, end_state, scheduled_nodes, time_offset, job_id, priority=0, partition=0, start_time=0):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -17,7 +17,8 @@ def job_dict(nodes_required, name, account, cpu_trace, gpu_trace, ntx_trace, nrx
         'submit_time': time_offset,
         'id': job_id,
         'priority': priority,
-        'partition': partition
+        'partition': partition,
+        'start_time': start_time
     }
 
 

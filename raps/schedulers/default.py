@@ -11,6 +11,7 @@ class PolicyType(Enum):
     PRIORITY = 'priority'
     FUGAKU_PTS = 'fugaku_pts'
     SJF = 'sjf'
+    REPLAY = 'replay'
 
 
 class Scheduler:
@@ -34,6 +35,8 @@ class Scheduler:
             return sorted(queue, key=lambda job: job.priority, reverse=True)
         elif self.policy == PolicyType.FUGAKU_PTS:
             return self.sort_fugaku_redeeming(queue, accounts)
+        elif self.policy == PolicyType.REPLAY:
+            return sorted(queue, key=lambda job: job.start_time)
         else:
             raise ValueError(f"Unknown policy type: {self.policy}")
 
