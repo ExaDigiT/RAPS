@@ -145,7 +145,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         time_start = max(diff.total_seconds(), 0)
 
         if fastforward:
-            time_offset -= fastforward
+            time_start -= fastforward
+            time_submit -= fastforward
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames
@@ -155,6 +156,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
             scheduled_nodes = None
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
+            time_start = None
             priority = aging_boost(nodes_required)
 
         elif reschedule == 'submit-time':
@@ -169,7 +171,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 indices = xname_to_index(xname, config)
                 scheduled_nodes.append(indices)
 
-        if gpu_trace.size > 0 and (jid == job_id or jid == '*') and time_start > 0:
+        if gpu_trace.size > 0 and (jid == job_id or jid == '*') and time_submit > 0:
             job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [], wall_time,
                                 end_state, scheduled_nodes, time_submit, job_id, priority, time_start)
             jobs.append(job_info)

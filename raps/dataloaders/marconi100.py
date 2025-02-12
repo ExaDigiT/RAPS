@@ -130,31 +130,37 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         priority = int(jobs_df.loc[jidx, 'priority'])
 
-        # wall_time = jobs_df.loc[i, 'run_time']
         wall_time = gpu_trace.size * config['TRACE_QUANTA'] # seconds
         end_state = jobs_df.loc[jidx, 'job_state']
+
         time_start = jobs_df.loc[jidx+1, 'start_time']
-        diff = time_start - time_zero
+        time_start = time_start - time_zero
+
+        time_submit = jobs_df.loc[jidx, 'submit_time']
+        time_submit = time_submit - time_zero
 
         if jid == '*':
-            time_offset = max(diff.total_seconds(), 0)
+            time_submit = max(time_submit.total_seconds(), 0)
         else:
             # When extracting out a single job, run one iteration past the end of the job
-            time_offset = config['UI_UPDATE_FREQ']
+            time_submit = config['UI_UPDATE_FREQ']
 
-        if fastforward: time_offset -= fastforward
+        if fastforward:
+            time_start -= fastforward
+            time_submit -= fastforward
 
         if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
             scheduled_nodes = None
-            time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
+            time_submit = next_arrival(1/config['JOB_ARRIVAL_TIME'])
+            time_start = None
         elif reschedule == 'submit-time':
             raise NotImplementedError
         else:  # Prescribed replay
             scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
-        if gpu_trace.size > 0 and time_offset >= 0:
+        if gpu_trace.size > 0 and time_submit >= 0:
             job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [], wall_time,
-                                end_state, scheduled_nodes, time_offset, job_id, priority)
+                                end_state, scheduled_nodes, time_submit, job_id, priority, time_start)
             jobs.append(job_info)
 
     return jobs
