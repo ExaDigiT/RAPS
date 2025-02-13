@@ -1,4 +1,5 @@
 import argparse
+import sys
 from raps.schedulers.default import PolicyType
 
 parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulator (RAPS)')
@@ -30,8 +31,8 @@ parser.add_argument('--scale', type=int, default=0, help='Scale telemetry to max
 parser.add_argument('--system', type=str, default='frontier', help='System config to use')
 choices = ['default', 'nrel', 'anl', 'flux']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
-choices = [policy.value for policy in PolicyType]
-parser.add_argument('--policy', type=str, choices=choices, default=choices[0], help='Schedule policy to use')
+policies = [policy.value for policy in PolicyType]
+parser.add_argument('--policy', type=str, choices=policies, default=None, help='Schedule policy to use')
 choices = ['random', 'benchmark', 'peak', 'idle']
 parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 choices = ['layout1', 'layout2']
@@ -42,3 +43,16 @@ parser.add_argument('--accounts-json', type=str, help='Json of account stats gen
 args = parser.parse_args()
 args_dict = vars(args)
 print(args_dict)
+
+# Determine the default policy based on --replay
+policy_specified = args.policy is not None  # was policy set explicitly
+
+if not policy_specified:
+    if args.replay:  # if --replay is provided, default to "replay"
+        args.policy = "replay"
+        print(f"No policy specified, using default for replay: {args.policy}")
+    else:  # otherwise, default to "fcfs"
+        args.policy = policies[0]
+        print(f"No policy specified, using default: {args.policy}")
+
+print("Final policy:", args.policy)

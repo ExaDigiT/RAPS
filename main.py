@@ -72,9 +72,6 @@ layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, **confi
 
 if args.replay:
 
-    if not args.reschedule:
-        args.policy = "replay"
-
     if args.fastforward:
         args.fastforward = convert_to_seconds(args.fastforward)
 
