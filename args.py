@@ -15,8 +15,8 @@ parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose
 parser.add_argument('--seed', action='store_true', help='Set random number seed for deterministic simulation')
 parser.add_argument('-f', '--replay', nargs='+', type=str, help='Either: path/to/joblive path/to/jobprofile' + \
                                                                 ' -or- filename.npz (overrides --workload option)')
-choices = ['poisson'] # to allow for future additional options
-parser.add_argument('--reschedule', nargs='?', const='poisson', type=str, choices=choices, help='Reschedule the telemetry workload')
+choices = ['prescribed', 'poisson']
+parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
 parser.add_argument('-u', '--uncertainties', action='store_true',
                     help='Change from floating point units to floating point units with uncertainties.' + \
                                                                 ' Very expensive w.r.t simulation time!')
