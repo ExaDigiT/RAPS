@@ -3,15 +3,7 @@ from ..utils import summarize_ranges
 
 from ..workload import MAX_PRIORITY
 
-
-class PolicyType(Enum):
-    """Supported scheduling policies."""
-    FCFS = 'fcfs'
-    BACKFILL = 'backfill'
-    PRIORITY = 'priority'
-    FUGAKU_PTS = 'fugaku_pts'
-    SJF = 'sjf'
-    REPLAY = 'replay'
+from ..policy import PolicyType
 
 
 class Scheduler:
@@ -29,8 +21,6 @@ class Scheduler:
         """Sort jobs based on the selected scheduling policy."""
         if self.policy == PolicyType.FCFS or self.policy == PolicyType.BACKFILL:
             return sorted(queue, key=lambda job: job.submit_time)
-        elif self.policy == PolicyType.SJF:
-            return sorted(queue, key=lambda job: job.wall_time)
         elif self.policy == PolicyType.PRIORITY:
             return sorted(queue, key=lambda job: job.priority, reverse=True)
         elif self.policy == PolicyType.FUGAKU_PTS:
@@ -38,7 +28,7 @@ class Scheduler:
         elif self.policy == PolicyType.REPLAY:
             return sorted(queue, key=lambda job: job.start_time)
         else:
-            raise ValueError(f"Unknown policy type: {self.policy}")
+            raise ValueError(f"Policy not implemented: {self.policy}")
 
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         # Sort the queue in place.
