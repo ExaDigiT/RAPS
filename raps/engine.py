@@ -288,6 +288,11 @@ class Engine:
             average_wait_time = aggregate_wait_time / len(self.job_history_dict)
             average_turnaround_time = aggregate_turnaround_time / len(self.job_history_dict)
         else:
+            # Set these to -1 to indicate nothing ran
+            min_wait_time = -1
+            max_wait_time = -1
+            min_turnaround_time = -1
+            max_turnaround_time = -1
             average_wait_time = -1
             average_turnaround_time = -1
         job_stats = {
