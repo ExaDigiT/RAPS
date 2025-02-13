@@ -1,6 +1,6 @@
 {
     "SEED": 42,
-    "JOB_ARRIVAL_TIME": 900,
+    "JOB_ARRIVAL_TIME": 100,
     "MTBF": 11,
     "TRACE_QUANTA": 15,
     "MIN_WALL_TIME": 3600,

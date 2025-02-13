@@ -37,7 +37,6 @@ class Engine:
             total_nodes=self.config['TOTAL_NODES'],
             down_nodes=self.config['DOWN_NODES']
         )
-
         # Initialize running and queue, etc.
         self.running = []
         self.queue = []
@@ -63,12 +62,16 @@ class Engine:
         )
         print(f"Using scheduler: {scheduler_type}")
 
-    def eligible_jobs(self,jobs_to_submit):
+    def eligible_jobs(self, jobs_to_submit):
+        # Build a list of jobs whose submit_time is <= current_time.
+        eligible = [job for job in jobs_to_submit if job['submit_time'] <= self.current_time]
+        # Remove those jobs from jobs_to_submit:
+        jobs_to_submit[:] = [job for job in jobs_to_submit if job['submit_time'] > self.current_time]
+        # Convert them to Job instances and build list of eligible jobs.
         eligible_jobs_list = []
-        while jobs_to_submit and jobs_to_submit[0]['submit_time'] <= self.current_time:
-            job_info = jobs_to_submit.pop(0)
-            job = Job(job_info, self.current_time)
-            eligible_jobs_list.append(job)
+        for job_data in eligible:
+            job_instance = Job(job_data, self.current_time)
+            eligible_jobs_list.append(job_instance)
         return eligible_jobs_list
 
     def tick(self):
@@ -130,13 +133,10 @@ class Engine:
             self.running.remove(job)
             self.jobs_completed += 1
             job_stats = job.statistics()
-            self.accounts.update_account_statistics(job_stats)
+            #self.accounts.update_account_statistics(job_stats)
             self.job_history_dict.append(job_stats.__dict__)
             # Free the nodes via the resource manager.
             self.resource_manager.free_nodes_from_job(job)
-
-        # Ask scheduler to schedule any jobs waiting in queue
-        self.scheduler.schedule(self.queue, self.running, self.current_time, self.accounts)
 
         # Update the power array UI component
         rack_power, rect_losses = self.power_manager.compute_rack_power()

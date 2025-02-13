@@ -86,8 +86,6 @@ def load_data_from_df(df, **kwargs):
         submit_time = row['adt'] if 'adt' in df.columns else min_time
         if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        elif reschedule == 'submit-time':
-            raise NotImplementedError
         else:
             time_offset = (submit_time - min_time).total_seconds()  # Compute time offset in seconds
 

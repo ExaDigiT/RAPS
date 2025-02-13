@@ -72,6 +72,9 @@ layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, **confi
 
 if args.replay:
 
+    if not args.reschedule:
+        args.policy = "replay"
+
     if args.fastforward:
         args.fastforward = convert_to_seconds(args.fastforward)
 
@@ -89,7 +92,7 @@ if args.replay:
     # Read telemetry data (either npz file or via custom data loader)
     if args.replay[0].endswith(".npz"):  # Replay .npz file
         print(f"Loading {args.replay[0]}...")
-        jobs, accounts = td.load_snapshot(args.replay[0])
+        jobs = td.load_snapshot(args.replay[0])
 
         if args.scale:
             for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -101,16 +104,13 @@ if args.replay:
             for job in tqdm(jobs, desc="Rescheduling jobs"):
                 job['requested_nodes'] = None
                 job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-        elif args.reschedule == 'submit-time':
-            raise NotImplementedError
 
     else:  # custom data loader
         print(*args.replay)
         jobs = td.load_data(args.replay)
         accounts = Accounts(jobs)
-        sc.accounts = accounts
         accounts_dict = accounts.to_dict()
-        td.save_snapshot(jobs, accounts, filename=DIR_NAME)
+        td.save_snapshot(jobs, filename=DIR_NAME)
 
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs
@@ -148,7 +148,7 @@ else:  # Synthetic jobs
 OPATH = OUTPUT_PATH / DIR_NAME
 print("Output directory is: ", OPATH)
 sc.opath = OPATH
-sc.accounts = accounts
+#sc.accounts = accounts
 
 if args.plot or args.output:
     try:

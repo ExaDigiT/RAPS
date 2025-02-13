@@ -160,8 +160,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
             scheduled_nodes = None
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        elif reschedule == 'submit-time':
-            raise NotImplementedError
         else:  # Prescribed replay
             scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 

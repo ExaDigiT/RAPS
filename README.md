@@ -70,7 +70,7 @@ This will simulate synthetic workloads on two partitions as defined in `config/s
 
 This will dump a .npz file with a randomized name, e.g. ac23db.npz. Let's rename this file to pm100.npz for clarity. Note: can control-C when the simulation starts. Now, this pm100.npz file can be used with `multi-part-sim.py` as follows:
 
-    python multi-part-sim.py -x setonix/* -f pm100.npz --reschedule poisson --scale 192
+    python multi-part-sim.py -x setonix/* -f pm100.npz --reschedule --scale 192
 
 The `--reschedule` flag will use the internal scheduler to determine what nodes to schedule for each job, and the `--scale` flag will specify the maximum number of nodes for each job (generally set this to the max number of nodes of the smallest partition). 
 

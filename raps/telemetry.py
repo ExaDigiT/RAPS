@@ -44,15 +44,14 @@ class Telemetry:
         except:
             print("WARNING: Failed to load dataloader")
 
-    def save_snapshot(self, jobs: list, accounts: dict, filename: str):
+    def save_snapshot(self, jobs: list, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
-        np.savez_compressed(filename, jobs=jobs, accounts=accounts)
+        np.savez_compressed(filename, jobs=jobs)
 
-    def load_snapshot(self, snapshot: str) -> (list, dict):
+    def load_snapshot(self, snapshot: str) -> list:
         """Reads a snapshot from a compressed file and returns the jobs."""
-        jobs, accounts_dict = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        print(jobs)
-        return jobs['jobs'].tolist(), Accounts.initialize_accounts_from_dict(accounts_dict)
+        jobs = np.load(snapshot, allow_pickle=True, mmap_mode='r')
+        return jobs['jobs'].tolist()
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""

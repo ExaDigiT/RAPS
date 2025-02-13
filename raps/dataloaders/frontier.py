@@ -140,7 +140,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         diff = time_submit - time_zero
         time_submit = max(diff.total_seconds(), 0)
 
-        time_start = jobs_df.loc[jidx+1, 'time_start']
+        time_start = jobs_df.loc[jidx, 'time_start']
         diff = time_start - time_zero
         time_start = max(diff.total_seconds(), 0)
 
@@ -159,11 +159,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             time_start = None
             priority = aging_boost(nodes_required)
 
-        elif reschedule == 'submit-time':
-            scheduled_nodes = None
-            priority = aging_boost(nodes_required)
-            #raise NotImplementedError
-
         else:  # Prescribed replay
             scheduled_nodes = []
             priority = 0  # not used for replay
@@ -171,7 +166,10 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 indices = xname_to_index(xname, config)
                 scheduled_nodes.append(indices)
 
-        if gpu_trace.size > 0 and (jid == job_id or jid == '*') and time_submit > 0:
+        if gpu_trace.size == 0:
+            print("ignoring job b/c zero trace:", jidx, time_submit, time_start, nodes_required)
+
+        if gpu_trace.size > 0 and (jid == job_id or jid == '*') and time_submit >= 0:
             job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [], wall_time,
                                 end_state, scheduled_nodes, time_submit, job_id, priority, time_start)
             jobs.append(job_info)

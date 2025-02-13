@@ -133,7 +133,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         wall_time = gpu_trace.size * config['TRACE_QUANTA'] # seconds
         end_state = jobs_df.loc[jidx, 'job_state']
 
-        time_start = jobs_df.loc[jidx+1, 'start_time']
+        time_start = jobs_df.loc[jidx, 'start_time']
         time_start = time_start - time_zero
 
         time_submit = jobs_df.loc[jidx, 'submit_time']
@@ -153,8 +153,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             scheduled_nodes = None
             time_submit = next_arrival(1/config['JOB_ARRIVAL_TIME'])
             time_start = None
-        elif reschedule == 'submit-time':
-            raise NotImplementedError
         else:  # Prescribed replay
             scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 

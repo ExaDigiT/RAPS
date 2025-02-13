@@ -124,8 +124,6 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
             scheduled_nodes = None
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        elif reschedule == 'submit-time':
-            raise NotImplementedError
         else:
             scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
             time_offset = compute_time_offset(row['begin_time'], min_time)
