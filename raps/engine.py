@@ -2,9 +2,12 @@ from typing import Optional
 import dataclasses
 import pandas as pd
 
+import sys
+
 from .job import Job, JobState
 from .network import network_utilization
 from .utils import summarize_ranges, expand_ranges, get_utilization
+from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
 from .schedulers import load_scheduler
 
@@ -227,14 +230,10 @@ class Engine:
 
             yield self.tick()
 
-    def get_stats(self):
+    def get_system_stats(self):
         """ Return output statistics """
-        sum_values = lambda values: sum(x[1] for x in values) if values else 0
-        min_value = lambda values: min(x[1] for x in values) if values else 0
-        max_value = lambda values: max(x[1] for x in values) if values else 0
         num_samples = len(self.power_manager.history) if self.power_manager else 0
 
-        throughput = self.jobs_completed / self.timesteps * 3600 if self.timesteps else 0  # Jobs per hour
         average_power_mw = sum_values(self.power_manager.history) / num_samples / 1000 if num_samples else 0
         average_loss_mw = sum_values(self.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
         min_loss_mw = min_value(self.power_manager.loss_history) / 1000 if num_samples else 0
@@ -248,10 +247,6 @@ class Engine:
 
         stats = {
             'num_samples': num_samples,
-            'jobs completed': self.jobs_completed,
-            'throughput': f'{throughput:.2f} jobs/hour',
-            'jobs still running': [job.id for job in self.running],
-            'jobs still in queue': [job.id for job in self.queue],
             'average power': f'{average_power_mw:.2f} MW',
             'min loss': f'{min_loss_mw:.2f} MW',
             'average loss': f'{average_loss_mw:.2f} MW',
@@ -266,3 +261,45 @@ class Engine:
 
     def get_job_history_dict(self):
         return self.job_history_dict
+
+    def get_job_stats(self):
+        throughput = self.jobs_completed / self.timesteps * 3600 if self.timesteps else 0  # Jobs per hour
+        min_wait_time = sys.maxsize
+        max_wait_time = -sys.maxsize - 1
+        aggregate_wait_time = 0
+        min_turnaround_time = sys.maxsize
+        max_turnaround_time = -sys.maxsize - 1
+        aggregate_turnaround_time = 0
+        for job in self.job_history_dict:
+            wait_time = job["start_time"] - job["submit_time"]
+            aggregate_wait_time += wait_time
+            turnaround_time = job["end_time"] - job["submit_time"]
+            aggregate_turnaround_time += turnaround_time
+            if wait_time < min_wait_time:
+                min_wait_time = wait_time
+            if wait_time > max_wait_time:
+                max_wait_time = wait_time
+            if turnaround_time < min_turnaround_time:
+                min_turnaround_time = turnaround_time
+            if turnaround_time > max_turnaround_time:
+                max_turnaround_time = turnaround_time
+
+        if len(self.job_history_dict) != 0:
+            average_wait_time = aggregate_wait_time / len(self.job_history_dict)
+            average_turnaround_time = aggregate_turnaround_time / len(self.job_history_dict)
+        else:
+            average_wait_time = -1
+            average_turnaround_time = -1
+        job_stats = {
+            'jobs completed': self.jobs_completed,
+            'throughput': f'{throughput:.2f} jobs/hour',
+            'jobs still running': [job.id for job in self.running],
+            'jobs still in queue': [job.id for job in self.queue],
+            'min_wait_time': min_wait_time,
+            'max_wait_time': max_wait_time,
+            'average_wait_time': average_wait_time,
+            'min_turnaround_time': min_turnaround_time,
+            'max_turnaround_time': max_turnaround_time,
+            'average_turnaround_time': average_turnaround_time
+        }
+        return job_stats

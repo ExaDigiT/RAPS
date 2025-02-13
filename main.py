@@ -158,13 +158,16 @@ if args.verbose:
 
 layout_manager.run(jobs, timesteps=timesteps)
 
-output_stats = sc.get_stats()
+system_stats = sc.get_system_stats()
+job_stats = sc.get_job_stats()
 # Following b/c we get the following error when we use PM100 telemetry dataset
 # TypeError: Object of type int64 is not JSON serializable
 try:
-    print(json.dumps(output_stats, indent=4))
+    print(json.dumps(system_stats, indent=4))
+    print(json.dumps(job_stats, indent=4))
 except:
-    print(output_stats)
+    print(system_stats)
+    print(job_stats)
 
 
 if args.plot:

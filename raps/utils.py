@@ -18,6 +18,18 @@ import uuid
 import json
 
 
+def sum_values(values):
+    return sum(x[1] for x in values) if values else 0
+
+
+def min_value(values):
+    return min(x[1] for x in values) if values else 0
+
+
+def max_value(values):
+    return max(x[1] for x in values) if values else 0
+
+
 def convert_seconds(seconds):
     """Convert seconds to time format: 3661s -> 01:01"""
     td = timedelta(seconds=seconds)

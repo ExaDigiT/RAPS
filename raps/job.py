@@ -116,6 +116,7 @@ class JobStatistics:
         self.account = job.account
         self.num_nodes = len(job.scheduled_nodes)
         self.run_time = job.running_time
+        self.submit_time = job.submit_time
         self.start_time = job.start_time
         self.end_time = job.end_time
         self.state = job._state
