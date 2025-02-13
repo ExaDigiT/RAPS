@@ -96,7 +96,7 @@ if args.replay:
                 job['nodes_required'] = random.randint(1, args.scale)
                 job['requested_nodes'] = None  # Setting to None triggers scheduler to assign nodes
 
-        if args.reschedule == 'poisson':
+        if args.policy == 'poisson':
             print("available nodes:", config['AVAILABLE_NODES'])
             for job in tqdm(jobs, desc="Rescheduling jobs"):
                 job['requested_nodes'] = None
