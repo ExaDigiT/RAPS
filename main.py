@@ -106,8 +106,6 @@ if args.replay:
     else:  # custom data loader
         print(*args.replay)
         jobs = td.load_data(args.replay)
-        accounts = Accounts(jobs)
-        accounts_dict = accounts.to_dict()
         td.save_snapshot(jobs, filename=DIR_NAME)
 
     # Set number of timesteps based on the last job running which we assume
@@ -123,12 +121,6 @@ if args.replay:
 else:  # Synthetic jobs
     wl = Workload(config)
     jobs = getattr(wl, args.workload)(num_jobs=args.numjobs)
-    job_accounts = Accounts(jobs)
-    if args.accounts_json:
-        loaded_accounts = Accounts.from_json_filename(args.accounts_json)
-        accounts = Accounts.merge(loaded_accounts,job_accounts)
-    else:
-        accounts = job_accounts
 
     if args.verbose:
         for job_vector in jobs:
@@ -146,7 +138,15 @@ else:  # Synthetic jobs
 OPATH = OUTPUT_PATH / DIR_NAME
 print("Output directory is: ", OPATH)
 sc.opath = OPATH
-#sc.accounts = accounts
+
+if args.accounts:
+    job_accounts = Accounts(jobs)
+    if args.accounts_json:
+        loaded_accounts = Accounts.from_json_filename(args.accounts_json)
+        accounts = Accounts.merge(loaded_accounts,job_accounts)
+    else:
+        accounts = job_accounts
+    sc.accounts = accounts
 
 if args.plot or args.output:
     try:
@@ -248,14 +248,15 @@ if args.output:
             with open(OPATH / 'stats.out', 'w') as f:
                 json.dump(engine_stats, f, indent=4)
                 json.dump(job_stats, f, indent=4)
-        except:
+        except TypeError:  # Is this the correct error code?
             write_dict_to_file(engine_stats, OPATH / 'stats.out')
             write_dict_to_file(job_stats, OPATH / 'stats.out')
 
-        try:
-            with open(OPATH / 'accounts.json', 'w') as f:
-                json_string = json.dumps(sc.accounts.to_dict())
-                f.write(json_string)
-        except TypeError:
-            raise TypeError(f"{sc.accounts} could not be parsed by json.dump")
+        if args.accounts:
+            try:
+                with open(OPATH / 'accounts.json', 'w') as f:
+                    json_string = json.dumps(sc.accounts.to_dict())
+                    f.write(json_string)
+            except TypeError:
+                raise TypeError(f"{sc.accounts} could not be parsed by json.dump")
     print("Output directory is: ", OPATH)  # If output is enabled, the user wants this information as last output
