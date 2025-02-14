@@ -32,6 +32,7 @@ from raps.workload import Workload
 from raps.account import Accounts
 from raps.weather import Weather
 from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival
+from raps.stats import get_engine_stats, get_job_stats
 
 config = ConfigManager(system_name=args.system).get_config()
 
@@ -158,15 +159,15 @@ if args.verbose:
 
 layout_manager.run(jobs, timesteps=timesteps)
 
-system_stats = sc.get_system_stats()
-job_stats = sc.get_job_stats()
+engine_stats = get_engine_stats(sc)
+job_stats = get_job_stats(sc)
 # Following b/c we get the following error when we use PM100 telemetry dataset
 # TypeError: Object of type int64 is not JSON serializable
 try:
-    print(json.dumps(system_stats, indent=4))
+    print(json.dumps(engine_stats, indent=4))
     print(json.dumps(job_stats, indent=4))
 except:
-    print(system_stats)
+    print(engine_stats)
     print(job_stats)
 
 
@@ -245,9 +246,11 @@ if args.output:
 
         try:
             with open(OPATH / 'stats.out', 'w') as f:
-                json.dump(output_stats, f, indent=4)
+                json.dump(engine_stats, f, indent=4)
+                json.dump(job_stats, f, indent=4)
         except:
-            write_dict_to_file(output_stats, OPATH / 'stats.out')
+            write_dict_to_file(engine_stats, OPATH / 'stats.out')
+            write_dict_to_file(job_stats, OPATH / 'stats.out')
 
         try:
             with open(OPATH / 'accounts.json', 'w') as f:
