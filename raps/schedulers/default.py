@@ -30,6 +30,7 @@ class Scheduler:
         else:
             raise ValueError(f"Policy not implemented: {self.policy}")
 
+    @profile
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         # Sort the queue in place.
         if not sorted:
@@ -41,7 +42,7 @@ class Scheduler:
             # Make sure the requested nodes are available.
             nodes_available = False
             if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-                if len(job.requested_nodes) < len(self.resource_manager.available_nodes):
+                if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
                     nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
                 else:
                     break
