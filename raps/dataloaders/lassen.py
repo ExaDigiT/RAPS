@@ -19,8 +19,8 @@ Usage Instructions:
     # to simulate the dataset as submitted
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
 
-    # to reschedule
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --reschedule poisson
+    # to modify the submit times of the telemetry according to Poisson distribution
+    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
     # to fast-forward 37 days and replay for 1 day
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 37d -t 1d
@@ -56,7 +56,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     """
     config = kwargs.get('config')
     jid = kwargs.get('jid', '*')
-    reschedule = kwargs.get('reschedule')
+    arrival = kwargs.get('arrival')
     fastforward = kwargs.get('fastforward')
     verbose = kwargs.get('verbose')
     min_time = kwargs.get('min_time', None)
@@ -64,6 +64,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     if fastforward:
         print(f"fast-forwarding {fastforward} seconds")
 
+    allocation_df['job_submit_time'] = pd.to_datetime(allocation_df['job_submit_time'], format='mixed', errors='coerce')
     allocation_df['begin_time'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
     allocation_df['end_time'] = pd.to_datetime(allocation_df['end_time'], format='mixed', errors='coerce')
 
@@ -121,14 +122,17 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
 
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
+        if arrival == 'poisson':  # Modify the submit times according to Poisson process
             scheduled_nodes = None
-            time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        else:
+            time_submit = next_arrival(1/config['JOB_ARRIVAL_TIME'])
+            time_start = None  # Scheduler will determine start time
+        else:  # Prescribed replay
             scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
-            time_offset = compute_time_offset(row['begin_time'], min_time)
+            time_submit = compute_time_offset(row['job_submit_time'], min_time)
+            time_start = compute_time_offset(row['begin_time'], min_time)
             if fastforward:
-                time_offset -= fastforward
+                time_submit -= fastforward
+                time_start -= fastforward
 
         if verbose:
             print('ib_tx, ib_rx, samples:', ib_tx, ib_rx, samples)
@@ -136,7 +140,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             print('rx:', net_rx)
             print('scheduled_nodes:', nodes_required, scheduled_nodes)
 
-        if time_offset >= 0:
+        if time_submit >= 0:
 
             job_info = job_dict(nodes_required,
                                 row['hashed_user_id'],
@@ -144,9 +148,10 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                                 cpu_trace, gpu_trace, net_tx, net_rx, wall_time,
                                 row['exit_status'],
                                 scheduled_nodes,
-                                time_offset,
+                                time_submit,
                                 job_id,
-                                row.get('priority', 0))
+                                row.get('priority', 0),
+                                time_start)
 
             job_list.append(job_info)
 

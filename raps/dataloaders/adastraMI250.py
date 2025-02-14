@@ -7,8 +7,8 @@
     # to simulate the dataset
     python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastra
 
-    # to reschedule
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastra --reschedule poisson
+    # to replay with different arrival distribution
+    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastra --arrival poisson
 
     # to fast-forward 60 days and replay for 1 day
     python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastra -ff 60d -t 1d
@@ -56,7 +56,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     count_jobs_notOK = 0
     config = kwargs.get('config')
     min_time = kwargs.get('min_time', None)
-    reschedule = kwargs.get('reschedule')
+    arrival = kwargs.get('arrival')
     fastforward = kwargs.get('fastforward')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
@@ -157,21 +157,20 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         if fastforward:
             time_offset -= fastforward
 
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
+        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
         else:  # Prescribed replay
             scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
         if time_offset >= 0 and wall_time > 0:
-            #print("start_time",time_start,"\tend_time",time_end,"\twall_time",wall_time,"\tquanta wall time",gpu_trace.size * TRACE_QUANTA )
             job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [],[],wall_time,
                                 end_state, scheduled_nodes, time_offset, job_id, priority)
             jobs.append(job_info)
         else:
-            count_jobs_notOK = count_jobs_notOK + 1
+            count_jobs_notOK += 1
 
-    print("many jobs not OK !!!!!!!!!!!!!!! : ",count_jobs_notOK)
+    print("jobs not added: ", count_jobs_notOK)
     return jobs
 
 def xname_to_index(xname: str, config: dict):

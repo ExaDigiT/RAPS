@@ -7,10 +7,10 @@
     Also, power in F-Data is only given at node-level. We can use node-level power by
     adding the --validate option.
 
-    The '--reschedule poisson' will compute submit times from Poisson distribution, instead of using
+    The '--arrival poisson' will compute submit times from Poisson distribution, instead of using
     the submit times given in F-Data.
 
-    python main.py --system fugaku -f /path/to/21_04.parquet --reschedule poisson --validate
+    python main.py --system fugaku -f /path/to/21_04.parquet --arrival poisson --validate
 
 """
 import pandas as pd
@@ -50,7 +50,7 @@ def load_data_from_df(df, **kwargs):
     """
     encrypt_bool = kwargs.get('encrypt')
     fastforward = kwargs.get('fastforward')
-    reschedule = kwargs.get('reschedule')
+    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     config = kwargs.get('config')
@@ -84,7 +84,7 @@ def load_data_from_df(df, **kwargs):
         #scheduled_nodes = row['nnuma'] if 'nnuma' in df.columns else 0
         scheduled_nodes = None
         submit_time = row['adt'] if 'adt' in df.columns else min_time
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
+        if arrival == 'poisson':  # Modify the arrival times of according to Poisson distribution
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
         else:
             time_offset = (submit_time - min_time).total_seconds()  # Compute time offset in seconds

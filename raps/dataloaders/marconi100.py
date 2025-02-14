@@ -11,8 +11,8 @@
     # to simulate the dataset
     python main.py -f /path/to/job_table.parquet --system marconi100
 
-    # to reschedule
-    python main.py -f /path/to/job_table.parquet --system marconi100 --reschedule poisson
+    # to replay using modified arrival times
+    python main.py -f /path/to/job_table.parquet --system marconi100 --arrival poisson
 
     # to fast-forward 60 days and replay for 1 day
     python main.py -f /path/to/job_table.parquet --system marconi100 -ff 60d -t 1d
@@ -59,7 +59,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     """
     config = kwargs.get('config')
     min_time = kwargs.get('min_time', None)
-    reschedule = kwargs.get('reschedule')
+    arrival = kwargs.get('arrival')
     fastforward = kwargs.get('fastforward')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
@@ -149,7 +149,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             time_start -= fastforward
             time_submit -= fastforward
 
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
+        if arrival == 'poisson':  # Modify the arrival times according to Poisson distribution
             scheduled_nodes = None
             time_submit = next_arrival(1/config['JOB_ARRIVAL_TIME'])
             time_start = None

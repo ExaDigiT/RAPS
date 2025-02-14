@@ -21,7 +21,7 @@ class ResourceManager:
         if job.requested_nodes:  # Telemetry replay case
             job.scheduled_nodes = job.requested_nodes
             self.available_nodes = [n for n in self.available_nodes if n not in job.scheduled_nodes]
-        else:  # Synthetic or reschedule case
+        else:  # Synthetic or case using modified/poisson arrival times
             job.scheduled_nodes = self.available_nodes[:job.nodes_required]
             self.available_nodes = self.available_nodes[job.nodes_required:]
 

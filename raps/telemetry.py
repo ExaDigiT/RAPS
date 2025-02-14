@@ -17,7 +17,8 @@ if __name__ == "__main__":
                              ' -or- filename.npz (overrides --workload option)')
     parser.add_argument('-p', '--plot', action='store_true', help='Output plots')
     parser.add_argument('--system', type=str, default='frontier', help='System config to use')
-    parser.add_argument('--reschedule', action='store_true', help='Reschedule the telemetry workload')
+    choices = ['prescribed', 'poisson']
+    parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     args = parser.parse_args()
 
@@ -84,7 +85,7 @@ if __name__ == "__main__":
     if args.replay[0].endswith(".npz"):
         print(f"Loading {args.replay[0]}...")
         jobs = td.load_snapshot(args.replay[0])
-        if args.reschedule:
+        if args.arrival == "poisson":
             for job in tqdm(jobs, desc="Updating requested_nodes"):
                 job['requested_nodes'] = None
                 job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])

@@ -61,7 +61,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     config = kwargs.get('config')
     encrypt_bool = kwargs.get('encrypt')
     fastforward = kwargs.get('fastforward')
-    reschedule = kwargs.get('reschedule')
+    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
 
@@ -153,7 +153,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if '' in xnames:
             continue
 
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
+        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
             time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
             time_start = None
