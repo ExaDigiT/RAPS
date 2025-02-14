@@ -30,7 +30,6 @@ class Scheduler:
         else:
             raise ValueError(f"Policy not implemented: {self.policy}")
 
-    @profile
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         # Sort the queue in place.
         if not sorted:
