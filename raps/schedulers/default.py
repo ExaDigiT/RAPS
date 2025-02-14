@@ -41,7 +41,10 @@ class Scheduler:
             # Make sure the requested nodes are available.
             nodes_available = False
             if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-                nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+                if len(job.requested_nodes) < len(self.resource_manager.available_nodes):
+                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+                else:
+                    break
             else:  # synthetic
                 nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
 

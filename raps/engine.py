@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 import dataclasses
 import pandas as pd
 
@@ -65,7 +65,11 @@ class Engine:
         )
         print(f"Using scheduler: {scheduler_type}")
 
-    def eligible_jobs(self, jobs_to_submit):
+    def eligible_jobs(self, jobs_to_submit: List):
+        """
+        Returns list of eligible jobs and:
+        modifies the jobs_to_submit removing them from the passed list (Mutable)!
+        """
         # Build a list of jobs whose submit_time is <= current_time.
         eligible = [job for job in jobs_to_submit if job['submit_time'] <= self.current_time]
         # Remove those jobs from jobs_to_submit:
