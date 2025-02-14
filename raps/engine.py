@@ -136,7 +136,8 @@ class Engine:
             self.running.remove(job)
             self.jobs_completed += 1
             job_stats = job.statistics()
-            #self.accounts.update_account_statistics(job_stats)
+            if self.accounts:
+                self.accounts.update_account_statistics(job_stats)
             self.job_history_dict.append(job_stats.__dict__)
             # Free the nodes via the resource manager.
             self.resource_manager.free_nodes_from_job(job)
