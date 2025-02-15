@@ -44,7 +44,7 @@ choices = ['random', 'benchmark', 'peak', 'idle']
 parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
-choices = ['default', 'nrel', 'anl', 'flux']
+choices = ['default', 'replay', 'nrel', 'anl', 'flux']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
 policies = [policy.value for policy in PolicyType]
 choices = ['prescribed', 'poisson']
