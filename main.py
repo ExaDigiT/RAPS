@@ -113,7 +113,7 @@ if args.replay:
     if args.time:
         timesteps = convert_to_seconds(args.time)
     else:
-        timesteps = int(max(job['wall_time'] + job['submit_time'] for job in jobs)) + 1
+        timesteps = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
 
     print(f'Simulating {len(jobs)} jobs for {timesteps} seconds')
     time.sleep(1)
@@ -124,7 +124,7 @@ else:  # Synthetic jobs
 
     if args.verbose:
         for job_vector in jobs:
-            job = Job(job_vector, 0)
+            job = Job(job_vector, 0)  # What does 0 stand for here?
             print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
         time.sleep(2)
 

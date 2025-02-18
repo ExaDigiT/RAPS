@@ -100,7 +100,7 @@ if __name__ == "__main__":
     submit_times = []
     last = 0
     for job_vector in jobs:
-        job = Job(job_vector, 0)
+        job = Job(job_vector, 0)  # current_time is never used in Job()
         wt_list.append(job.wall_time)
         nr_list.append(job.nodes_required)
         submit_times.append(job.submit_time)

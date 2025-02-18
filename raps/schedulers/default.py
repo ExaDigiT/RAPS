@@ -37,21 +37,39 @@ class Scheduler:
 
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
-
+            if self.policy == PolicyType.REPLAY:
+                if job.start_time >= current_time:
+                    continue
+                else:
+                    pass
+            else:
+                pass
             # Make sure the requested nodes are available.
             nodes_available = False
             if job.requested_nodes:  # nodes specified, i.e., telemetry replay
                 if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
-                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+                    if self.policy == PolicyType.REPLAY:  # Check if exact set is available:
+                        nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+                    else:
+                        # Sufficiently large number of nodes available
+                        # but no exact set is required!
+                        nodes_available = True
+                        # remove the request for specific nodes and ask for n nodes
+                        job.nodes_required = len(job.requested_nodes)
+                        job.requested_nodes = []
                 else:
-                    break
-            else:  # synthetic
+                    # Next we check if we continue or abort.
+                    # This may be policy dependent. I break by default but this may not be correct.
+                    if self.policy == PolicyType.FCFS or \
+                       self.policy == PolicyType.PRIORITY or \
+                       self.policy == PolicyType.FUGAKU_PTS:  # self.policy == PolicyType ??
+                        break  # The job at the front of the queue doesnt fit, wait until it fits.
+                    elif self.policy == PolicyType.REPLAY:
+                        continue  # The job at the front of the queue doesn't fit, but there are other jobs that may fit, look at the next one.
+                    else:
+                        raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
+            else:  # synthetic jobs dont have nodes assigned:
                 nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
-
-            if self.policy == PolicyType.REPLAY and current_time < job.start_time:
-                # Don't start replay jobs until they reach their start_time
-                nodes_available = False
-
             if nodes_available:
                 self.resource_manager.assign_nodes_to_job(job, current_time)
                 running.append(job)
@@ -60,6 +78,7 @@ class Scheduler:
                     scheduled_nodes = summarize_ranges(job.scheduled_nodes)
                     print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
             else:
+                # not sure if this does what it should!
                 if self.policy == PolicyType.BACKFILL:
                     # Try to find a backfill candidate from the entire queue.
                     backfill_job = self.find_backfill_job(queue, len(self.resource_manager.available_nodes), current_time)

@@ -1,7 +1,10 @@
 from enum import Enum
 
-def job_dict(nodes_required, name, account, cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
-             wall_time, end_state, scheduled_nodes, time_offset, job_id, priority=0, partition=0, start_time=0):
+def job_dict(nodes_required, name, account, \
+             cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
+             end_state, scheduled_nodes, job_id, priority=0, partition=0,
+             submit_time=0, time_limit=0, start_time=0, end_time=0,
+             wall_time=0, trace_time=0):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -11,14 +14,18 @@ def job_dict(nodes_required, name, account, cpu_trace, gpu_trace, ntx_trace, nrx
         'gpu_trace': gpu_trace,
         'ntx_trace': ntx_trace,
         'nrx_trace': nrx_trace,
-        'wall_time': wall_time,
         'end_state': end_state,
         'requested_nodes': scheduled_nodes,
-        'submit_time': time_offset,
         'id': job_id,
         'priority': priority,
         'partition': partition,
-        'start_time': start_time
+        # Times:
+        'submit_time': submit_time,
+        'time_limit': time_limit,
+        'start_time': start_time,
+        'end_time': end_time,
+        'wall_time': wall_time,
+        'trace_time': trace_time
     }
 
 
@@ -36,22 +43,29 @@ class Job:
     """Represents a job to be scheduled and executed in the distributed computing system.
 
     Each job consists of various attributes such as the number of nodes required for execution,
-    CPU and GPU utilization, wall time, and other relevant parameters (see utils.job_dict).
+    CPU and GPU utilization, trace time, and other relevant parameters (see utils.job_dict).
     The job can transition through different states during its lifecycle, including PENDING,
     RUNNING, COMPLETED, CANCELLED, FAILED, or TIMEOUT.
     """
     _id_counter = 0
 
     def __init__(self, job_dict, current_time, state=JobState.PENDING, account=None):
+        # # current_time unused!
         # Initializations:
-        self.start_time = None
-        self.end_time = None
-        self.running_time = 0
         self.power = 0
         self.scheduled_nodes = []
         self.power_history = []
         self._state = state
         self.account = account
+        # Times:
+        self.submit_time = None  # Actual submit time
+        self.time_limit = None   # Time limit set at submission
+        self.start_time = None   # Actual start time when executing or from telemetry
+        self.end_time = None     # Actual end time when executing or from telemetry
+        self.wall_time = None    # end_time - start_time
+        self.trace_time = None   # Time period for which traces are available
+        self.running_time = 0    # Current running time updated when simulating
+
         # If a job dict was given, override the values from the job_dict:
         for key, value in job_dict.items():
             setattr(self, key, value)
@@ -63,10 +77,13 @@ class Job:
         """Return a string representation of the job."""
         return (f"Job(id={self.id}, name={self.name}, account={self.account}, "
                 f"nodes_required={self.nodes_required}, "
-                f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, wall_time={self.wall_time}, "
+                f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
                 f"end_state={self.end_state}, requested_nodes={self.requested_nodes}, "
-                f"submit_time={self.submit_time}, start_time={self.start_time}, "
-                f"end_time={self.end_time}, running_time={self.running_time}, state={self._state}, "
+                f"submit_time={self.submit_time}, time_limit={self.time_limit}, "
+                f"start_time={self.start_time}, end_time={self.end_time}, "
+                f"wall_time={self.wall_time}, "
+                f"trace_time={self.trace_time}, "
+                f"running_time={self.running_time}, state={self._state}, "
                 f"scheduled_nodes={self.scheduled_nodes}, power={self.power}, "
                 f"power_history={self.power_history})")
 

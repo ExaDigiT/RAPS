@@ -21,37 +21,16 @@ class Scheduler:
         """Sort jobs based on the selected scheduling policy."""
         return sorted(queue, key=lambda job: job.start_time)
 
-### NOTE:
-# Both schdule and schedule_v2 do not work, as the resource_manager claims nodes not available.
-# This needs to be fixed.
-
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
-    #### DOES NOT WORK, Nodes are not available! in resrouce_manager.assign_nodes_to_job!
         # Sort the queue in place.
         if not sorted:
             queue[:] = self.sort_jobs(queue, accounts)
 
-        # Filter Jobs with start_time in this epoch
-        queue[:] = [job for job in queue if job.start_time <= current_time]
-
-        # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
-            nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
-            self.resource_manager.assign_nodes_to_job(job, current_time)
-            running.append(job)
-            queue.remove(job)
-            continue
+            # Skip jobs in queue with start time in the future
+            if job.start_time >= current_time:
+                continue
 
-    def schedule_v2(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
-    #### DOES NOT WORK, Nodes are not available!
-        # Sort the queue in place.
-        if not sorted:
-            queue[:] = self.sort_jobs(queue, accounts)
-
-        # Filter Jobs with start_time in this epoch
-        queue[:] = [job for job in queue if job.start_time <= current_time]
-
-        for job in queue[:]:
             nodes_available = False
             if job.requested_nodes:  # nodes specified, i.e., telemetry replay
                 if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
@@ -66,5 +45,5 @@ class Scheduler:
                 running.append(job)
                 queue.remove(job)
             else:
-                raise ValueError("Nodes not available!")  # Jobs may be queued
-                pass  # Try next time
+                # This is a replay so this should not happen
+                raise ValueError(f"Nodes not available!\nRequested:{job.requested_nodes}\nAvailable:{self.resource_manager.available_nodes}\n{job.__dict__}")

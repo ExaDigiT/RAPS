@@ -5,6 +5,7 @@ import pandas as pd
 import sys
 
 from .job import Job, JobState
+from .policy import PolicyType
 from .network import network_utilization
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
@@ -77,18 +78,30 @@ class Engine:
         # Convert them to Job instances and build list of eligible jobs.
         eligible_jobs_list = []
         for job_data in eligible:
-            job_instance = Job(job_data, self.current_time)
+            job_instance = Job(job_data, self.current_time)  # current_time is not used in Job()
             eligible_jobs_list.append(job_instance)
         return eligible_jobs_list
 
-    def tick(self):
-        """Simulate a timestep."""
+    def prepare_timestep(self, replay:bool = True):
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
 
-        # Simulate node failure
-        newly_downed_nodes = self.resource_manager.node_failure(self.config['MTBF'])
-        for node in newly_downed_nodes:
-            self.power_manager.set_idle(node)
+        for job in completed_jobs:
+            self.running.remove(job)
+            self.jobs_completed += 1
+            job_stats = job.statistics()
+            if self.accounts:
+                self.accounts.update_account_statistics(job_stats)
+            self.job_history_dict.append(job_stats.__dict__)
+            # Free the nodes via the resource manager.
+            self.resource_manager.free_nodes_from_job(job)
+
+        if not replay:
+            # Simulate node failure
+            newly_downed_nodes = self.resource_manager.node_failure(self.config['MTBF'])
+            for node in newly_downed_nodes:
+                self.power_manager.set_idle(node)
+        else:
+            newly_downed_nodes = []
 
         # Update active/free nodes
         self.num_free_nodes = len(self.resource_manager.available_nodes)
@@ -96,17 +109,29 @@ class Engine:
                               - len(self.resource_manager.available_nodes) \
                               - len(self.resource_manager.down_nodes)
 
+
+        return completed_jobs, newly_downed_nodes
+
+
+    def tick(self):
+        """Simulate a timestep."""
+
         # Update running time for all running jobs
         scheduled_nodes = []
         cpu_utils = []
         gpu_utils = []
         net_utils = []
         for job in self.running:
-            if job.end_time == self.current_time:
+            if job.end_time <= self.current_time:
                 job.state = JobState.COMPLETED
 
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
+                if job.running_time > job.trace_time:
+                    raise ValueError(f"Trace Ended before job ended!\n\
+                                       {job.running_time} > {job.trace_time}\n\
+                                       {len(job.cpu_trace)} vs. {self.running_time // self.config['TRACE_QUANTA']}\
+                                      ")
                 time_quanta_index = (self.current_time - job.start_time) // self.config['TRACE_QUANTA']
                 cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                 gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
@@ -136,15 +161,6 @@ class Engine:
                     job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
             del _running_jobs
 
-        for job in completed_jobs:
-            self.running.remove(job)
-            self.jobs_completed += 1
-            job_stats = job.statistics()
-            if self.accounts:
-                self.accounts.update_account_statistics(job_stats)
-            self.job_history_dict.append(job_stats.__dict__)
-            # Free the nodes via the resource manager.
-            self.resource_manager.free_nodes_from_job(job)
 
         # Update the power array UI component
         rack_power, rect_losses = self.power_manager.compute_rack_power()
@@ -192,7 +208,7 @@ class Engine:
 
         tick_data = TickData(
             current_time=self.current_time,
-            completed=completed_jobs,
+            completed=None,
             running=self.running,
             queue=self.queue,
             down_nodes=expand_ranges(self.down_nodes[1:]),
@@ -216,7 +232,17 @@ class Engine:
         # Sort pending jobs by submit_time.
         jobs_to_submit = sorted(jobs, key=lambda j: j['submit_time'])
 
+        # Missing prepareation:
+        # Remove Jobs that have already ended.
+        # Place jobs that are currently running.
+
+        if self.scheduler.policy == PolicyType.REPLAY:
+            replay = True
+        else:
+            replay = False
+
         for timestep in range(timesteps):
+            completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # Identify eligible jobs and add them to the queue.
             self.queue += self.eligible_jobs(jobs_to_submit)
@@ -231,7 +257,11 @@ class Engine:
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
-            yield self.tick()
+
+
+            tick_data = self.tick()
+            tick_data.completed = completed_jobs
+            yield tick_data
 
     def get_job_history_dict(self):
         return self.job_history_dict

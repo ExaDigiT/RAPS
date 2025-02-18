@@ -74,6 +74,7 @@ class Workload:
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
             wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
+            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
@@ -83,7 +84,8 @@ class Workload:
             time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
 
             jobs.append(job_dict(nodes_required, name, account, cpu_trace, gpu_trace, net_tx, net_rx, \
-                        wall_time, end_state, None, time_to_next_job, None, priority, partition))
+                        end_state, None, job_index, priority, partition,
+                        time_to_next_job, time_limit, time_to_next_job, time_to_next_job + wall_time, wall_time, wall_time))
 
         return jobs
 
@@ -116,13 +118,17 @@ class Workload:
                 gpu_trace,                       # GPU trace
                 net_tx,                          # Network transmit trace
                 net_rx,                          # Network receive trace
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
                 'COMPLETED',                     # End state
-                None,                            # Scheduled nodes
-                0,                               # Time to next job
+                None,                            # Requested Nodes ?! This needs to be fixed! job_dict and Job class are inconsitent Job()
                 None,                            # Job ID
                 100,                             # Priority
-                partition                        # Partition name
+                partition,                        # Partition name
+                0,                               # Submit time
+                len(gpu_trace) * config['TRACE_QUANTA'] + 1,  # Time limit
+                0,                               # Start time / or None
+                len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
+                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
+                len(gpu_trace) * config['TRACE_QUANTA']   # Trace time
             )
             print(job_info)
             jobs.append(job_info)  # Add job to the list
@@ -148,19 +154,23 @@ class Workload:
             # Create job info for this partition
             job_info = job_dict(
                 config['AVAILABLE_NODES'],       # Nodes required
-                f"Idle Test {partition}",        # Name with partition label
+                f"Idle Test {partition}",         # Name with partition label
                 ACCT_NAMES[0],                   # User account
                 cpu_trace,                       # CPU trace
                 gpu_trace,                       # GPU trace
                 net_tx,                          # Network transmit trace
                 net_rx,                          # Network receive trace
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
                 'COMPLETED',                     # End state
-                None,                            # Scheduled nodes
-                0,                               # Time to next job
+                None,                            # Requested Nodes ?! This needs to be fixed! job_dict and Job class are inconsitent Job()
                 None,                            # Job ID
                 100,                             # Priority
-                partition                        # Partition name
+                partition,                        # Partition name
+                0,                               # Submit time
+                len(gpu_trace) * config['TRACE_QUANTA'] + 1,  # Time limit
+                0,                               # Start time / or None
+                len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
+                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
+                len(gpu_trace) * config['TRACE_QUANTA']   # Trace time
             )
             jobs.append(job_info)  # Add job to the list
 
@@ -182,11 +192,13 @@ class Workload:
             # Max test
             cpu_util, gpu_util = 1, 4
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
+
             job_info = job_dict(
                 config['AVAILABLE_NODES'],
-                f"Max Test {partition}", account,
-                cpu_trace, gpu_trace, net_tx, net_rx,
-                len(gpu_trace) * config['TRACE_QUANTA'], 'COMPLETED', None, 100, None, 0, partition
+                f"Max Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
+                'COMPLETED', None, None, 100, partition,
+                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
+                0, 10800, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -195,9 +207,10 @@ class Workload:
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
             job_info = job_dict(
                 config['AVAILABLE_NODES'],
-                f"OpenMxP {partition}", account,
-                cpu_trace, gpu_trace, net_tx, net_rx,
-                len(gpu_trace) * config['TRACE_QUANTA'], 'COMPLETED', None, 300, None, 0, partition
+                f"OpenMxP {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
+                'COMPLETED', None, None, 100, partition,
+                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
+                10800, 14200, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -206,9 +219,10 @@ class Workload:
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
             job_info = job_dict(
                 config['AVAILABLE_NODES'],
-                f"HPL {partition}", account,
-                cpu_trace, gpu_trace, net_tx, net_rx,
-                len(gpu_trace) * config['TRACE_QUANTA'], 'COMPLETED', None, 200, None, 0, partition
+                f"HPL {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
+                'COMPLETED', None, None, 100, partition,
+                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
+                14200, 17800, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -217,11 +231,11 @@ class Workload:
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
             job_info = job_dict(
                 config['AVAILABLE_NODES'],
-                f"Idle Test {partition}", account,
-                cpu_trace, gpu_trace, net_tx, net_rx,
-                len(gpu_trace) * config['TRACE_QUANTA'], 'COMPLETED', None, 0, None, 0, partition
+                f"Idle Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
+                'COMPLETED', None, None, 100, partition,
+                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
+                17800, 21400, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
         return jobs
-

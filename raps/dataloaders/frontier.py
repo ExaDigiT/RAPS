@@ -67,6 +67,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
     if fastforward:
         print(f"fast-forwarding {fastforward} seconds")
+    else:
+        fastforward = 0
 
     min_time = kwargs.get('min_time', None)
 
@@ -87,7 +89,10 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     if min_time:
         time_zero = min_time
     else:
-        time_zero = jobs_df['time_snapshot'].min()
+        time_zero = jobs_df['time_snapshot'].min()  # Earliets time snapshot within the day!
+    first_start_time = jobs_df['time_start'].min()
+    diff = time_zero - first_start_time  # Check if fast forward makes sense!
+    fastforward += diff.total_seconds()
 
     num_jobs = len(jobs_df)
     print("time_zero:", time_zero, "num_jobs", num_jobs)
@@ -134,19 +139,41 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         cpu_trace[np.isnan(cpu_trace)] = 0
         gpu_trace[np.isnan(gpu_trace)] = 0
 
-        wall_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
 
-        time_submit = jobs_df.loc[jidx, 'time_submission']
-        diff = time_submit - time_zero
-        time_submit = max(diff.total_seconds(), 0)
+        time_submit_timestamp = jobs_df.loc[jidx, 'time_submission']
+        diff = time_submit_timestamp - time_zero
+        # time_submit = max(diff.total_seconds(), 0)
+        time_submit = diff.total_seconds()
 
-        time_start = jobs_df.loc[jidx, 'time_start']
-        diff = time_start - time_zero
-        time_start = max(diff.total_seconds(), 0)
+        time_limit = jobs_df.loc[jidx, 'time_limit']  # timelimit in seconds
+
+        time_start_timestamp = jobs_df.loc[jidx, 'time_start']
+        diff = time_start_timestamp - time_zero
+        # time_start = max(diff.total_seconds(), 0)
+        time_start = diff.total_seconds()
+
+        time_end_timestamp = jobs_df.loc[jidx, 'time_end']
+        diff = time_end_timestamp - time_zero
+        time_end = diff.total_seconds()
+
+        wall_time = time_end - time_start
+        if np.isnan(wall_time):
+            wall_time = 0
+
+        trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
+        if wall_time > trace_time:
+            missing_steps = int(wall_time - trace_time)
+            cpu_trace = np.concatenate((cpu_trace,np.array([cpu_min_power] * missing_steps)))
+            gpu_trace = np.concatenate((cpu_trace,np.array([cpu_min_power] * missing_steps)))
+            wall_time = trace_time  # Pretending to have a full trace
+            print(f"Job: {job_id} extended {missing_steps} Values with idle power!")
+            #raise ValueError(f"Job: {job_id} {wall_time} > {trace_time}")
+
 
         if fastforward:
-            time_start -= fastforward
             time_submit -= fastforward
+            time_start -= fastforward
+            time_end -= fastforward
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames
@@ -155,8 +182,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
-            time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-            time_start = None
+            time_offset = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+            time_start = None  # ?
+            time_end = None  # ?
             priority = aging_boost(nodes_required)
 
         else:  # Prescribed replay
@@ -170,8 +198,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             print("ignoring job b/c zero trace:", jidx, time_submit, time_start, nodes_required)
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*') and time_submit >= 0:
-            job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [], wall_time,
-                                end_state, scheduled_nodes, time_submit, job_id, priority, time_start)
+            job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [],
+                                end_state, scheduled_nodes,
+                                job_id, priority,  # partition missing
+                                submit_time=time_submit, time_limit=time_limit,
+                                start_time=time_start, end_time=time_end,
+                                wall_time=wall_time, trace_time=trace_time)
             jobs.append(job_info)
 
     return jobs

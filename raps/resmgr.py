@@ -25,7 +25,8 @@ class ResourceManager:
             job.scheduled_nodes = self.available_nodes[:job.nodes_required]
             self.available_nodes = self.available_nodes[job.nodes_required:]
 
-        # Set job start and end times
+        # Set job start and end times according to simulation
+        # This overrides actual times from telemetry and set state to 'running'
         job.start_time = current_time
         job.end_time = current_time + job.wall_time
         job.state = JobState.RUNNING  # Mark job as running
