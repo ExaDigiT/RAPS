@@ -8,3 +8,5 @@ class PolicyType(Enum):
     PRIORITY = 'priority'
     FUGAKU_PTS = 'fugaku_pts'
     REPLAY = 'replay'
+    SJF = 'sjf'
+    LJF = 'ljf'

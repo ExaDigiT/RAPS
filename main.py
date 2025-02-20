@@ -75,6 +75,7 @@ if args.replay:
 
     if args.fastforward:
         args.fastforward = convert_to_seconds(args.fastforward)
+        timestep_start = args.fastforward
 
     td = Telemetry(**args_dict)
 
@@ -105,18 +106,16 @@ if args.replay:
 
     else:  # custom data loader
         print(*args.replay)
-        jobs = td.load_data(args.replay)
+        jobs, timestep_start, timestep_end = td.load_data(args.replay)
         td.save_snapshot(jobs, filename=DIR_NAME)
 
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs
     if args.time:
-        timesteps = convert_to_seconds(args.time)
-    else:
-        timesteps = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
+        timestep_end = convert_to_seconds(args.time)
+    elif not timestep_end:
+        timestep_end = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
 
-    print(f'Simulating {len(jobs)} jobs for {timesteps} seconds')
-    time.sleep(1)
 
 else:  # Synthetic jobs
     wl = Workload(config)
@@ -124,14 +123,14 @@ else:  # Synthetic jobs
 
     if args.verbose:
         for job_vector in jobs:
-            job = Job(job_vector, 0)  # What does 0 stand for here?
+            job = Job(job_vector)
             print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
         time.sleep(2)
 
     if args.time:
-        timesteps = convert_to_seconds(args.time)
+        timestep_end = convert_to_seconds(args.time)
     else:
-        timesteps = 88200  # 24 hours
+        timestep_end = 88200  # 24 hours
 
     DIR_NAME = create_casename()
 
@@ -157,7 +156,8 @@ if args.plot or args.output:
 if args.verbose:
     print(jobs)
 
-layout_manager.run(jobs, timesteps=timesteps)
+print(f'Simulating {len(jobs)} jobs for {timestep_end - timestep_start} seconds')
+layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end)
 
 engine_stats = get_engine_stats(sc)
 job_stats = get_job_stats(sc)

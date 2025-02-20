@@ -49,22 +49,23 @@ class Job:
     """
     _id_counter = 0
 
-    def __init__(self, job_dict, current_time, state=JobState.PENDING, account=None):
+    def __init__(self, job_dict, state=JobState.PENDING, account=None):
         # # current_time unused!
         # Initializations:
         self.power = 0
-        self.scheduled_nodes = []
+        self.scheduled_nodes = []  # Explicit list of requested nodes
+        self.nodes_required = 0  # If scheduled_nodes is set this can be derived.
         self.power_history = []
         self._state = state
         self.account = account
         # Times:
-        self.submit_time = None  # Actual submit time
-        self.time_limit = None   # Time limit set at submission
-        self.start_time = None   # Actual start time when executing or from telemetry
-        self.end_time = None     # Actual end time when executing or from telemetry
-        self.wall_time = None    # end_time - start_time
-        self.trace_time = None   # Time period for which traces are available
-        self.running_time = 0    # Current running time updated when simulating
+        self.submit_time = None   # Actual submit time
+        self.time_limit = None    # Time limit set at submission
+        self.start_time = None    # Actual start time when executing or from telemetry
+        self.end_time = None      # Actual end time when executing or from telemetry
+        self.wall_time = None     # end_time - start_time
+        self.trace_time = None    # Time period for which traces are available
+        self.running_time = 0     # Current running time updated when simulating
 
         # If a job dict was given, override the values from the job_dict:
         for key, value in job_dict.items():
@@ -72,6 +73,9 @@ class Job:
         # In any case: provide a job_id!
         if not self.id:
             self.id = Job._get_next_id()
+
+        if self.scheduled_nodes and self.nodes_required == 0:
+            self.nodes_required = len(self.scheduled_nodes)
 
     def __repr__(self):
         """Return a string representation of the job."""

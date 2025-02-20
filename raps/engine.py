@@ -66,10 +66,36 @@ class Engine:
         )
         print(f"Using scheduler: {scheduler_type}")
 
-    def eligible_jobs(self, jobs_to_submit: List):
+
+    def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
-        Returns list of eligible jobs and:
-        modifies the jobs_to_submit removing them from the passed list (Mutable)!
+        Mofifies jobs_to_submit
+        and self.queue
+
+        This is a preparatory step and should only be called before the main
+        loop of run_simulation.
+        Adds running jobs to the queueu, and removes them from the jobs_to_submit
+        jobs_to_submit still holds the jobs that need be submitted in the future.
+        """
+        # Build a list of jobs whose start_time is <= current_time.
+        eligible = [job for job in jobs_to_submit if job['start_time'] < self.current_time]
+        # Remove those jobs from jobs_to_submit:
+        jobs_to_submit[:] = [job for job in jobs_to_submit if job['start_time'] >= self.current_time]
+        # Convert them to Job instances and build list of eligible jobs.
+        eligible_jobs_list = []
+        for job_data in eligible:
+            job_instance = Job(job_data)
+            eligible_jobs_list.append(job_instance)
+        self.queue += eligible_jobs_list
+
+
+    def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
+        """
+        Mofifies jobs_to_submit
+        and self.queue
+
+        Adds eligible jobs to the queueu, and removes them from the jobs_to_submit
+        jobs_to_submit still holds the jobs that need be submitted in the future.
         """
         # Build a list of jobs whose submit_time is <= current_time.
         eligible = [job for job in jobs_to_submit if job['submit_time'] <= self.current_time]
@@ -78,14 +104,16 @@ class Engine:
         # Convert them to Job instances and build list of eligible jobs.
         eligible_jobs_list = []
         for job_data in eligible:
-            job_instance = Job(job_data, self.current_time)  # current_time is not used in Job()
+            job_instance = Job(job_data)
             eligible_jobs_list.append(job_instance)
-        return eligible_jobs_list
+        self.queue += eligible_jobs_list
 
     def prepare_timestep(self, replay:bool = True):
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
 
         for job in completed_jobs:
+            job.state = JobState.COMPLETED
+
             self.running.remove(job)
             self.jobs_completed += 1
             job_stats = job.statistics()
@@ -109,7 +137,6 @@ class Engine:
                               - len(self.resource_manager.available_nodes) \
                               - len(self.resource_manager.down_nodes)
 
-
         return completed_jobs, newly_downed_nodes
 
 
@@ -122,8 +149,6 @@ class Engine:
         gpu_utils = []
         net_utils = []
         for job in self.running:
-            if job.end_time <= self.current_time:
-                job.state = JobState.COMPLETED
 
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
@@ -132,7 +157,7 @@ class Engine:
                                        {job.running_time} > {job.trace_time}\n\
                                        {len(job.cpu_trace)} vs. {self.running_time // self.config['TRACE_QUANTA']}\
                                       ")
-                time_quanta_index = (self.current_time - job.start_time) // self.config['TRACE_QUANTA']
+                time_quanta_index = int(job.running_time // self.config['TRACE_QUANTA'])
                 cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                 gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                 net_util = 0
@@ -145,9 +170,11 @@ class Engine:
                 else:
                     net_utils.append(0)
 
-                scheduled_nodes.append(job.scheduled_nodes)
+                scheduled_nodes.append(job.scheduled_nodes)  # ?
                 cpu_utils.append(cpu_util)
                 gpu_utils.append(gpu_util)
+            else:
+                raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
 
         if len(scheduled_nodes) > 0:
             self.flops_manager.update_flop_state(scheduled_nodes, cpu_utils, gpu_utils)
@@ -225,27 +252,42 @@ class Engine:
         self.current_time += 1
         return tick_data
 
-    def run_simulation(self, jobs, timesteps, autoshutdown=False):
+    def prepare_system_state(self, all_jobs:List, timestep_start):
+        # Modifies Jobs object
+        self.current_time = timestep_start
+
+        #keep only jobs that have not yet ended
+        all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start]
+
+        all_jobs.sort(key=lambda j: j['submit_time'])
+
+        self.add_running_jobs_to_queue(all_jobs)
+        # Now process job queue one by one (needed to get the start_time right!)
+        for job in self.queue:
+            self.scheduler.schedule([job], self.running, job.start_time, sorted=True)
+        if len(self.queue) != len(self.running):
+            raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
+        self.queue = []  # Empty queue needed as addition one by one does not empty the queue!
+
+    def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
         """Generator that yields after each simulation tick."""
-        self.timesteps = timesteps
+        self.timesteps = timestep_end - timestep_start  # Where is this used?
 
-        # Sort pending jobs by submit_time.
-        jobs_to_submit = sorted(jobs, key=lambda j: j['submit_time'])
-
-        # Missing prepareation:
-        # Remove Jobs that have already ended.
-        # Place jobs that are currently running.
+        # Place jobs that are currently running, onto the system.
+        self.prepare_system_state(jobs, timestep_start)
 
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
         else:
             replay = False
 
-        for timestep in range(timesteps):
+        for timestep in range(timestep_start,timestep_end):
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # Identify eligible jobs and add them to the queue.
-            self.queue += self.eligible_jobs(jobs_to_submit)
+            #self.queue += self.eligible_jobs(jobs, self.current_time)
+            #jobs = self.add_eligible_jobs_to_queue(jobs)
+            self.add_eligible_jobs_to_queue(jobs)
             # Schedule jobs that are now in the queue.
             self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=False)
 
@@ -256,8 +298,6 @@ class Engine:
 
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
-
-
 
             tick_data = self.tick()
             tick_data.completed = completed_jobs

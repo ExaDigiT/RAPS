@@ -1,3 +1,4 @@
+from typing import List
 from enum import Enum
 from ..utils import summarize_ranges
 
@@ -25,6 +26,10 @@ class Scheduler:
             return sorted(queue, key=lambda job: job.priority, reverse=True)
         elif self.policy == PolicyType.FUGAKU_PTS:
             return self.sort_fugaku_redeeming(queue, accounts)
+        if self.policy == PolicyType.SJF:
+            return sorted(queue, key=lambda job: job.time_limit)
+        if self.policy == PolicyType.LJF:
+            return sorted(queue, key=lambda job: job.nodes_required)
         elif self.policy == PolicyType.REPLAY:
             return sorted(queue, key=lambda job: job.start_time)
         else:
@@ -38,7 +43,7 @@ class Scheduler:
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
             if self.policy == PolicyType.REPLAY:
-                if job.start_time >= current_time:
+                if job.start_time > current_time:
                     continue
                 else:
                     pass
@@ -61,10 +66,15 @@ class Scheduler:
                     # Next we check if we continue or abort.
                     # This may be policy dependent. I break by default but this may not be correct.
                     if self.policy == PolicyType.FCFS or \
-                       self.policy == PolicyType.PRIORITY or \
-                       self.policy == PolicyType.FUGAKU_PTS:  # self.policy == PolicyType ??
+                       self.policy == PolicyType.PRIORITY or\
+                       self.policy == PolicyType.FUGAKU_PTS or \
+                       self.policy == PolicyType.LJF or \
+                       False:  # self.policy == PolicyType ??
                         break  # The job at the front of the queue doesnt fit, wait until it fits.
-                    elif self.policy == PolicyType.REPLAY:
+                    elif self.policy == PolicyType.REPLAY or \
+                         self.policy == PolicyType.BACKFILL or \
+                         self.policy == PolicyType.SJF or\
+                         False:
                         continue  # The job at the front of the queue doesn't fit, but there are other jobs that may fit, look at the next one.
                     else:
                         raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
@@ -90,6 +100,35 @@ class Scheduler:
                             scheduled_nodes = summarize_ranges(backfill_job.scheduled_nodes)
                             print(f"t={current_time}: Backfilling job {backfill_job.id} with wall time {backfill_job.wall_time} on nodes {scheduled_nodes}")
 
+    def prepare_system_state(self,jobs_to_submit:List, running, timestep_start):
+        # def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
+        """
+        In the case of replay and fast forward, previously placed jobs should be present.
+
+        """
+        if self.policy == PolicyType.REPLAY:
+            total_jobs = len(jobs_to_submit)
+            print(f"All jobs: {total_jobs}")
+
+            # Keep only jobs have an end time in the future future.
+            jobs_to_submit[:] = [job for job in jobs_to_submit if job['end_time'] >= timestep_start]
+            print(f"Num jobs in the past: {total_jobs - len(jobs_to_submit)}")
+
+            # Identify jobs that started in the past and Split them from the jobs that will start in the future:
+            jobs_to_start_now = [job for job in jobs_to_submit if job['start_time'] < timestep_start]
+            print(f"Num jobs that started in the past: {len(jobs_to_start_now)}")
+
+            jobs_to_submit[:] = [job for job in jobs_to_submit if job['start_time'] >= timestep_start]
+            print(f"Num jobs to be schedule in the simulation: {len(jobs_to_submit)}")
+
+            # Now schedule them with their orignal start time.
+            # This has to be done one by one!
+            for job in jobs_to_start_now:
+                self.schedule([job], running, job['start_time'], sorted=True)
+            # self.schedule(jobs_to_start_now, running, 0, False)
+            return jobs_to_submit
+        else:
+            return jobs_to_submit
 
     def find_backfill_job(self, queue, num_free_nodes, current_time):
         """Finds a backfill job based on available nodes and estimated completion times.

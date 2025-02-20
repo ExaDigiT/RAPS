@@ -21,6 +21,9 @@ class Scheduler:
         """Sort jobs based on the selected scheduling policy."""
         return sorted(queue, key=lambda job: job.start_time)
 
+    def prepare_system_state(self,queue,running):
+        return queue
+
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         # Sort the queue in place.
         if not sorted:
@@ -38,7 +41,11 @@ class Scheduler:
                 else:
                     continue   # continue instead of break, as later job with specific nodes may still be placed!
             else:  # synthetic
-                raise ValueError("No jobs requested?")
+                if job.nodes_required:
+                    pass
+                else:
+                    raise ValueError("No number of nodes specified.")
+
 
             if nodes_available:
                 self.resource_manager.assign_nodes_to_job(job, current_time)

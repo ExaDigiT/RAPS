@@ -119,7 +119,7 @@ class Workload:
                 net_tx,                          # Network transmit trace
                 net_rx,                          # Network receive trace
                 'COMPLETED',                     # End state
-                None,                            # Requested Nodes ?! This needs to be fixed! job_dict and Job class are inconsitent Job()
+                list(range(config['AVAILABLE_NODES'])),  # Explicitly all nodes to test replay
                 None,                            # Job ID
                 100,                             # Priority
                 partition,                        # Partition name
@@ -161,7 +161,7 @@ class Workload:
                 net_tx,                          # Network transmit trace
                 net_rx,                          # Network receive trace
                 'COMPLETED',                     # End state
-                None,                            # Requested Nodes ?! This needs to be fixed! job_dict and Job class are inconsitent Job()
+                list(range(config['AVAILABLE_NODES'])),  # Explicitly all nodes to test replay
                 None,                            # Job ID
                 100,                             # Priority
                 partition,                        # Partition name
@@ -182,12 +182,13 @@ class Workload:
         # List to hold jobs for all partitions
         jobs = []
         account = ACCT_NAMES[0]
-
         # Iterate through each partition and its config
         for partition in self.partitions:
             # Fetch partition-specific configuration
             config = self.config_map[partition]
             net_tx, net_rx = [], []
+
+            list_of_all_nodes = list(range(config['AVAILABLE_NODES']))
 
             # Max test
             cpu_util, gpu_util = 1, 4

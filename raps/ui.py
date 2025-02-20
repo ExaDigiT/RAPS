@@ -398,13 +398,13 @@ class LayoutManager:
             self.console.clear()
             self.console.print(self.layout)
 
-    def run(self, jobs, timesteps):
+    def run(self, jobs, timestep_start, timestep_end):
         """ Runs the UI, blocking until the simulation is complete """
-        for data in self.engine.run_simulation(jobs, timesteps):
+        for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
             if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
                 self.update(data)
                 self.render()
 
-    def run_stepwise(self, jobs, timesteps):
+    def run_stepwise(self, jobs, timestep_start, timestep_end):
         """ Prepares the UI and returns a generator for the simulation """
-        return self.engine.run_simulation(jobs, timesteps)
+        return self.engine.run_simulation(jobs, timestep_start, timestep_end)
