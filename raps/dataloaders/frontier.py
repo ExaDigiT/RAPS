@@ -231,13 +231,13 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if wall_time > trace_time:
             missing_steps = int(wall_time - trace_time)
             if start_time < 0:
-                cpu_trace = np.concatenate((np.array([cpu_min_power] * missing_steps),cpu_trace))
-                gpu_trace = np.concatenate((np.array([cpu_min_power] * missing_steps),gpu_trace))
+                cpu_trace = np.concatenate((np.array([0] * missing_steps),cpu_trace))
+                gpu_trace = np.concatenate((np.array([0] * missing_steps),gpu_trace))
                 print(f"Job: {job_id} prepended {missing_steps} Values with idle power!")
                 print(f"{start_time} - {end_time}")
             elif end_time > telemetry_end:
-                cpu_trace = np.concatenate((cpu_trace,np.array([cpu_min_power] * missing_steps)))
-                gpu_trace = np.concatenate((gpu_trace,np.array([cpu_min_power] * missing_steps)))
+                cpu_trace = np.concatenate((cpu_trace,np.array([0] * missing_steps)))
+                gpu_trace = np.concatenate((gpu_trace,np.array([0] * missing_steps)))
                 print(f"Job: {job_id} appended {missing_steps} Values with idle power!")
                 print(f"{start_time} - {end_time}")
             else:
