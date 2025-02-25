@@ -114,6 +114,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     - end_time
     - wall_time (end_time-start_time, actual runtime in seconds)
     - trace_time (lenght of each trace in seconds)
+    - trace_start_time (time offset in seconds after which the trace starts)
+    - trace_end_time (time offset in seconds after which the trace ends)
     has to be set for use within the simulation
 
     The returned values are these three:
@@ -222,28 +224,33 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         diff = end_time_timestamp - telemetry_start_timestamp
         end_time = diff.total_seconds()
 
-
         wall_time = end_time - start_time
         if np.isnan(wall_time):
             wall_time = 0
 
         trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
+        trace_start_time = 0
+        trace_end_time = trace_time
         if wall_time > trace_time:
-            missing_steps = int((wall_time - trace_time) // config['TRACE_QUANTA'])
+            missing_trace_time = wall_time - trace_time
             if start_time < 0:
-                cpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),cpu_trace))
-                gpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),gpu_trace))
-                print(f"Job: {job_id} prepended {missing_steps} Values with idle power!")
-                print(f"{start_time} - {end_time}")
+                #cpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),cpu_trace))
+                #gpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),gpu_trace))
+                #print(f"Job: {job_id} prepended {missing_steps} Values with idle power!")
+                #print(f"{start_time} - {end_time}")
+                trace_start_time = missing_trace_time
+                trace_end_time = wall_time
             elif end_time > telemetry_end:
-                cpu_trace = np.concatenate((cpu_trace,np.array([np.NaN] * missing_steps)))
-                gpu_trace = np.concatenate((gpu_trace,np.array([np.NaN] * missing_steps)))
-                print(f"Job: {job_id} appended {missing_steps} Values with idle power!")
-                print(f"{start_time} - {end_time}")
+                #cpu_trace = np.concatenate((cpu_trace,np.array([np.NaN] * missing_steps)))
+                #gpu_trace = np.concatenate((gpu_trace,np.array([np.NaN] * missing_steps)))
+                #print(f"Job: {job_id} appended {missing_steps} Values with idle power!")
+                #print(f"{start_time} - {end_time}")
+                trace_start_time = 0
+                trace_end_time = trace_time
             else:
                 print(f"Job: {job_id} {start_time} - {end_time}!")
                 raise ValueError("Missing values not at start nor end.")
-            trace_time = wall_time  # Pretending to have a full trace, This may not be needed!
+            #trace_time = gpu_trace.size * config["TRACE_QUANTA"]  # Update trace_time to padded trace
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames
@@ -277,15 +284,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             print("Job starts after last recorded telemetry entry:",job_id, "start:", start_time,"end:",end_time, " Telemetry: ", len(gpu_trace), "entries.")
             continue  # SKIP!
 
-
-
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
             job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [],
                                 end_state, scheduled_nodes,
                                 job_id, priority,  # partition missing
                                 submit_time=submit_time, time_limit=time_limit,
                                 start_time=start_time, end_time=end_time,
-                                wall_time=wall_time, trace_time=trace_time)
+                                wall_time=wall_time, trace_time=trace_time,
+                                trace_start_time=trace_start_time, trace_end_time=trace_end_time)
             jobs.append(job_info)
 
     return jobs, telemetry_start, telemetry_end

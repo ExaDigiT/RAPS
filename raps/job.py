@@ -4,7 +4,7 @@ def job_dict(nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
              end_state, scheduled_nodes, job_id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
-             wall_time=0, trace_time=0):
+             wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -25,7 +25,9 @@ def job_dict(nodes_required, name, account, \
         'start_time': start_time,
         'end_time': end_time,
         'wall_time': wall_time,
-        'trace_time': trace_time
+        'trace_time': trace_time,
+        'trace_start_time': trace_start_time,
+        'trace_end_time': trace_end_time
     }
 
 
@@ -65,6 +67,8 @@ class Job:
         self.end_time = None      # Actual end time when executing or from telemetry
         self.wall_time = None     # end_time - start_time
         self.trace_time = None    # Time period for which traces are available
+        self.trace_start_time = None    # Time period for which traces are available
+        self.trace_end_time = None    # Time period for which traces are available
         self.running_time = 0     # Current running time updated when simulating
 
         # If a job dict was given, override the values from the job_dict:
@@ -87,6 +91,8 @@ class Job:
                 f"start_time={self.start_time}, end_time={self.end_time}, "
                 f"wall_time={self.wall_time}, "
                 f"trace_time={self.trace_time}, "
+                f"trace_start_time={self.trace_start_time}, "
+                f"trace_end_time={self.trace_end_time}, "
                 f"running_time={self.running_time}, state={self._state}, "
                 f"scheduled_nodes={self.scheduled_nodes}, power={self.power}, "
                 f"power_history={self.power_history})")

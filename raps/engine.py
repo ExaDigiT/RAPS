@@ -157,15 +157,47 @@ class Engine:
                 print(f"JobID: {job.id}")
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
-                if job.running_time > job.trace_time:
-                    raise ValueError(f"Trace Ended before job ended!\n\
-                                       {job.running_time} > {job.trace_time}\n\
-                                       {len(job.cpu_trace)} vs. {self.running_time // self.config['TRACE_QUANTA']}\
+
+                if job.running_time > job.wall_time:
+                    raise Exception(f"Job should have ended already!\n\
+                                       {job.running_time} > {job.wall_time}\n\
+                                       {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
                                       ")
-                time_quanta_index = int(job.running_time // self.config['TRACE_QUANTA'])
-                cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
-                gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
-                net_util = 0
+                # Next: compute the time_quanta_index:
+                # If the running time is past the last time step in the trace,
+                # use the last value in the trace. This can happen if the end
+                # time valid timesteps is e.g. 17%15, the last trace value is
+                # 15%15 and the next possible trace value 30%15 but was not
+                # recorded because the job ended before. Instead of using a
+                # additional padding or raisinig an error, the last valid value
+                # is used.
+                #if int(job.trace_time // self.config['TRACE_QUANTA']) \
+                #   <= int(job.running_time // self.config['TRACE_QUANTA']):
+                #    # Make sure only the last interval is missing if any:
+                #    if job.running_time - job.trace_time < self.config['TRACE_QUANTA']:
+                #        time_quanta_index = len(job.cpu_trace) - 1
+                #    else:
+                #        raise Exception(f"Job is not padded correctly!\n\
+                #                        {job.running_time} > {job.trace_time}\n\
+                #                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
+                #                        ")
+                #else:
+                #    time_quanta_index = int(job.running_time // self.config['TRACE_QUANTA'])
+
+                if job.running_time < job.trace_start_time or job.running_time > job.trace_end_time:
+                    cpu_util = 0  # get_utilization(job.cpu_trace, time_quanta_index)
+                    gpu_util = 0  # get_utilization(job.gpu_trace, time_quanta_index)
+                    net_util = 0
+                    if self.debug:
+                        print("No Values in trace, using IDLE.")
+                    if self.scheduler.policy == PolicyType.REPLAY:
+                        print(f"{job.running_time} < {job.trace_start_time} or {job.running_time} > {job.trace_end_time}")
+                        raise Exception("Replay is using IDLE values! Something is wrong!")
+                else:
+                    time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
+                    cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
+                    gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
+                    net_util = 0
 
                 if len(job.ntx_trace) and len(job.nrx_trace):
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
