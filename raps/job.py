@@ -67,8 +67,8 @@ class Job:
         self.end_time = None      # Actual end time when executing or from telemetry
         self.wall_time = None     # end_time - start_time
         self.trace_time = None    # Time period for which traces are available
-        self.trace_start_time = None    # Time period for which traces are available
-        self.trace_end_time = None    # Time period for which traces are available
+        self.trace_start_time = None  # Relative start time of the trace (to running time)
+        self.trace_end_time = None    # Relative end time of the trace
         self.running_time = 0     # Current running time updated when simulating
 
         # If a job dict was given, override the values from the job_dict:

@@ -100,7 +100,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
     This means that the time between first_start_timestamp and telemetry_start
     has no associated values in the traces!
-    The missing values after simulation_end can be ignored, as the simulatuion will have stoped before.
+    The missing values after simulation_end can be ignored, as the simulatuion
+    will have stoped before.
 
     However, the times before telemetry_start have to be padded to generate
     correct offsets within their data!
@@ -117,6 +118,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     - trace_start_time (time offset in seconds after which the trace starts)
     - trace_end_time (time offset in seconds after which the trace ends)
     has to be set for use within the simulation
+
+    The values trace_start_time are similar to the telemetry_start and
+    telemetry_stop but job specific.
 
     The returned values are these three:
         - The list of parsed jobs. (as a job_dict)
@@ -158,7 +162,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     first_start_timestamp = jobs_df['time_start'].min()
     diff = first_start_timestamp - telemetry_start_timestamp
     first_start = int(diff.total_seconds())  # negative seconds or 0
-
 
     num_jobs = len(jobs_df)
     if debug:
@@ -234,23 +237,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if wall_time > trace_time:
             missing_trace_time = wall_time - trace_time
             if start_time < 0:
-                #cpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),cpu_trace))
-                #gpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),gpu_trace))
-                #print(f"Job: {job_id} prepended {missing_steps} Values with idle power!")
-                #print(f"{start_time} - {end_time}")
                 trace_start_time = missing_trace_time
                 trace_end_time = wall_time
             elif end_time > telemetry_end:
-                #cpu_trace = np.concatenate((cpu_trace,np.array([np.NaN] * missing_steps)))
-                #gpu_trace = np.concatenate((gpu_trace,np.array([np.NaN] * missing_steps)))
-                #print(f"Job: {job_id} appended {missing_steps} Values with idle power!")
-                #print(f"{start_time} - {end_time}")
                 trace_start_time = 0
                 trace_end_time = trace_time
             else:
                 print(f"Job: {job_id} {start_time} - {end_time}!")
                 raise ValueError("Missing values not at start nor end.")
-            #trace_time = gpu_trace.size * config["TRACE_QUANTA"]  # Update trace_time to padded trace
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames

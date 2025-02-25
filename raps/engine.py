@@ -163,30 +163,9 @@ class Engine:
                                        {job.running_time} > {job.wall_time}\n\
                                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
                                       ")
-                # Next: compute the time_quanta_index:
-                # If the running time is past the last time step in the trace,
-                # use the last value in the trace. This can happen if the end
-                # time valid timesteps is e.g. 17%15, the last trace value is
-                # 15%15 and the next possible trace value 30%15 but was not
-                # recorded because the job ended before. Instead of using a
-                # additional padding or raisinig an error, the last valid value
-                # is used.
-                #if int(job.trace_time // self.config['TRACE_QUANTA']) \
-                #   <= int(job.running_time // self.config['TRACE_QUANTA']):
-                #    # Make sure only the last interval is missing if any:
-                #    if job.running_time - job.trace_time < self.config['TRACE_QUANTA']:
-                #        time_quanta_index = len(job.cpu_trace) - 1
-                #    else:
-                #        raise Exception(f"Job is not padded correctly!\n\
-                #                        {job.running_time} > {job.trace_time}\n\
-                #                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
-                #                        ")
-                #else:
-                #    time_quanta_index = int(job.running_time // self.config['TRACE_QUANTA'])
-
                 if job.running_time < job.trace_start_time or job.running_time > job.trace_end_time:
-                    cpu_util = 0  # get_utilization(job.cpu_trace, time_quanta_index)
-                    gpu_util = 0  # get_utilization(job.gpu_trace, time_quanta_index)
+                    cpu_util = 0  # No values available therefore we assume IDLE == 0
+                    gpu_util = 0
                     net_util = 0
                     if self.debug:
                         print("No Values in trace, using IDLE.")
@@ -195,6 +174,16 @@ class Engine:
                         raise Exception("Replay is using IDLE values! Something is wrong!")
                 else:
                     time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
+                    if time_quanta_index == len(job.cpu_trace):
+                        # If the running time is past the last time step in the
+                        # trace, use the last value in the trace. This can
+                        # happen if the last valid timesteps is e.g. 17%15,
+                        # the last trace value is 15%15 and the next possible
+                        # trace value 30%15 but was not recorded because the
+                        # job ended before.
+                        # For every other error condition trace_start_ and
+                        # _end_time are used!
+                        time_quanta_index -= 1
                     cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                     gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     net_util = 0
@@ -224,7 +213,6 @@ class Engine:
                 if job.running_time % self.config['TRACE_QUANTA'] == 0:
                     job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
             del _running_jobs
-
 
         # Update the power array UI component
         rack_power, rect_losses = self.power_manager.compute_rack_power()
@@ -293,7 +281,7 @@ class Engine:
         # Modifies Jobs object
         self.current_time = timestep_start
 
-        #keep only jobs that have not yet ended
+        # Keep only jobs that have not yet ended
         all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start]
 
         all_jobs.sort(key=lambda j: j['submit_time'])
@@ -305,7 +293,6 @@ class Engine:
             self.queue.remove(job)
         if replay and len(self.queue) != 0:
             raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
-
 
     def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
         """Generator that yields after each simulation tick."""
@@ -319,13 +306,10 @@ class Engine:
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, replay)
 
-
         for timestep in range(timestep_start,timestep_end):
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # Identify eligible jobs and add them to the queue.
-            #self.queue += self.eligible_jobs(jobs, self.current_time)
-            #jobs = self.add_eligible_jobs_to_queue(jobs)
             self.add_eligible_jobs_to_queue(jobs)
             # Schedule jobs that are now in the queue.
             self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=False)
