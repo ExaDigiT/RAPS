@@ -71,11 +71,13 @@ sc = Engine(
 )
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
 
-if args.replay:
+timestep_start = 0
+if args.fastforward:
+    args.fastforward = convert_to_seconds(args.fastforward)
+    timestep_start = args.fastforward
 
-    if args.fastforward:
-        args.fastforward = convert_to_seconds(args.fastforward)
-        timestep_start = args.fastforward
+
+if args.replay:
 
     td = Telemetry(**args_dict)
 
@@ -106,8 +108,9 @@ if args.replay:
 
     else:  # custom data loader
         print(*args.replay)
-        jobs, timestep_start, timestep_end = td.load_data(args.replay)
+        jobs, timestep_start_from_data, timestep_end = td.load_data(args.replay)
         td.save_snapshot(jobs, filename=DIR_NAME)
+        timestep_start += timestep_start_from_data  # + timestep_start_from_data
 
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs

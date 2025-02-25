@@ -191,7 +191,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             cpu_power_array = cpu_power.values
             cpu_min_power = nodes_required * config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
             cpu_max_power = nodes_required * config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
-            cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)
+            cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)  # Will be negative! as cpu_power_array[i] can be smaller than cpu_min_power
             cpu_trace = cpu_util * config['CPUS_PER_NODE']
 
             gpu_power = jobprofile_df[jobprofile_df['allocation_id'] \
@@ -229,7 +229,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
         if wall_time > trace_time:
-            missing_steps = int(wall_time - trace_time)
+            missing_steps = int((wall_time - trace_time) // config['TRACE_QUANTA'])
             if start_time < 0:
                 cpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),cpu_trace))
                 gpu_trace = np.concatenate((np.array([np.NaN] * missing_steps),gpu_trace))

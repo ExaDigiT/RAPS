@@ -148,8 +148,13 @@ class Engine:
         cpu_utils = []
         gpu_utils = []
         net_utils = []
+        if self.debug:
+                print(f"Current Time: {self.current_time}")
+
         for job in self.running:
 
+            if self.debug:
+                print(f"JobID: {job.id}")
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
                 if job.running_time > job.trace_time:
@@ -252,7 +257,7 @@ class Engine:
         self.current_time += 1
         return tick_data
 
-    def prepare_system_state(self, all_jobs:List, timestep_start):
+    def prepare_system_state(self, all_jobs:List, timestep_start, replay:bool):
         # Modifies Jobs object
         self.current_time = timestep_start
 
@@ -263,23 +268,25 @@ class Engine:
 
         self.add_running_jobs_to_queue(all_jobs)
         # Now process job queue one by one (needed to get the start_time right!)
-        for job in self.queue:
+        for job in self.queue[:]:  # operate over a slice copy to be able to remove jobs from queue if placed.
             self.scheduler.schedule([job], self.running, job.start_time, sorted=True)
-        if len(self.queue) != len(self.running):
+            self.queue.remove(job)
+        if replay and len(self.queue) != 0:
             raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
-        self.queue = []  # Empty queue needed as addition one by one does not empty the queue!
+
 
     def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
         """Generator that yields after each simulation tick."""
         self.timesteps = timestep_end - timestep_start  # Where is this used?
 
-        # Place jobs that are currently running, onto the system.
-        self.prepare_system_state(jobs, timestep_start)
-
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
         else:
             replay = False
+
+        # Place jobs that are currently running, onto the system.
+        self.prepare_system_state(jobs, timestep_start, replay)
+
 
         for timestep in range(timestep_start,timestep_end):
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
