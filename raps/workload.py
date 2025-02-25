@@ -85,7 +85,8 @@ class Workload:
 
             jobs.append(job_dict(nodes_required, name, account, cpu_trace, gpu_trace, net_tx, net_rx, \
                         end_state, None, job_index, priority, partition,
-                        time_to_next_job, time_limit, time_to_next_job, time_to_next_job + wall_time, wall_time, wall_time))
+                        time_to_next_job, time_limit, time_to_next_job, time_to_next_job + wall_time, wall_time,
+                        wall_time, 0, wall_time))
 
         return jobs
 
@@ -128,7 +129,9 @@ class Workload:
                 0,                               # Start time / or None
                 len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
                 len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
-                len(gpu_trace) * config['TRACE_QUANTA']   # Trace time
+                len(gpu_trace) * config['TRACE_QUANTA'],  # Trace time
+                0,                                        # Trace start time
+                len(gpu_trace) * config['TRACE_QUANTA']   # Trace end time
             )
             print(job_info)
             jobs.append(job_info)  # Add job to the list
@@ -170,7 +173,9 @@ class Workload:
                 0,                               # Start time / or None
                 len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
                 len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
-                len(gpu_trace) * config['TRACE_QUANTA']   # Trace time
+                len(gpu_trace) * config['TRACE_QUANTA'],  # Trace time
+                0,                                        # Trace start time
+                len(gpu_trace) * config['TRACE_QUANTA']   # Trace end time
             )
             jobs.append(job_info)  # Add job to the list
 
@@ -199,7 +204,8 @@ class Workload:
                 f"Max Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
                 'COMPLETED', None, None, 100, partition,
                 0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                0, 10800, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
+                0, 10800, len(gpu_trace) * config['TRACE_QUANTA'],
+                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -211,7 +217,8 @@ class Workload:
                 f"OpenMxP {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
                 'COMPLETED', None, None, 100, partition,
                 0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                10800, 14200, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
+                10800, 14200, len(gpu_trace) * config['TRACE_QUANTA'],
+                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -223,7 +230,8 @@ class Workload:
                 f"HPL {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
                 'COMPLETED', None, None, 100, partition,
                 0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                14200, 17800, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
+                14200, 17800, len(gpu_trace) * config['TRACE_QUANTA'],
+                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 
@@ -235,7 +243,8 @@ class Workload:
                 f"Idle Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
                 'COMPLETED', None, None, 100, partition,
                 0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                17800, 21400, len(gpu_trace) * config['TRACE_QUANTA'], len(gpu_trace) * config['TRACE_QUANTA']
+                17800, 21400, len(gpu_trace) * config['TRACE_QUANTA'],
+                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
             )
             jobs.append(job_info)
 

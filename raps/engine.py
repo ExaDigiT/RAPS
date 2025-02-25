@@ -148,19 +148,45 @@ class Engine:
         cpu_utils = []
         gpu_utils = []
         net_utils = []
+        if self.debug:
+                print(f"Current Time: {self.current_time}")
+
         for job in self.running:
 
+            if self.debug:
+                print(f"JobID: {job.id}")
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
-                if job.running_time > job.trace_time:
-                    raise ValueError(f"Trace Ended before job ended!\n\
-                                       {job.running_time} > {job.trace_time}\n\
-                                       {len(job.cpu_trace)} vs. {self.running_time // self.config['TRACE_QUANTA']}\
+
+                if job.running_time > job.wall_time:
+                    raise Exception(f"Job should have ended already!\n\
+                                       {job.running_time} > {job.wall_time}\n\
+                                       {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
                                       ")
-                time_quanta_index = int(job.running_time // self.config['TRACE_QUANTA'])
-                cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
-                gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
-                net_util = 0
+                if job.running_time < job.trace_start_time or job.running_time > job.trace_end_time:
+                    cpu_util = 0  # No values available therefore we assume IDLE == 0
+                    gpu_util = 0
+                    net_util = 0
+                    if self.debug:
+                        print("No Values in trace, using IDLE.")
+                    if self.scheduler.policy == PolicyType.REPLAY:
+                        print(f"{job.running_time} < {job.trace_start_time} or {job.running_time} > {job.trace_end_time}")
+                        raise Exception("Replay is using IDLE values! Something is wrong!")
+                else:
+                    time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
+                    if time_quanta_index == len(job.cpu_trace):
+                        # If the running time is past the last time step in the
+                        # trace, use the last value in the trace. This can
+                        # happen if the last valid timesteps is e.g. 17%15,
+                        # the last trace value is 15%15 and the next possible
+                        # trace value 30%15 but was not recorded because the
+                        # job ended before.
+                        # For every other error condition trace_start_ and
+                        # _end_time are used!
+                        time_quanta_index -= 1
+                    cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
+                    gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
+                    net_util = 0
 
                 if len(job.ntx_trace) and len(job.nrx_trace):
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
@@ -187,7 +213,6 @@ class Engine:
                 if job.running_time % self.config['TRACE_QUANTA'] == 0:
                     job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
             del _running_jobs
-
 
         # Update the power array UI component
         rack_power, rect_losses = self.power_manager.compute_rack_power()
@@ -252,41 +277,39 @@ class Engine:
         self.current_time += 1
         return tick_data
 
-    def prepare_system_state(self, all_jobs:List, timestep_start):
+    def prepare_system_state(self, all_jobs:List, timestep_start, replay:bool):
         # Modifies Jobs object
         self.current_time = timestep_start
 
-        #keep only jobs that have not yet ended
+        # Keep only jobs that have not yet ended
         all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start]
 
         all_jobs.sort(key=lambda j: j['submit_time'])
 
         self.add_running_jobs_to_queue(all_jobs)
         # Now process job queue one by one (needed to get the start_time right!)
-        for job in self.queue:
+        for job in self.queue[:]:  # operate over a slice copy to be able to remove jobs from queue if placed.
             self.scheduler.schedule([job], self.running, job.start_time, sorted=True)
-        if len(self.queue) != len(self.running):
+            self.queue.remove(job)
+        if replay and len(self.queue) != 0:
             raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
-        self.queue = []  # Empty queue needed as addition one by one does not empty the queue!
 
     def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
         """Generator that yields after each simulation tick."""
         self.timesteps = timestep_end - timestep_start  # Where is this used?
-
-        # Place jobs that are currently running, onto the system.
-        self.prepare_system_state(jobs, timestep_start)
 
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
         else:
             replay = False
 
+        # Place jobs that are currently running, onto the system.
+        self.prepare_system_state(jobs, timestep_start, replay)
+
         for timestep in range(timestep_start,timestep_end):
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # Identify eligible jobs and add them to the queue.
-            #self.queue += self.eligible_jobs(jobs, self.current_time)
-            #jobs = self.add_eligible_jobs_to_queue(jobs)
             self.add_eligible_jobs_to_queue(jobs)
             # Schedule jobs that are now in the queue.
             self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=False)
