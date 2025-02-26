@@ -1,6 +1,5 @@
 import argparse
-import sys
-from raps.schedulers.default import PolicyType
+from raps.schedulers.default import PolicyType, BackfillType
 
 parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulator (RAPS)')
 
@@ -10,18 +9,22 @@ parser.add_argument('-x', '--partitions', nargs='+', default=None, help='List of
 parser.add_argument('-c', '--cooling', action='store_true', help='Include FMU cooling model')
 
 # Simulation runtime options
+parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
 parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode and disable rich layout')
 parser.add_argument('-n', '--numjobs', type=int, default=1000, help='Number of jobs to schedule')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-choices = ['layout1', 'layout2']
-parser.add_argument('--layout', type=str, choices=choices, default=choices[0], help='Layout of UI')
 parser.add_argument('--start', type=str, help='ISO8061 string for start of simulation')
 parser.add_argument('--end', type=str, help='ISO8061 string for end of simulation')
 parser.add_argument('--seed', action='store_true', help='Set random number seed for deterministic simulation')
 parser.add_argument('-u', '--uncertainties', action='store_true',
                     help='Change from floating point units to floating point units with uncertainties.' + \
-                                                                ' Very expensive w.r.t simulation time!')
+                         ' Very expensive w.r.t simulation time!')
+
+# User Interface options
+choices = ['layout1', 'layout2']
+parser.add_argument('--layout', type=str, choices=choices, default=choices[0], help='Layout of UI')
+
 
 # Output options
 parser.add_argument('-o', '--output', action='store_true', help='Output power, cooling, and loss models for later analysis')
@@ -33,7 +36,6 @@ parser.add_argument('--imtype', type=str, choices=choices, default=choices[0], h
 # Telemetry data
 parser.add_argument('-f', '--replay', nargs='+', type=str, help='Either: path/to/joblive path/to/jobprofile' + \
                                                                 ' -or- filename.npz (overrides --workload option)')
-parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-e', '--encrypt', action='store_true', help='Encrypt any sensitive data in telemetry')
 parser.add_argument('--validate', action='store_true', help='Use node power instead of CPU/GPU utilizations')
 parser.add_argument('--jid', type=str, default='*', help='Replay job id')
@@ -44,14 +46,18 @@ choices = ['random', 'benchmark', 'peak', 'idle']
 parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
-choices = ['default', 'replay', 'nrel', 'anl', 'flux']
+choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
-choices = [None, 'firstfit', 'bestfit', 'greedy', 'easy', 'conservative']
+choices = [policy.value for policy in PolicyType]
+parser.add_argument('--policy', type=str, choices=choices, default=choices[0], help='Schedule policy to use')
+choices = [policy.value for policy in BackfillType]
 parser.add_argument('--backfill', type=str, choices=choices, default=None, help='Backfill Policy')
-policies = [policy.value for policy in PolicyType]
+
+# Redistribution of job arrival
 choices = ['prescribed', 'poisson']
 parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
-parser.add_argument('--policy', type=str, choices=policies, default=None, help='Schedule policy to use')
+
+# Account options
 parser.add_argument('--accounts', action='store_true', help='Flag indicating if accounts should be tracked')
 parser.add_argument('--accounts-json', type=str, help='Json of account stats generated in previous run. see raps/accounts.py')
 
