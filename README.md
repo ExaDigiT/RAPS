@@ -96,6 +96,12 @@ There are three ways to modify replaying of telemetry data:
 
     make docker_build && make docker_run
 
+## Third party schedulers
+
+To install third-party schedulers, such as ScheduleFlow, run:
+
+    git submodule update --init --recursive
+
 ### Setup Simulation Server
 
 See instructions in [server/README.md](https://code.ornl.gov/exadigit/simulationserver)
