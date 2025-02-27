@@ -203,7 +203,7 @@ if args.plot:
 
     if 'pue' in args.plot:
         if cooling_model:
-            ylabel = 'PUE_Out[1]'
+            ylabel = 'pue'
             title = 'FMU ' + ylabel + 'History'
             pl = Plotter('Time (s)', ylabel, title, OPATH / f'pue.{args.imtype}', \
                          uncertainties=args.uncertainties)
