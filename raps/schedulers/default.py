@@ -169,7 +169,9 @@ class Scheduler:
         # as the next job in line has the necessary resrouces after this time limit.
 
         # Find and return the first job that fits
-        if self.bfpolicy == BackfillType.EASY:
+        if self.bfpolicy == BackfillType.NONE:
+            pass
+        elif self.bfpolicy == BackfillType.EASY:
             queue[:] = sorted(queue, key=lambda job: job.submit_time)
             return self.return_first_fit(queue,time_limit)
         elif self.bfpolicy == BackfillType.FIRSTFIT:
