@@ -46,6 +46,8 @@ parser.add_argument('-w', '--workload', type=str, choices=choices, default=choic
 # Scheduling options
 choices = ['default', 'replay', 'nrel', 'anl', 'flux']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
+choices = [None, 'firstfit', 'bestfit', 'greedy', 'easy', 'conservative']
+parser.add_argument('--backfill', type=str, choices=choices, default=None, help='Backfill Policy')
 policies = [policy.value for policy in PolicyType]
 choices = ['prescribed', 'poisson']
 parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')

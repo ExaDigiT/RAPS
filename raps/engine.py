@@ -59,12 +59,16 @@ class Engine:
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
+        policy_type = kwargs.get('policy', None)
+        backfill_type = kwargs.get('backfill', None)
+
         self.scheduler = load_scheduler(scheduler_type)(
             config=self.config,
             policy=kwargs.get('policy'),
+            bfpolicy=kwargs.get('backfill'),
             resource_manager=self.resource_manager
         )
-        print(f"Using scheduler: {scheduler_type}")
+        print(f"Using scheduler: {scheduler_type}, with policy {policy_type} and backfill {backfill_type}")
 
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
