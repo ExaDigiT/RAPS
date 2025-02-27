@@ -4,7 +4,7 @@ def job_dict(nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
              end_state, scheduled_nodes, job_id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
-             wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0):
+             wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0, trace_missing_values=False):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -27,7 +27,9 @@ def job_dict(nodes_required, name, account, \
         'wall_time': wall_time,
         'trace_time': trace_time,
         'trace_start_time': trace_start_time,
-        'trace_end_time': trace_end_time
+        'trace_end_time': trace_end_time,
+        'trace_missing_values': trace_missing_values
+
     }
 
 

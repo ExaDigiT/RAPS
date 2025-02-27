@@ -260,7 +260,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         else:  # Prescribed replay
             scheduled_nodes = []
-            priority = 0  # not used for replay
+            # priority = 0  # not used for replay
+            priority = aging_boost(nodes_required)
             for xname in xnames:
                 indices = xname_to_index(xname, config)
                 scheduled_nodes.append(indices)

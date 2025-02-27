@@ -167,13 +167,13 @@ class Engine:
                                        {job.running_time} > {job.wall_time}\n\
                                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
                                       ")
-                if job.running_time < job.trace_start_time or job.running_time > job.trace_end_time:
+                if job.running_time < job.trace_start_time or job.running_time >= job.trace_end_time:
                     cpu_util = 0  # No values available therefore we assume IDLE == 0
                     gpu_util = 0
                     net_util = 0
                     if self.debug:
                         print("No Values in trace, using IDLE.")
-                    if self.scheduler.policy == PolicyType.REPLAY:
+                    if self.scheduler.policy == PolicyType.REPLAY and not job.trace_missing_values:
                         print(f"{job.running_time} < {job.trace_start_time} or {job.running_time} > {job.trace_end_time}")
                         raise Exception("Replay is using IDLE values! Something is wrong!")
                 else:
