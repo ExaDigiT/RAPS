@@ -281,12 +281,12 @@ class Engine:
         self.current_time += 1
         return tick_data
 
-    def prepare_system_state(self, all_jobs:List, timestep_start, replay:bool):
+    def prepare_system_state(self, all_jobs:List, timestep_start, timestep_end, replay:bool):
         # Modifies Jobs object
         self.current_time = timestep_start
 
-        # Keep only jobs that have not yet ended
-        all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start]
+        # Keep only jobs that have not yet ended and that have a chance to start
+        all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start and job['submit_time'] < timestep_end]
 
         all_jobs.sort(key=lambda j: j['submit_time'])
 
@@ -308,7 +308,7 @@ class Engine:
             replay = False
 
         # Place jobs that are currently running, onto the system.
-        self.prepare_system_state(jobs, timestep_start, replay)
+        self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
 
         for timestep in range(timestep_start,timestep_end):
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
