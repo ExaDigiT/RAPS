@@ -115,7 +115,7 @@ if args.replay:
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs
     if args.time:
-        timestep_end = convert_to_seconds(args.time)
+        timestep_end = timestep_start + convert_to_seconds(args.time)
     elif not timestep_end:
         timestep_end = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
 
