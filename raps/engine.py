@@ -92,7 +92,6 @@ class Engine:
             eligible_jobs_list.append(job_instance)
         self.queue += eligible_jobs_list
 
-
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
         Mofifies jobs_to_submit
@@ -310,16 +309,30 @@ class Engine:
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
 
+        # Process jobs in batches for better performance of timestep loop
+        all_jobs = jobs.copy()
+        jobs = []
+
         for timestep in range(timestep_start,timestep_end):
+
+            # Batch Jobs into 6h windows based on submit_time
+            batch_window = 60 * 60 * 6  # 6h
+            if (timestep % batch_window == 0) or (timestep == timestep_start):
+                # Add jobs that are within the batching window and remove them from all jobs
+                jobs += [job for job in all_jobs if job['submit_time'] <= timestep + batch_window]
+                all_jobs[:] = [job for job in all_jobs if job['submit_time'] > timestep + batch_window]
+
+            # Start Siulation loop:
+            # 1. Cleanup old jobs
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
-            # Identify eligible jobs and add them to the queue.
+            # 2. Identify eligible jobs and add them to the queue.
             self.add_eligible_jobs_to_queue(jobs)
-            # Schedule jobs that are now in the queue.
+            # 3. Schedule jobs that are now in the queue.
             self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=False)
 
-            # Stop the simulation if no more jobs are running or in the queue.
-            if autoshutdown and not self.queue and not self.running and not self.replay:
+            # Stop the simulation if no more jobs are running or in the queue or in the job list.
+            if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:
                 print(f"[DEBUG] {self.config['system_name']} - Stopping simulation at time {self.current_time}")
                 break
 
