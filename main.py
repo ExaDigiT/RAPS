@@ -69,7 +69,6 @@ sc = Engine(
     cooling_model=cooling_model,
     **args_dict,
 )
-layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
 
 timestep_start = 0
 if args.fastforward:
@@ -159,7 +158,9 @@ if args.plot or args.output:
 if args.verbose:
     print(jobs)
 
-print(f'Simulating {len(jobs)} jobs for {timestep_end - timestep_start} seconds')
+total_timesteps = timestep_end - timestep_start
+print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds')
+layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end)
 
 engine_stats = get_engine_stats(sc)
