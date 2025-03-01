@@ -4,13 +4,16 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
+from rich.live import Live
+from rich.progress import Progress,TextColumn,BarColumn,TaskProgressColumn,TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
+
 from .utils import summarize_ranges, convert_seconds
 from .constants import ELLIPSES
 from .engine import TickData, Engine
 
 
 class LayoutManager:
-    def __init__(self, layout_type, engine: Engine, debug, **config):
+    def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, **config):
         self.engine = engine
         self.config = config
         self.console = Console()
@@ -22,20 +25,32 @@ class LayoutManager:
         self.racks_per_cdu = self.config['RACKS_PER_CDU']
         self.power_column = self.power_df_header[self.racks_per_cdu + 1]
         self.loss_column = self.power_df_header[-1]
+        self.progress = Progress(
+            TextColumn("Progress: [progress.percentage]{task.percentage:>3.0f}%"),
+            BarColumn(bar_width=None),
+            TextColumn("•"),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn()
+        )
+        self.progress_task = self.progress.add_task("Progress",total=total_timesteps, name="Progress")
 
     def setup_layout(self, layout_type):
+        self.layout.split_column(Layout(name="main"),Layout(name="progress",size=1))
         if layout_type == "layout2":
-            self.layout.split_row(Layout(name="left", ratio=3), Layout(name="right", ratio=2))
-            self.layout["left"].split_column(
+            self.layout["main"].split_row(Layout(name="left", ratio=3), Layout(name="right", ratio=2))
+            self.layout["main"]["left"].split_column(
                 Layout(name="pressflow", ratio=6),
                 Layout(name="powertemp", ratio=11),
                 Layout(name="totpower", ratio=3),
             )
-            self.layout["right"].split(Layout(name="scheduled", ratio=17), Layout(name="status", ratio=3))
+            self.layout["main"]["right"].split(Layout(name="scheduled", ratio=17), Layout(name="status", ratio=3))
         else:
-            self.layout.split_row(Layout(name="left", ratio=1), Layout(name="right", ratio=1))
-            self.layout["left"].split_column(Layout(name="upper", ratio=8), Layout(name="lower", ratio=2))
-            self.layout["right"].split_column(Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
+            self.layout["main"].split_row(Layout(name="left", ratio=1), Layout(name="right", ratio=1))
+            self.layout["main"]["left"].split_column(Layout(name="upper", ratio=8), Layout(name="lower", ratio=2))
+            self.layout["main"]["right"].split_column(Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
 
     def create_table(self, title, columns, header_style="bold green"):
         """
@@ -373,25 +388,34 @@ class LayoutManager:
 
             self.layout["lower"].update(Panel(Align(total_table, align="center"), title="Power and Performance"))
 
+    def update_progress(self, timestamp):
+        self.progress.update(self.progress_task, description=f"{timestamp}",advance=timestamp,transient=True)
+        self.layout["progress"].update(self.progress.get_renderable())
+
     def update(self, data: TickData):
         uncertainties = self.engine.power_manager.uncertainties
 
-        if self.engine.cooling_model:
-            self.update_powertemp_array(
-                data.power_df, data.fmu_outputs, data.p_flops, data.g_flops_w, data.system_util,
-                uncertainties=uncertainties,
-            )
-            self.update_pressflow_array(data.fmu_outputs)
+        if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
+            if self.engine.cooling_model:
+                self.update_powertemp_array(
+                    data.power_df, data.fmu_outputs, data.p_flops, data.g_flops_w, data.system_util,
+                    uncertainties=uncertainties,
+                )
+                self.update_pressflow_array(data.fmu_outputs)
 
-        self.update_scheduled_jobs(data.running + data.queue)
-        self.update_status(
-            data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
-            data.num_free_nodes, data.down_nodes,
-        )
-        self.update_power_array(
-            data.power_df, data.p_flops, data.g_flops_w,
-            data.system_util, uncertainties=uncertainties,
-        )
+            self.update_scheduled_jobs(data.running + data.queue)
+            self.update_status(
+                data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
+                data.num_free_nodes, data.down_nodes,
+            )
+            self.update_power_array(
+                data.power_df, data.p_flops, data.g_flops_w,
+                data.system_util, uncertainties=uncertainties,
+            )
+            if False:
+                self.render()
+        self.update_progress(1)
+
 
     def render(self):
         if not self.debug:
@@ -400,10 +424,9 @@ class LayoutManager:
 
     def run(self, jobs, timestep_start, timestep_end):
         """ Runs the UI, blocking until the simulation is complete """
-        for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
-            if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
+        with Live(self.layout, refresh_per_second=5):
+            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
                 self.update(data)
-                self.render()
 
     def run_stepwise(self, jobs, timestep_start, timestep_end):
         """ Prepares the UI and returns a generator for the simulation """
