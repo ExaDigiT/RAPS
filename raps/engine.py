@@ -165,8 +165,9 @@ class Engine:
                     raise Exception(f"Job should have ended already!\n\
                                        {job.running_time} > {job.wall_time}\n\
                                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
-                                      ")
-                if job.running_time < job.trace_start_time or job.running_time >= job.trace_end_time:
+                                    ")
+                # job.running_time < job.trace_start_time or
+                if job.running_time >= job.trace_end_time:
                     cpu_util = 0  # No values available therefore we assume IDLE == 0
                     gpu_util = 0
                     net_util = 0
@@ -177,7 +178,7 @@ class Engine:
                         raise Exception("Replay is using IDLE values! Something is wrong!")
                 else:
                     time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
-                    if time_quanta_index == len(job.cpu_trace):
+                    if isinstance(job.cpu_trace, List) and time_quanta_index == len(job.cpu_trace):
                         # If the running time is past the last time step in the
                         # trace, use the last value in the trace. This can
                         # happen if the last valid timesteps is e.g. 17%15,
@@ -191,7 +192,7 @@ class Engine:
                     gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     net_util = 0
 
-                if len(job.ntx_trace) and len(job.nrx_trace):
+                if isinstance(job.ntx_trace,List) and len(job.ntx_trace) and isinstance(job.nrx_trace,List) and len(job.nrx_trace):
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx)
