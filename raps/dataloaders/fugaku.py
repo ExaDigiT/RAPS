@@ -10,8 +10,9 @@
     The '--arrival poisson' will compute submit times from Poisson distribution, instead of using
     the submit times given in F-Data.
 
-    python main.py --system fugaku -f /path/to/21_04.parquet --arrival poisson --validate
-
+    python main.py --system fugaku -f /path/to/21_04.parquet
+    python main.py --system fugaku -f /path/to/21_04.parquet --validate
+    python main.py --system fugaku -f /path/to/21_04.parquet --policy priority --backfill easy
 """
 import pandas as pd
 from tqdm import tqdm
@@ -51,13 +52,10 @@ def load_data_from_df(df, **kwargs):
     int: Telemetry End (in seconds)
     """
     encrypt_bool = kwargs.get('encrypt')
-    fastforward = kwargs.get('fastforward')
     arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     config = kwargs.get('config')
-
-    if fastforward: print(f"fast-forwarding {fastforward} seconds")
 
     job_list = []
 

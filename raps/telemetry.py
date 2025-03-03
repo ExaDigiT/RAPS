@@ -84,13 +84,13 @@ if __name__ == "__main__":
 
     if args.replay[0].endswith(".npz"):
         print(f"Loading {args.replay[0]}...")
-        jobs = td.load_snapshot(args.replay[0])
+        jobs,_,_ = td.load_snapshot(args.replay[0])
         if args.arrival == "poisson":
             for job in tqdm(jobs, desc="Updating requested_nodes"):
                 job['requested_nodes'] = None
                 job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
     else:
-        jobs = td.load_data(args.replay)
+        jobs,_,_ = td.load_data(args.replay)
 
     timesteps = int(max(job['wall_time'] + job['submit_time'] for job in jobs))
 

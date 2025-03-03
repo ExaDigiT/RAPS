@@ -11,8 +11,9 @@
     # to simulate the dataset
     python main.py -f /path/to/job_table.parquet --system marconi100
 
-    # to replay using modified arrival times
-    python main.py -f /path/to/job_table.parquet --system marconi100 --arrival poisson
+    # to replay using differnt schedulers
+    python main.py -f /path/to/job_table.parquet --system marconi100 --policy fcfs --backfill easy
+    python main.py -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
 
     # to fast-forward 60 days and replay for 1 day
     python main.py -f /path/to/job_table.parquet --system marconi100 -ff 60d -t 1d
@@ -72,13 +73,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     # Sort jobs dataframe based on values in time_start column, adjust indices after sorting
     jobs_df = jobs_df.sort_values(by='start_time')
     jobs_df = jobs_df.reset_index(drop=True)
-
-    # Take earliest time as baseline reference
-    # We can use the start time of the first job.
-    if min_time:
-        time_zero = min_time
-    else:
-        time_zero = jobs_df['start_time'].min()
 
     # Dataset has one value from start to finish.
     # Therefore we set telemetry start and end equal to job start and end.

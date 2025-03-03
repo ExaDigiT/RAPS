@@ -174,7 +174,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     # Map dataframe to job state. Add results to jobs list
     for jidx in tqdm(range(num_jobs - 1), total=num_jobs, desc="Processing Jobs"):
 
-        user = jobs_df.loc[jidx, 'user']
+        # user = jobs_df.loc[jidx, 'user']
         account = jobs_df.loc[jidx, 'account']
         job_id = jobs_df.loc[jidx, 'job_id']
         allocation_id = jobs_df.loc[jidx, 'allocation_id']
