@@ -1,5 +1,15 @@
 from enum import Enum
 
+"""
+Note: want to simplify this in the future to use a minimal required set of job attributes, 
+the standard workload format (swf) https://www.cs.huji.ac.il/labs/parallel/workload/swf.html
+
+Implementing such using something like:
+
+    from types import SimpleNamespace
+    job = SimpleNamespace(**job_dict(...))
+"""
+
 def job_dict(nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
              end_state, scheduled_nodes, job_id, priority=0, partition=0,
