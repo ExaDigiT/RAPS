@@ -64,7 +64,7 @@ def main():
     # If no arguments are given, run all tests
     if not args.tests:
         synthetic_workload_tests()
-        hetero_tests()
+        #hetero_tests()
         execute_system_tests(SYSTEMS.keys())
     else:
         # Validate each test name

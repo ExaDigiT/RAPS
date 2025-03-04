@@ -92,7 +92,16 @@ if args.replay:
     # Read telemetry data (either npz file or via custom data loader)
     if args.replay[0].endswith(".npz"):  # Replay .npz file
         print(f"Loading {args.replay[0]}...")
-        jobs = td.load_snapshot(args.replay[0])
+        jobs, timestep_start_from_file, timestep_end_from_file, args_from_file = td.load_snapshot(args.replay[0])
+        print("Intended to run with:" +\
+              f"\n--system {args_from_file.system} " +\
+              f"-ff {args_from_file.fastforward} " +\
+              f"-t {args_from_file.time}\n" +\
+              f"All Args:\n{args_from_file}"
+              )
+        if args.time is None:
+            print("Set --time (necessary) and possibly --fasforward, to run .npz replay successfully!")
+            exit()
 
         if args.scale:
             for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -108,8 +117,8 @@ if args.replay:
     else:  # custom data loader
         print(*args.replay)
         jobs, timestep_start_from_data, timestep_end = td.load_data(args.replay)
-        td.save_snapshot(jobs, filename=DIR_NAME)
-        timestep_start += timestep_start_from_data  # + timestep_start_from_data
+        timestep_start += timestep_start_from_data
+        td.save_snapshot((jobs, timestep_start, timestep_end, args), filename=DIR_NAME)
 
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs
