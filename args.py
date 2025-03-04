@@ -58,16 +58,3 @@ parser.add_argument('--accounts-json', type=str, help='Json of account stats gen
 args = parser.parse_args()
 args_dict = vars(args)
 print(args_dict)
-
-# Determine the default policy based on --replay
-policy_specified = args.policy is not None  # was policy set explicitly
-
-if not policy_specified:
-    if args.replay:  # if --replay is provided, default to "replay"
-        args.policy = "replay"
-        print(f"No policy specified, using default for replay: {args.policy}")
-    else:  # otherwise, default to "fcfs"
-        args.policy = policies[0]
-        print(f"No policy specified, using default: {args.policy}")
-
-print("Final policy:", args.policy)

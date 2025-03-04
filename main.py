@@ -93,15 +93,15 @@ if args.replay:
     if args.replay[0].endswith(".npz"):  # Replay .npz file
         print(f"Loading {args.replay[0]}...")
         jobs, timestep_start_from_file, timestep_end_from_file, args_from_file = td.load_snapshot(args.replay[0])
-        print("Intended to run with:" +\
+        if args_from_file.fastforward is None:
+            args_from_file.fastforward = 0
+        print("File was generated with:" +\
               f"\n--system {args_from_file.system} " +\
               f"-ff {args_from_file.fastforward} " +\
               f"-t {args_from_file.time}\n" +\
               f"All Args:\n{args_from_file}"
               )
-        if args.time is None:
-            print("Set --time (necessary) and possibly --fasforward, to run .npz replay successfully!")
-            exit()
+        timestep_end = timestep_end_from_file
 
         if args.scale:
             for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -153,7 +153,7 @@ if args.accounts:
     job_accounts = Accounts(jobs)
     if args.accounts_json:
         loaded_accounts = Accounts.from_json_filename(args.accounts_json)
-        accounts = Accounts.merge(loaded_accounts,job_accounts)
+        accounts = Accounts.merge(loaded_accounts, job_accounts)
     else:
         accounts = job_accounts
     sc.accounts = accounts

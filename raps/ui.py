@@ -359,7 +359,7 @@ class LayoutManager:
         percent_loss_str = f"{total_loss_mw / total_power_mw * 100:.2f}%"
 
         if not self.hascooling:
-            self.layout["upper"].update(Panel(Align(table, align="center")))
+            self.layout["upper"].update(Panel(Align(table, align="center"),title=self.engine.config["system_name"].capitalize()))
 
             # Create Total Power table with green headers and white data
             total_table = Table(show_header=True, header_style="bold green")

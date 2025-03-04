@@ -12,6 +12,8 @@ class Scheduler:
 
     def __init__(self, config, policy, bfpolicy=None, resource_manager=None):
         self.config = config
+        if policy is None:  # policy is passed as policy=None, therefore default is not choosen
+            policy = "replay"
         self.policy = PolicyType(policy)
         self.bfpolicy = BackfillType(bfpolicy)
         if resource_manager is None:

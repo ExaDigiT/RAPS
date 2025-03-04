@@ -79,13 +79,20 @@ for i, config in enumerate(configs):
     layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
 
 # Set simulation timesteps
+if args.fastforward:
+    fastfoward = convert_to_seconds(args.fastforward)
+else:
+    fastforward = 0
 if args.time:
     timesteps = convert_to_seconds(args.time)
 else:
     timesteps = 88200  # Default to 24 hours
 
+timestep_start = fastforward
+timestep_end = timestep_start + timesteps
+
 # Create generators for each layout manager
-generators = {name: lm.run_stepwise(jobs_by_partition[name], timesteps=timesteps)
+generators = {name: lm.run_stepwise(jobs_by_partition[name], timestep_start=timestep_start, timestep_end=timestep_end)
               for name, lm in layout_managers.items()}
 
 # Step through all generators in lockstep
