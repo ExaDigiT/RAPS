@@ -50,12 +50,16 @@ def min_max_sum(value,min,max,sum):
     sum += value
     return min,max,sum
 
-
 def get_job_stats(engine: Engine):
     """ Return job statistics processed over the engine execution"""
     # Information on Job-Mix
     min_job_size, max_job_size, sum_job_size = sys.maxsize, -sys.maxsize - 1, 0
     min_runtime, max_runtime, sum_runtime = sys.maxsize, -sys.maxsize - 1, 0
+
+    min_energy, max_energy, sum_energy = sys.maxsize, -sys.maxsize - 1, 0
+    min_edp, max_edp, sum_edp = sys.maxsize, -sys.maxsize - 1, 0
+    min_edp2, max_edp2, sum_edp2 = sys.maxsize, -sys.maxsize - 1, 0
+
     min_agg_node_hours, max_agg_node_hours, sum_agg_node_hours = sys.maxsize, -sys.maxsize - 1, 0
     # Completion statistics
     throughput = engine.jobs_completed / engine.timesteps * 3600 if engine.timesteps else 0  # Jobs per hour
@@ -66,6 +70,11 @@ def get_job_stats(engine: Engine):
     min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = sys.maxsize, -sys.maxsize - 1, 0
     min_awrt, max_awrt, sum_awrt = sys.maxsize, -sys.maxsize - 1, 0
 
+    jobsSmall = 0
+    jobsMedium = 0
+    jobsLarge = 0
+    jobsHuge = 0
+
     # Information on Job-Mix
     for job in engine.job_history_dict:
         job_size = job['num_nodes']
@@ -75,6 +84,17 @@ def get_job_stats(engine: Engine):
         runtime = job['end_time'] - job['start_time']
         min_runtime, max_runtime, sum_runtime = \
             min_max_sum(runtime, min_runtime, max_runtime, sum_runtime)
+
+        energy = job['energy']
+        min_energy, max_energy, sum_energy = \
+            min_max_sum(energy, min_energy, max_energy, sum_energy)
+        edp = energy * runtime
+        min_edp, max_edp, sum_edp = \
+            min_max_sum(edp, min_edp, max_edp, sum_edp)
+
+        edp2 = energy * runtime**2
+        min_edp2, max_edp2, sum_edp2 = \
+            min_max_sum(edp2, min_edp2, max_edp2, sum_edp2)
 
         agg_node_hours = runtime * job_size  # Aggreagte node hours
         min_agg_node_hours, max_agg_node_hours, sum_agg_node_hours = \
@@ -102,9 +122,21 @@ def get_job_stats(engine: Engine):
         min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = \
             min_max_sum(psf_partial_den, min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den)
 
+        if job['num_nodes'] <= 5:
+            jobsSmall += 1
+        elif job['num_nodes'] <= 50:
+            jobsMedium += 1
+        elif job['num_nodes'] <= 250:
+            jobsLarge += 1
+        else:  # job['nodes_required'] > 250:
+            jobsHuge += 1
+
     if len(engine.job_history_dict) != 0:
         avg_job_size = sum_job_size / len(engine.job_history_dict)
         avg_runtime = sum_runtime / len(engine.job_history_dict)
+        avg_energy = sum_energy / len(engine.job_history_dict)
+        avg_edp= sum_edp / len(engine.job_history_dict)
+        avg_edp2= sum_edp2 / len(engine.job_history_dict)
         avg_agg_node_hours = sum_agg_node_hours / len(engine.job_history_dict)
         avg_wait_time = sum_wait_time / len(engine.job_history_dict)
         avg_turnaround_time = sum_turnaround_time / len(engine.job_history_dict)
@@ -114,6 +146,9 @@ def get_job_stats(engine: Engine):
         # Set these to -1 to indicate nothing ran
         min_job_size, max_job_size, avg_job_size = -1,-1,-1
         min_runtime, max_runtime, avg_runtime = -1,-1,-1
+        min_energy, max_energy, avg_energy = -1,-1,-1
+        min_edp, max_edp, avg_edp = -1,-1,-1
+        min_edp2, max_edp2, avg_edp2 = -1,-1,-1
         min_agg_node_hours, max_agg_node_hours, avg_agg_node_hours = -1,-1,-1
         min_wait_time, max_wait_time, avg_wait_time = -1,-1,-1
         min_turnaround_time, max_turnaround_time, avg_turnaround_time = -1,-1,-1
@@ -125,6 +160,10 @@ def get_job_stats(engine: Engine):
         'throughput': f'{throughput:.2f} jobs/hour',
         'jobs still running': [job.id for job in engine.running],
         'jobs still in queue': [job.id for job in engine.queue],
+        'Jobs <= 5 nodes': jobsSmall,
+        'Jobs <= 50 nodes': jobsMedium,
+        'Jobs <= 250 nodes': jobsLarge,
+        'Jobs > 250 nodes': jobsHuge,
         # Information on job-mix executed
         'min job size': min_job_size,
         'max job size': max_job_size,
@@ -132,6 +171,15 @@ def get_job_stats(engine: Engine):
         'min runtime': min_runtime,
         'max runtime': max_runtime,
         'average runtime': avg_runtime,
+        'min energy': min_energy,
+        'max energy': max_energy,
+        'avg energy': avg_energy,
+        'min edp': min_edp,
+        'max edp': max_edp,
+        'avg edp': avg_edp,
+        'min edp^2': min_edp2,
+        'max edp^2': max_edp2,
+        'avg edp^2': avg_edp2,
         'min_aggregate_node_hours': min_agg_node_hours,
         'max_aggregate_node_hours': max_agg_node_hours,
         'avg_aggregate_node_hours': avg_agg_node_hours,
