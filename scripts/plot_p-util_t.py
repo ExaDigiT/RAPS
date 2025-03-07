@@ -60,4 +60,5 @@ for i in [1]:
     plt.title(path)
     ax1.legend(loc='upper left')
     ax2.legend(loc='upper right')
-    plt.show()
+    # plt.show()
+    plt.savefig("test.png")
