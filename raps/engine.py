@@ -34,7 +34,7 @@ class TickData:
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, **kwargs):
+    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, jobs=None, **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
@@ -66,11 +66,12 @@ class Engine:
             config=self.config,
             policy=kwargs.get('policy'),
             bfpolicy=kwargs.get('backfill'),
-            resource_manager=self.resource_manager
+            resource_manager=self.resource_manager,
+            jobs=jobs
         )
         print(f"Using scheduler: {str(self.scheduler.__class__).split('.')[2]}"\
-              f", with policy {self.scheduler.policy.value} "\
-              f"and backfill {self.scheduler.bfpolicy.value}")
+              f", with policy {self.scheduler.policy} "\
+              f"and backfill {self.scheduler.bfpolicy}")
 
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
@@ -315,11 +316,11 @@ class Engine:
         # Process jobs in batches for better performance of timestep loop
         all_jobs = jobs.copy()
         jobs = []
+        # Batch Jobs into 6h windows based on submit_time
+        batch_window = 60 * 60 * 6  # 6h
 
         for timestep in range(timestep_start,timestep_end):
 
-            # Batch Jobs into 6h windows based on submit_time
-            batch_window = 60 * 60 * 6  # 6h
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
                 jobs += [job for job in all_jobs if job['submit_time'] <= timestep + batch_window]

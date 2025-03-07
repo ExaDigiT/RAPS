@@ -83,10 +83,18 @@ class Workload:
             # Jobs arrive according to Poisson process
             time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
 
-            jobs.append(job_dict(nodes_required, name, account, cpu_trace, gpu_trace, net_tx, net_rx, \
-                        end_state, None, job_index, priority, partition,
-                        time_to_next_job, time_limit, time_to_next_job, time_to_next_job + wall_time, wall_time,
-                        wall_time, 0, wall_time))
+            jobs.append(job_dict(nodes_required=nodes_required, name=name,
+                                 account=account, cpu_trace=cpu_trace,
+                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
+                                 nrx_trace=net_rx, end_state=end_state,
+                                 id=job_index, priority=priority,
+                                 partition=partition,
+                                 submit_time=time_to_next_job - 100,
+                                 time_limit=time_limit,
+                                 start_time=time_to_next_job,
+                                 end_time=time_to_next_job + wall_time,
+                                 wall_time=wall_time, trace_time=wall_time,
+                                 trace_start_time=0, trace_end_time=wall_time))
 
         return jobs
 

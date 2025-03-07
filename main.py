@@ -63,12 +63,6 @@ else:
 args_dict['config'] = config
 flops_manager = FLOPSManager(**args_dict)
 
-sc = Engine(
-    power_manager=power_manager,
-    flops_manager=flops_manager,
-    cooling_model=cooling_model,
-    **args_dict,
-)
 
 timestep_start = 0
 if args.fastforward:
@@ -144,6 +138,14 @@ else:  # Synthetic jobs
         timestep_end = 88200  # 24 hours
 
     DIR_NAME = create_casename()
+
+sc = Engine(
+    power_manager=power_manager,
+    flops_manager=flops_manager,
+    cooling_model=cooling_model,
+    jobs=jobs,
+    **args_dict,
+)
 
 OPATH = OUTPUT_PATH / DIR_NAME
 print("Output directory is: ", OPATH)

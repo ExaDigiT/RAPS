@@ -1,7 +1,7 @@
 from enum import Enum
 
 """
-Note: want to simplify this in the future to use a minimal required set of job attributes, 
+Note: want to simplify this in the future to use a minimal required set of job attributes,
 the standard workload format (swf) https://www.cs.huji.ac.il/labs/parallel/workload/swf.html
 
 Implementing such using something like:
@@ -10,9 +10,9 @@ Implementing such using something like:
     job = SimpleNamespace(**job_dict(...))
 """
 
-def job_dict(nodes_required, name, account, \
+def job_dict(*,nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
-             end_state, scheduled_nodes, job_id, priority=0, partition=0,
+             end_state, scheduled_nodes=None, id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
              wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0, trace_missing_values=False):
     """ Return job info dictionary """
@@ -26,7 +26,7 @@ def job_dict(nodes_required, name, account, \
         'nrx_trace': nrx_trace,
         'end_state': end_state,
         'requested_nodes': scheduled_nodes,
-        'id': job_id,
+        'id': id,
         'priority': priority,
         'partition': partition,
         # Times:
@@ -87,7 +87,7 @@ class Job:
         for key, value in job_dict.items():
             setattr(self, key, value)
         # In any case: provide a job_id!
-        if not self.id:
+        if self.id is None:  # This is wrong
             self.id = Job._get_next_id()
 
         if self.scheduled_nodes and self.nodes_required == 0:

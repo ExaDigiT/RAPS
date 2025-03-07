@@ -10,7 +10,7 @@ from ..policy import PolicyType, BackfillType
 class Scheduler:
     """ Default job scheduler with various scheduling policies. """
 
-    def __init__(self, config, policy, bfpolicy=None, resource_manager=None):
+    def __init__(self, config, policy, bfpolicy=None, jobs=None, resource_manager=None):
         self.config = config
         if policy is None:  # policy is passed as policy=None, therefore default is not choosen
             policy = "replay"
