@@ -64,7 +64,6 @@ def get_job_stats(engine: Engine):
     min_turnaround_time, max_turnaround_time, sum_turnaround_time = sys.maxsize, -sys.maxsize - 1, 0
     min_psf_partial_num, max_psf_partial_num, sum_psf_partial_num = sys.maxsize, -sys.maxsize - 1, 0
     min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = sys.maxsize, -sys.maxsize - 1, 0
-
     min_awrt, max_awrt, sum_awrt = sys.maxsize, -sys.maxsize - 1, 0
 
     # Information on Job-Mix
@@ -90,9 +89,11 @@ def get_job_stats(engine: Engine):
         min_turnaround_time, max_turnaround_time, sum_turnaround_time = \
             min_max_sum(turnaround_time, min_turnaround_time, max_turnaround_time, sum_turnaround_time)
 
+        # Area Weighted Average Response Time
         awrt = agg_node_hours * turnaround_time  # Area Weighted Response Time
         min_awrt, max_awrt, sum_awrt = min_max_sum(awrt, min_awrt, max_awrt, sum_awrt)
-        
+
+        # Priority Weighted Specific Response Time
         psf_partial_num = job_size * (turnaround_time**4 - wait_time**4)
         psf_partial_den = job_size * (turnaround_time**3 - wait_time**3)
 
@@ -104,11 +105,11 @@ def get_job_stats(engine: Engine):
     if len(engine.job_history_dict) != 0:
         avg_job_size = sum_job_size / len(engine.job_history_dict)
         avg_runtime = sum_runtime / len(engine.job_history_dict)
-        avg_agg_node_hours = sum_agg_node_hours / len(engine.job_history_dict) 
+        avg_agg_node_hours = sum_agg_node_hours / len(engine.job_history_dict)
         avg_wait_time = sum_wait_time / len(engine.job_history_dict)
         avg_turnaround_time = sum_turnaround_time / len(engine.job_history_dict)
         avg_awrt = sum_awrt / sum_agg_node_hours
-        psf = (3*sum_psf_partial_num)/(4*sum_psf_partial_den)
+        psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
     else:
         # Set these to -1 to indicate nothing ran
         min_job_size, max_job_size, avg_job_size = -1,-1,-1
@@ -117,6 +118,7 @@ def get_job_stats(engine: Engine):
         min_wait_time, max_wait_time, avg_wait_time = -1,-1,-1
         min_turnaround_time, max_turnaround_time, avg_turnaround_time = -1,-1,-1
         min_awrt, max_awrt, avg_awrt = -1,-1,-1
+        psf = -1
 
     job_stats = {
         'jobs completed': engine.jobs_completed,
