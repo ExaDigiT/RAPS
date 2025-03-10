@@ -94,12 +94,27 @@ See instructions in [server/README.md](https://code.ornl.gov/exadigit/simulation
 
 See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulation-dashboard)
 
-## Authors:
+## Authors
 
 Many thanks to the contributors of ExaDigiT/RAPS.  
 The full list of contributors and organizations involved are found in CONTRIBUTORS.txt.  
 
-## License:
+## Citation
+
+If you use ExaDigiT or RAPS in your research, please cite our work:
+
+    @inproceedings{inproceedings,
+      title={ExaDigiT: A Framework for Digital Twins of Liquid-cooled Supercomputers Demonstrating Comprehensive Modeling of Workloads, Power, and Cooling},
+      author={Brewer, W. and Dash, S. and Maiterth, S. and Greenwood, S. and Shin, W. and Grant, D. and others},
+      booktitle={SC24: International Conference for High Performance Computing, Networking, Storage and Analysis},
+      pages={1--18},
+      year={2024},
+      organization={IEEE}
+    }
+
+Thank you for your support!
+
+## License
 
 ExaDigiT/RAPS is distributed under the terms of both the MIT license and the Apache License (Version 2.0).  
 Users may choose either license, at their option.  
