@@ -37,6 +37,12 @@ class Scheduler:
         # self.sf_action_list = []  # list as returned from sf_scheduler.stop_job
 
 
+    def gif(self):
+        logs = self._sf_runtime.get_stats()
+        #vis_hanlder = _intScheduleFlow.VizualizationEngine(self.sf_scheduler.
+        self._sf_runtime._Runtime__generate_gif()
+
+
     def sort_jobs(self, queue, accounts=None):
         """
         Optionally, pre-sort jobs.

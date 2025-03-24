@@ -7,6 +7,7 @@ DATAPATH = os.path.expanduser("~/data")
 
 # Standardize the time setting
 DEFAULT_TIME = "1h"
+BENCH_TIME = "4h"
 
 # Define systems and their corresponding filenames
 SYSTEMS = {
@@ -41,7 +42,7 @@ def synthetic_workload_tests():
     """Run synthetic workload tests."""
     print("Starting synthetic workload tests...")
     run_command(f"python main.py -t {DEFAULT_TIME}")
-    run_command(f"python main.py -w benchmark -t {DEFAULT_TIME}")
+    run_command(f"python main.py -w benchmark -t {BENCH_TIME}")
     run_command(f"python main.py -w peak -t {DEFAULT_TIME}")
     run_command(f"python main.py -w idle -t {DEFAULT_TIME}")
 

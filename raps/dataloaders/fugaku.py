@@ -153,9 +153,7 @@ def load_data_from_df(df, **kwargs):
             trace_time=trace_time,
             trace_start_time=trace_start_time,
             trace_end_time=trace_end_time,
-            trace_missing_values=trace_missing_values
-        )
-
+            trace_missing_values=trace_missing_values)
         job_list.append(job_info)
 
     return job_list, telemetry_start, telemetry_end

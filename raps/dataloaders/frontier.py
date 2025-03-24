@@ -280,13 +280,22 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             continue  # SKIP!
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
-            job_info = job_dict(nodes_required, name, account, cpu_trace, gpu_trace, [], [],
-                                end_state, scheduled_nodes,
-                                job_id, priority,  # partition missing
-                                submit_time=submit_time, time_limit=time_limit,
-                                start_time=start_time, end_time=end_time,
-                                wall_time=wall_time, trace_time=trace_time,
-                                trace_start_time=trace_start_time, trace_end_time=trace_end_time)
+            job_info = job_dict(
+                nodes_required=nodes_required,
+                name=name,
+                account=account,
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                nrx_trace=[],
+                ntx_trace=[],
+                end_state=end_state,
+                scheduled_nodes=scheduled_nodes,
+                id=job_id,
+                priority=priority,  # partition missing
+                submit_time=submit_time, time_limit=time_limit,
+                start_time=start_time, end_time=end_time,
+                wall_time=wall_time, trace_time=trace_time,
+                trace_start_time=trace_start_time, trace_end_time=trace_end_time)
             jobs.append(job_info)
 
     return jobs, telemetry_start, telemetry_end

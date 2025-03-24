@@ -118,73 +118,66 @@ class Workload:
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
             net_tx, net_rx = [], []
 
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
             # Create job info for this partition
             job_info = job_dict(
-                config['AVAILABLE_NODES'],       # Nodes required
-                f"Max Test {partition}",         # Name with partition label
-                ACCT_NAMES[0],                   # User account
-                cpu_trace,                       # CPU trace
-                gpu_trace,                       # GPU trace
-                net_tx,                          # Network transmit trace
-                net_rx,                          # Network receive trace
-                'COMPLETED',                     # End state
-                list(range(config['AVAILABLE_NODES'])),  # Explicitly all nodes to test replay
-                None,                            # Job ID
-                100,                             # Priority
-                partition,                        # Partition name
-                0,                               # Submit time
-                len(gpu_trace) * config['TRACE_QUANTA'] + 1,  # Time limit
-                0,                               # Start time / or None
-                len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Trace time
-                0,                                        # Trace start time
-                len(gpu_trace) * config['TRACE_QUANTA']   # Trace end time
-            )
-            print(job_info)
+                nodes_required=config['AVAILABLE_NODES'],
+                name=f"Max Test {partition}",
+                account=ACCT_NAMES[0],
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                scheduled_nodes=list(range(config['AVAILABLE_NODES'])),
+                id=None,
+                priority=100,
+                partition=partition,
+                time_limit=job_time + 1,
+                start_time=0,
+                end_time=job_time,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time)
             jobs.append(job_info)  # Add job to the list
 
         return jobs
 
     def idle(self, **kwargs):
-        """Idle power test for multiple partitions"""
-
-        # List to hold jobs for all partitions
         jobs = []
-
         # Iterate through each partition and get its configuration
         for partition in self.partitions:
-            # Fetch partition-specific configuration
+            # Fetch the config for the current partition
             config = self.config_map[partition]
 
             # Generate traces based on partition-specific configuration
-            cpu_util, gpu_util = 0, 0  # Idle test has zero utilization
-            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 43200, config['TRACE_QUANTA'])  # 12 hours
+            cpu_util, gpu_util = 0, 0
+            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
             net_tx, net_rx = [], []
 
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
             # Create job info for this partition
             job_info = job_dict(
-                config['AVAILABLE_NODES'],       # Nodes required
-                f"Idle Test {partition}",         # Name with partition label
-                ACCT_NAMES[0],                   # User account
-                cpu_trace,                       # CPU trace
-                gpu_trace,                       # GPU trace
-                net_tx,                          # Network transmit trace
-                net_rx,                          # Network receive trace
-                'COMPLETED',                     # End state
-                list(range(config['AVAILABLE_NODES'])),  # Explicitly all nodes to test replay
-                None,                            # Job ID
-                100,                             # Priority
-                partition,                        # Partition name
-                0,                               # Submit time
-                len(gpu_trace) * config['TRACE_QUANTA'] + 1,  # Time limit
-                0,                               # Start time / or None
-                len(gpu_trace) * config['TRACE_QUANTA'],  # End time / or None
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Wall time
-                len(gpu_trace) * config['TRACE_QUANTA'],  # Trace time
-                0,                                        # Trace start time
-                len(gpu_trace) * config['TRACE_QUANTA']   # Trace end time
-            )
+                nodes_required=config['AVAILABLE_NODES'],
+                name=f"Idle Test {partition}",
+                account=ACCT_NAMES[0],
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                scheduled_nodes=list(range(config['AVAILABLE_NODES'])),
+                id=None,
+                priority=100,
+                partition=partition,
+                time_limit=job_time + 1,
+                start_time=0,
+                end_time=job_time,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time)
             jobs.append(job_info)  # Add job to the list
 
         return jobs
@@ -207,53 +200,114 @@ class Workload:
             cpu_util, gpu_util = 1, 4
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
 
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
+
             job_info = job_dict(
-                config['AVAILABLE_NODES'],
-                f"Max Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
-                'COMPLETED', None, None, 100, partition,
-                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                0, 10800, len(gpu_trace) * config['TRACE_QUANTA'],
-                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
-            )
+                nodes_required=config['AVAILABLE_NODES'],
+                scheduled_nodes=list_of_all_nodes,
+                name=f"Max Test {partition}",
+                account=account,
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                id=None,
+                priority=100,
+                partition=partition,
+                submit_time=0,
+                time_limit=job_time + 1,
+                start_time=0,
+                end_time=job_time,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time,
+                trace_missing_values=False)
             jobs.append(job_info)
 
             # OpenMxP run
             cpu_util, gpu_util = 0, 4
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
+
             job_info = job_dict(
-                config['AVAILABLE_NODES'],
-                f"OpenMxP {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
-                'COMPLETED', None, None, 100, partition,
-                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                10800, 14200, len(gpu_trace) * config['TRACE_QUANTA'],
-                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
-            )
+                nodes_required=config['AVAILABLE_NODES'],
+                scheduled_nodes=list_of_all_nodes,
+                name=f"OpenMxP {partition}",
+                account=account,
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                id=None,
+                priority=100,
+                partition=partition,
+                submit_time=0,
+                time_limit=job_time + 1,
+                start_time=10800,
+                end_time=14200,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time,
+                trace_missing_values=False)
             jobs.append(job_info)
 
             # HPL run
             cpu_util, gpu_util = 0.33, 0.79 * 4  # based on 24-01-18 run
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
             job_info = job_dict(
-                config['AVAILABLE_NODES'],
-                f"HPL {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
-                'COMPLETED', None, None, 100, partition,
-                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                14200, 17800, len(gpu_trace) * config['TRACE_QUANTA'],
-                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
-            )
+                nodes_required=config['AVAILABLE_NODES'],
+                scheduled_nodes=list_of_all_nodes,
+                name=f"HPL {partition}",
+                account=account,
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                id=None,
+                priority=100,
+                partition=partition,
+                submit_time=0,
+                time_limit=job_time + 1,
+                start_time=14200,
+                end_time=17800,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time,
+                trace_missing_values=False)
             jobs.append(job_info)
 
             # Idle test
-            cpu_util, gpu_util = 0, 0
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
+            job_time = len(gpu_trace) * config['TRACE_QUANTA']
             job_info = job_dict(
-                config['AVAILABLE_NODES'],
-                f"Idle Test {partition}", account, cpu_trace, gpu_trace, net_tx, net_rx,
-                'COMPLETED', None, None, 100, partition,
-                0, len(gpu_trace) * config['TRACE_QUANTA'] + 1,
-                17800, 21400, len(gpu_trace) * config['TRACE_QUANTA'],
-                len(gpu_trace) * config['TRACE_QUANTA'], 0, len(gpu_trace) * config['TRACE_QUANTA']
-            )
+                nodes_required=config['AVAILABLE_NODES'],
+                scheduled_nodes=list_of_all_nodes,
+                name=f"Idle Test {partition}",
+                account=account,
+                cpu_trace=cpu_trace,
+                gpu_trace=gpu_trace,
+                ntx_trace=net_tx,
+                nrx_trace=net_rx,
+                end_state='COMPLETED',
+                id=None,
+                priority=100,
+                partition=partition,
+                submit_time=0,
+                time_limit=job_time + 1,
+                start_time=17800,
+                end_time=21400,
+                wall_time=job_time,
+                trace_time=job_time,
+                trace_start_time=0,
+                trace_end_time=job_time,
+                trace_missing_values=False)
             jobs.append(job_info)
 
         return jobs
