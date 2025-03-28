@@ -16,6 +16,7 @@ if __name__ == "__main__":
                         help='Either: path/to/joblive path/to/jobprofile' + \
                              ' -or- filename.npz (overrides --workload option)')
     parser.add_argument('-p', '--plot', action='store_true', help='Output plots')
+    parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
     parser.add_argument('--system', type=str, default='frontier', help='System config to use')
     choices = ['prescribed', 'poisson']
     parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
@@ -29,7 +30,7 @@ from tqdm import tqdm
 from .config import ConfigManager
 from .job import Job
 from .account import Accounts
-from .plotting import plot_submit_times, plot_nodes_histogram
+from .plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
 from .utils import next_arrival
 
 
@@ -98,12 +99,14 @@ if __name__ == "__main__":
     wt_list = []
     nr_list = []
     submit_times = []
+    end_times = []
     last = 0
     for job_vector in jobs:
         job = Job(job_vector)
         wt_list.append(job.wall_time)
         nr_list.append(job.nodes_required)
         submit_times.append(job.submit_time)
+        end_times.append(job.submit_time + job.wall_time)
         if job.submit_time > 0:
             dt = job.submit_time - last
             dt_list.append(dt)
@@ -119,5 +122,6 @@ if __name__ == "__main__":
     print(f'Nodes required (std): {np.std(nr_list):.2f}')
 
     if args.plot:
-        plot_nodes_histogram(nr_list)
-        plot_submit_times(submit_times, nr_list)
+        #plot_nodes_histogram(nr_list)
+        #plot_submit_times(submit_times, nr_list)
+        plot_job_gantt(submit_times, end_times, nr_list)

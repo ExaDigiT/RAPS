@@ -231,6 +231,58 @@ def plot_submit_times(submit_times, nr_list):
     plt.savefig('submit_times.png', dpi=300, bbox_inches='tight')
 
 
+def convert_time_scale(times):
+    max_time = max(times)
+    if max_time >= 3600 * 24 * 7:  # more than a week
+        return [t / (3600 * 24) for t in times], 'days'
+    elif max_time >= 3600 * 24:    # more than a day
+        return [t / 3600 for t in times], 'hours'
+    else:
+        return times, 'seconds'
+
+
+def plot_job_gantt(start_times, end_times, node_counts):
+    # Convert times
+    start_times, time_label = convert_time_scale(start_times)
+    end_times, _ = convert_time_scale(end_times)
+
+    plt.figure(figsize=(10, 4))
+
+    # We'll plot each job in a different row on the Y-axis
+    y_positions = range(len(start_times))  # 0, 1, 2, ...
+    
+    for s, e, n in zip(start_times, end_times, node_counts):
+        # Bar placed at y = n
+        plt.barh(
+            y=n,                # node count is the vertical coordinate
+            width=e - s,        # job duration on the x-axis
+            left=s,             # start time
+            height=0.8,         # thickness of the bar
+            color='yellow', 
+            edgecolor='black', 
+            alpha=0.8
+        )
+
+    #for y, (s, e, n) in enumerate(zip(start_times, end_times, node_counts)):
+    #    plt.barh(y, width=e - s, left=s, height=0.8,
+    #                 color='yellow', edgecolor='black', alpha=0.8)
+    #    # Optionally place the node count label in the middle of the bar
+    #    plt.text((s + e)/2, y, str(n),
+    #             ha='center', va='center', color='black')
+
+    plt.xlabel(f'Time ({time_label})')
+    plt.ylabel('Job Index')
+    plt.title('Job Timeline (Gantt Style)')
+    plt.yticks(y_positions)  # label each job if desired
+
+    # Time axis from earliest start to latest end
+    plt.xlim(min(start_times), max(end_times))
+
+    plt.tight_layout()
+    plt.savefig('job_gantt.png', dpi=300)
+    plt.show()
+
+
 if __name__ == "__main__":
     plotter = Plotter()
     #plotter.plot_history([1, 2, 3, 4])
