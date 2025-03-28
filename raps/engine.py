@@ -56,6 +56,8 @@ class Engine:
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
         self.sys_util_history = []
+        self.scheduler_queue_history = []
+        self.scheduler_running_history = []
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
@@ -230,6 +232,9 @@ class Engine:
         system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
         self.sys_util_history.append((self.current_time, system_util))
 
+        self.scheduler_queue_history.append(len(self.running))
+        self.scheduler_running_history.append(len(self.queue))
+
         # Render the updated layout
         power_df = None
         cooling_inputs, cooling_outputs = None, None
@@ -349,3 +354,9 @@ class Engine:
 
     def get_job_history_dict(self):
         return self.job_history_dict
+
+    def get_scheduler_queue_history(self):
+        return self.scheduler_queue_history
+
+    def get_scheduler_running_history(self):
+        return self.scheduler_running_history

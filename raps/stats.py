@@ -50,6 +50,16 @@ def min_max_sum(value,min,max,sum):
     sum += value
     return min,max,sum
 
+
+def get_scheduler_stats(engine: Engine):
+    average_queue = sum(engine.scheduler_queue_history) / len(engine.scheduler_queue_history)
+    average_running = sum(engine.scheduler_running_history) / len(engine.scheduler_running_history)
+    stats = {
+        'average_queue': average_queue,
+        'average_running': average_running,
+    }
+    return stats
+
 def get_job_stats(engine: Engine):
     """ Return job statistics processed over the engine execution"""
     # Information on Job-Mix
