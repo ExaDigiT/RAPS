@@ -1,4 +1,6 @@
+import sys
 import pandas as pd
+import numpy as np
 from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
@@ -268,6 +270,9 @@ class LayoutManager:
         if uncertainties:
             pass
         else:
+            power_df = power_df.replace([np.nan],0.0)
+            power_df = power_df.replace([np.inf],sys.maxsize)
+            power_df = power_df.replace([-np.inf], -sys.maxsize - 1)
             power_df = power_df[power_columns].astype(int)
 
         # Populate the table with data from the DataFrame, applying the data styles
@@ -332,6 +337,9 @@ class LayoutManager:
         if uncertainties:
             pass
         else:
+            power_df = power_df.replace([np.nan],0.0)
+            power_df = power_df.replace([np.inf],sys.maxsize)
+            power_df = power_df.replace([-np.inf], -sys.maxsize - 1)
             power_df = power_df[display_columns].round().astype(int)
 
         # Create table for displaying rack power and loss with styling
