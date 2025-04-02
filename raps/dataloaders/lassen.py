@@ -225,12 +225,12 @@ def adjust_bursts(burst_intervals, total, intervals):
     bursts = np.round(bursts).astype(int)
     adjustment = total - np.sum(bursts)
 
-    # Distribute adjustment across non-zero elements to avoid negative values
-    if adjustment != 0:
-        for i in range(len(bursts)):
-            if bursts[i] > 0:
-                bursts[i] += adjustment % (2^64-1)
-                break  # Apply adjustment only once where it won't cause a negative
+    ## Distribute adjustment across non-zero elements to avoid negative values
+    #if adjustment != 0:
+    #    for i in range(len(bursts)):
+    #        if bursts[i] > 0:
+    #            bursts[i] += adjustment % (2^64-1)  # This can overflow!
+    #            break  # Apply adjustment only once where it won't cause a negative
 
     return bursts
 

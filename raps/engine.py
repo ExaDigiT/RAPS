@@ -115,6 +115,10 @@ class Engine:
             job_instance = Job(job_data)
             eligible_jobs_list.append(job_instance)
         self.queue += eligible_jobs_list
+        if eligible_jobs_list != []:
+            return True
+        else:
+            return False
 
     def prepare_timestep(self, replay:bool = True):
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
@@ -171,31 +175,27 @@ class Engine:
                                        {job.running_time} > {job.wall_time}\n\
                                        {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
                                     ")
-                # job.running_time < job.trace_start_time or
-                if job.running_time >= job.trace_end_time:
-                    cpu_util = 0  # No values available therefore we assume IDLE == 0
-                    gpu_util = 0
-                    net_util = 0
-                    if self.debug:
-                        print("No Values in trace, using IDLE.")
-                    if self.scheduler.policy == PolicyType.REPLAY and not job.trace_missing_values:
-                        print(f"{job.running_time} < {job.trace_start_time} or {job.running_time} > {job.trace_end_time}")
-                        raise Exception("Replay is using IDLE values! Something is wrong!")
-                else:
-                    time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
-                    if isinstance(job.cpu_trace, List) and time_quanta_index == len(job.cpu_trace):
-                        # If the running time is past the last time step in the
-                        # trace, use the last value in the trace. This can
-                        # happen if the last valid timesteps is e.g. 17%15,
-                        # the last trace value is 15%15 and the next possible
-                        # trace value 30%15 but was not recorded because the
-                        # job ended before.
-                        # For every other error condition trace_start_ and
-                        # _end_time are used!
-                        time_quanta_index -= 1
+
+                time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
+                # If the running time is past the last time step in the
+                # trace, use the last value in the trace. This can
+                # happen if the last valid timesteps is e.g. 17%15,
+                # the last trace value is 15%15 and the next possible
+                # trace value 30%15 but was not recorded because the
+                # job ended before.
+                # For every other error condition trace_start_ and
+                # _end_time are used!
+
+                if time_quanta_index < len(job.cpu_trace):
                     cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
+                else:
+                    cpu_util = get_utilization(job.cpu_trace, len(job.cpu_trace) - 1)
+
+                if time_quanta_index < len(job.gpu_trace):
                     gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
-                    net_util = 0
+                else:
+                    gpu_util = get_utilization(job.gpu_trace, len(job.gpu_trace) - 1)
+                net_util = 0
 
                 if isinstance(job.ntx_trace,List) and len(job.ntx_trace) and isinstance(job.nrx_trace,List) and len(job.nrx_trace):
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
@@ -336,9 +336,9 @@ class Engine:
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # 2. Identify eligible jobs and add them to the queue.
-            self.add_eligible_jobs_to_queue(jobs)
+            has_new_additions = self.add_eligible_jobs_to_queue(jobs)
             # 3. Schedule jobs that are now in the queue.
-            self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=False)
+            self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=(not has_new_additions))
 
             # Stop the simulation if no more jobs are running or in the queue or in the job list.
             if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:

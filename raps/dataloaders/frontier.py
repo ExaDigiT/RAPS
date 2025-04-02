@@ -232,10 +232,13 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             wall_time = 0
 
         trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
+
+
+
         trace_start_time = 0
         trace_end_time = trace_time
         if wall_time > trace_time:
-            missing_trace_time = wall_time - trace_time
+            missing_trace_time = int(wall_time - trace_time)
             if start_time < 0:
                 trace_start_time = missing_trace_time
                 trace_end_time = wall_time
@@ -243,8 +246,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 trace_start_time = 0
                 trace_end_time = trace_time
             else:
-                print(f"Job: {job_id} {start_time} - {end_time}!")
-                raise ValueError("Missing values not at start nor end.")
+                print(f"Job: {job_id} {end_state} {start_time} - {end_time},Trace: {trace_start_time} - {trace_end_time} Missing: {missing_trace_time}!")
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames
