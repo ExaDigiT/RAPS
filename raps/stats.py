@@ -43,6 +43,8 @@ def get_engine_stats(engine: Engine):
 
 
 def min_max_sum(value,min,max,sum):
+    if value < 0:
+        value = 0
     if value < min:
         min = value
     if value > max:
@@ -139,10 +141,10 @@ def get_job_stats(engine: Engine):
         min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = \
             min_max_sum(psf_partial_den, min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den)
 
-        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(min_cpu_u, max_cpu_u, sum_cpu_u)
-        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(min_gpu_u, max_gpu_u, sum_gpu_u)
-        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(min_ntx_u, max_ntx_u, sum_ntx_u)
-        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(min_nrx_u, max_nrx_u, sum_nrx_u)
+        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(job['avg_cpu_usage'],min_cpu_u, max_cpu_u, sum_cpu_u)
+        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(job['avg_gpu_usage'],min_gpu_u, max_gpu_u, sum_gpu_u)
+        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(job['avg_ntx_usage'],min_ntx_u, max_ntx_u, sum_ntx_u)
+        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(job['avg_nrx_usage'],min_nrx_u, max_nrx_u, sum_nrx_u)
 
         if job['num_nodes'] <= 5:
             jobsSmall += 1
@@ -164,6 +166,13 @@ def get_job_stats(engine: Engine):
         avg_agg_node_hours = sum_agg_node_hours / len(engine.job_history_dict)
         avg_wait_time = sum_wait_time / len(engine.job_history_dict)
         avg_turnaround_time = sum_turnaround_time / len(engine.job_history_dict)
+
+        avg_cpu_u = sum_cpu_u / len(engine.job_history_dict)
+        avg_gpu_u = sum_gpu_u / len(engine.job_history_dict)
+        avg_ntx_u = sum_ntx_u / len(engine.job_history_dict)
+        avg_nrx_u = sum_nrx_u / len(engine.job_history_dict)
+
+
         avg_awrt = sum_awrt / sum_agg_node_hours
         psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
     else:
@@ -211,16 +220,16 @@ def get_job_stats(engine: Engine):
         # Utilization:
         'min_cpu_util': min_cpu_u,
         'max_cpu_util': max_cpu_u,
-        'sum_cpu_util': sum_cpu_u,
+        'avg_cpu_util': avg_cpu_u,
         'min_gpu_util': min_gpu_u,
         'max_gpu_util': max_gpu_u,
-        'sum_gpu_util': sum_gpu_u,
+        'avg_gpu_util': avg_gpu_u,
         'min_ntx_util': min_ntx_u,
         'max_ntx_util': max_ntx_u,
-        'sum_ntx_util': sum_ntx_u,
+        'avg_ntx_util': avg_ntx_u,
         'min_nrx_util': min_nrx_u,
         'max_nrx_util': max_nrx_u,
-        'sum_nrx_util': sum_nrx_u,
+        'avg_nrx_util': avg_nrx_u,
         # Completion statistics
         'min_wait_time': min_wait_time,
         'max_wait_time': max_wait_time,
