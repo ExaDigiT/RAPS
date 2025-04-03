@@ -301,7 +301,7 @@ class Engine:
         self.add_running_jobs_to_queue(all_jobs)
         # Now process job queue one by one (needed to get the start_time right!)
         for job in self.queue[:]:  # operate over a slice copy to be able to remove jobs from queue if placed.
-            self.scheduler.schedule([job], self.running, job.start_time, sorted=True)
+            self.scheduler.schedule([job], self.running, job.start_time, accounts=self.accounts, sorted=True)
             self.queue.remove(job)
         if replay and len(self.queue) != 0:
             raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
@@ -338,7 +338,7 @@ class Engine:
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
             # 3. Schedule jobs that are now in the queue.
-            self.scheduler.schedule(self.queue, self.running, self.current_time, sorted=(not has_new_additions))
+            self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
 
             # Stop the simulation if no more jobs are running or in the queue or in the job list.
             if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:

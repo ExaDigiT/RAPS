@@ -159,6 +159,22 @@ class JobStatistics:
         self.start_time = job.start_time
         self.end_time = job.end_time
         self.state = job._state
+        if len(job.cpu_trace) == 0:
+            self.avg_cpu_usage = 0
+        else:
+            self.avg_cpu_usage = sum(job.cpu_trace) / len(job.cpu_trace)
+        if len(job.gpu_trace) == 0:
+            self.avg_gpu_usage = 0
+        else:
+            self.avg_gpu_usage = sum(job.gpu_trace) / len(job.gpu_trace)
+        if len(job.ntx_trace) == 0:
+            self.avg_ntx_usage = 0
+        else:
+            self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
+        if len(job.nrx_trace) == 0:
+            self.avg_nrx_usage = 0
+        else:
+            self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
         if len(job.power_history) == 0:
             self.avg_node_power = 0
             self.max_node_power = 0

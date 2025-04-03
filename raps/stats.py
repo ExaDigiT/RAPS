@@ -60,6 +60,7 @@ def get_scheduler_stats(engine: Engine):
     }
     return stats
 
+
 def get_job_stats(engine: Engine):
     """ Return job statistics processed over the engine execution"""
     # Information on Job-Mix
@@ -80,9 +81,15 @@ def get_job_stats(engine: Engine):
     min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = sys.maxsize, -sys.maxsize - 1, 0
     min_awrt, max_awrt, sum_awrt = sys.maxsize, -sys.maxsize - 1, 0
 
+    min_cpu_u, max_cpu_u, sum_cpu_u = sys.maxsize, -sys.maxsize - 1, 0
+    min_gpu_u, max_gpu_u, sum_gpu_u = sys.maxsize, -sys.maxsize - 1, 0
+    min_ntx_u, max_ntx_u, sum_ntx_u = sys.maxsize, -sys.maxsize - 1, 0
+    min_nrx_u, max_nrx_u, sum_nrx_u = sys.maxsize, -sys.maxsize - 1, 0
+
     jobsSmall = 0
     jobsMedium = 0
     jobsLarge = 0
+    jobsVLarge = 0
     jobsHuge = 0
 
     # Information on Job-Mix
@@ -132,12 +139,19 @@ def get_job_stats(engine: Engine):
         min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = \
             min_max_sum(psf_partial_den, min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den)
 
+        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(min_cpu_u, max_cpu_u, sum_cpu_u)
+        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(min_gpu_u, max_gpu_u, sum_gpu_u)
+        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(min_ntx_u, max_ntx_u, sum_ntx_u)
+        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(min_nrx_u, max_nrx_u, sum_nrx_u)
+
         if job['num_nodes'] <= 5:
             jobsSmall += 1
         elif job['num_nodes'] <= 50:
             jobsMedium += 1
         elif job['num_nodes'] <= 250:
             jobsLarge += 1
+        elif job['num_nodes'] <= 4500:
+            jobsVLarge += 1
         else:  # job['nodes_required'] > 250:
             jobsHuge += 1
 
@@ -145,8 +159,8 @@ def get_job_stats(engine: Engine):
         avg_job_size = sum_job_size / len(engine.job_history_dict)
         avg_runtime = sum_runtime / len(engine.job_history_dict)
         avg_energy = sum_energy / len(engine.job_history_dict)
-        avg_edp= sum_edp / len(engine.job_history_dict)
-        avg_edp2= sum_edp2 / len(engine.job_history_dict)
+        avg_edp = sum_edp / len(engine.job_history_dict)
+        avg_edp2 = sum_edp2 / len(engine.job_history_dict)
         avg_agg_node_hours = sum_agg_node_hours / len(engine.job_history_dict)
         avg_wait_time = sum_wait_time / len(engine.job_history_dict)
         avg_turnaround_time = sum_turnaround_time / len(engine.job_history_dict)
@@ -173,7 +187,8 @@ def get_job_stats(engine: Engine):
         'Jobs <= 5 nodes': jobsSmall,
         'Jobs <= 50 nodes': jobsMedium,
         'Jobs <= 250 nodes': jobsLarge,
-        'Jobs > 250 nodes': jobsHuge,
+        'Jobs <= 4500 nodes': jobsVLarge,
+        'Jobs > 4500 nodes': jobsHuge,
         # Information on job-mix executed
         'min job size': min_job_size,
         'max job size': max_job_size,
@@ -193,6 +208,19 @@ def get_job_stats(engine: Engine):
         'min_aggregate_node_hours': min_agg_node_hours,
         'max_aggregate_node_hours': max_agg_node_hours,
         'avg_aggregate_node_hours': avg_agg_node_hours,
+        # Utilization:
+        'min_cpu_util': min_cpu_u,
+        'max_cpu_util': max_cpu_u,
+        'sum_cpu_util': sum_cpu_u,
+        'min_gpu_util': min_gpu_u,
+        'max_gpu_util': max_gpu_u,
+        'sum_gpu_util': sum_gpu_u,
+        'min_ntx_util': min_ntx_u,
+        'max_ntx_util': max_ntx_u,
+        'sum_ntx_util': sum_ntx_u,
+        'min_nrx_util': min_nrx_u,
+        'max_nrx_util': max_nrx_u,
+        'sum_nrx_util': sum_nrx_u,
         # Completion statistics
         'min_wait_time': min_wait_time,
         'max_wait_time': max_wait_time,
