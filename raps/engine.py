@@ -1,8 +1,7 @@
 from typing import Optional, List
 import dataclasses
 import pandas as pd
-
-import sys
+import numpy as np
 
 from .job import Job, JobState
 from .policy import PolicyType
@@ -185,19 +184,30 @@ class Engine:
                 # job ended before.
                 # For every other error condition trace_start_ and
                 # _end_time are used!
-
-                if time_quanta_index < len(job.cpu_trace):
-                    cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
+                #print(type(job.cpu_trace))
+                if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
+                    if time_quanta_index < len(job.cpu_trace):
+                        cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
+                    else:
+                        cpu_util = get_utilization(job.cpu_trace, len(job.cpu_trace) - 1)
+                elif isinstance(job.cpu_trace,float) or isinstance(job.cpu_trace,int):
+                    cpu_util = job.cpu_trace
                 else:
-                    cpu_util = get_utilization(job.cpu_trace, len(job.cpu_trace) - 1)
+                    raise NotImplementedError()
 
-                if time_quanta_index < len(job.gpu_trace):
-                    gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
+                if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
+                    if time_quanta_index < len(job.gpu_trace):
+                        gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
+                    else:
+                        gpu_util = get_utilization(job.gpu_trace, len(job.gpu_trace) - 1)
+                elif isinstance(job.gpu_trace,float) or isinstance(job.gpu_trace,int):
+                    gpu_util = job.gpu_trace
                 else:
-                    gpu_util = get_utilization(job.gpu_trace, len(job.gpu_trace) - 1)
+                    raise NotImplementedError()
+
                 net_util = 0
 
-                if isinstance(job.ntx_trace,List) and len(job.ntx_trace) and isinstance(job.nrx_trace,List) and len(job.nrx_trace):
+                if (isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray)) and len(job.ntx_trace) and (isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,list)) and len(job.nrx_trace):
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx)

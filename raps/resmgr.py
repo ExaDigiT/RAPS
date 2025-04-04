@@ -54,6 +54,7 @@ class ResourceManager:
         return utilization
 
     def node_failure(self, mtbf):
+        return []
         """Simulate node failure using Weibull distribution."""
         shape_parameter = 1.5
         scale_parameter = mtbf * 3600  # Convert to seconds

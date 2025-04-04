@@ -1,4 +1,5 @@
 from enum import Enum
+import numpy as np
 
 """
 Note: want to simplify this in the future to use a minimal required set of job attributes,
@@ -159,22 +160,42 @@ class JobStatistics:
         self.start_time = job.start_time
         self.end_time = job.end_time
         self.state = job._state
-        if len(job.cpu_trace) == 0:
-            self.avg_cpu_usage = 0
+        if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
+            if len(job.cpu_trace) == 0:
+                self.avg_cpu_usage = 0
+            else:
+                self.avg_cpu_usage = sum(job.cpu_trace) / len(job.cpu_trace)
+        elif isinstance(job.cpu_trace,int) or isinstance(job.cpu_trace,float):
+            self.avg_cpu_usage = job.cpu_trace
         else:
-            self.avg_cpu_usage = sum(job.cpu_trace) / len(job.cpu_trace)
-        if len(job.gpu_trace) == 0:
-            self.avg_gpu_usage = 0
+            raise NotImplementedError()
+
+        if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
+            if len(job.gpu_trace) == 0:
+                self.avg_gpu_usage = 0
+            else:
+                self.avg_gpu_usage = sum(job.gpu_trace) / len(job.gpu_trace)
+        elif isinstance(job.gpu_trace,int) or isinstance(job.gpu_trace,float):
+            self.avg_gpu_usage = job.gpu_trace
         else:
-            self.avg_gpu_usage = sum(job.gpu_trace) / len(job.gpu_trace)
-        if len(job.ntx_trace) == 0:
-            self.avg_ntx_usage = 0
-        else:
-            self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
-        if len(job.nrx_trace) == 0:
-            self.avg_nrx_usage = 0
-        else:
-            self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
+            raise NotImplementedError()
+
+        if isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray):
+            if len(job.ntx_trace) == 0:
+                self.avg_ntx_usage = 0
+            else:
+                self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
+        elif isinstance(job.ntx_trace,int) or isinstance(job.ntx_trace,float):
+            self.avg_ntx_usage = job.ntx_trace
+
+        if isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,np.ndarray):
+            if len(job.nrx_trace) == 0:
+                self.avg_nrx_usage = 0
+            else:
+                self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
+        elif isinstance(job.nrx_trace,int) or isinstance(job.nrx_trace,float):
+            self.avg_nrx_usage = job.nrx_trace
+
         if len(job.power_history) == 0:
             self.avg_node_power = 0
             self.max_node_power = 0

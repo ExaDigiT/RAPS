@@ -95,6 +95,7 @@ def load_data_from_df(df, **kwargs):
         scheduled_nodes = None  # Only nodes_required is in the trace
 
         job_id = row['jid'] if 'jid' in df.columns else 'unknown'
+
         priority = row['pri'] if 'pri' in df.columns else 0
 
         submit_timestamp = pd.to_datetime(row['adt']) if 'adt' in df.columns else -1  # Else job was submitted in the past
@@ -143,7 +144,7 @@ def load_data_from_df(df, **kwargs):
             nrx_trace=[],
             end_state=end_state,
             scheduled_nodes=scheduled_nodes,
-            job_id=job_id,
+            id=job_id,
             priority=priority,
             submit_time=submit_time,
             time_limit=time_limit,
