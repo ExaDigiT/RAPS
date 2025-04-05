@@ -217,6 +217,9 @@ class Engine:
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx)
+                    print("time:", self.current_time, "net util:", net_util)
+                    print("jid", job.id, "net_tx", net_tx)
+                    print("jid", job.id, "net_rx", net_tx)
                     net_utils.append(net_util)
 
                     # Get the maximum allowed bandwidth from the configuration.
