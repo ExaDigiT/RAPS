@@ -119,15 +119,35 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             gpu_trace = 0  # = cpu_trace  # Is this correct?
         else:
             # Compute GPU power
-            gpu_power = (node_data['gpu_energy'].sum() / nodes_required) / wall_time
-            gpu_min_power = config['POWER_GPU_IDLE']
-            gpu_max_power = config['POWER_GPU_MAX']
+            gpu_node_idle_power = config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
+            # Note: GPU_Power is on a per node basis.
+            # The current simulator uses the same time series for every node of the job
+            # Therefore we sum over all nodes and form the average node power.
+            # TODO: Jobs could have a time-series per node!
+            gpu_node_energy = node_data['gpu_energy'].copy()
+            gpu_power = (gpu_node_energy.sum() / nodes_required) / wall_time  # This is a single value
+            if gpu_power < gpu_node_idle_power:
+                # print(gpu_power, gpu_node_idle_power)  # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
+                gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
+            assert (gpu_power >= gpu_node_idle_power)
+            gpu_min_power = gpu_node_idle_power
+            gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
+            # power_to_utilization has issues! As it is unclear if gpu_power is for a single gpu or all gpus of a node.
+            # The multiplication by GPUS_PER_NODE fixes this but is patch-work! TODO Refactor and fix
             gpu_util = power_to_utilization(gpu_power,gpu_min_power,gpu_max_power)
-            gpu_trace = gpu_util
+            # gpu_util should to be between 0 an 4 (4 GPUs), where 4 is all GPUs full utilization.
+            gpu_trace = gpu_util * config['GPUS_PER_NODE']
 
             # Compute CPU power from CPU usage time
             # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
-            cpu_util = node_data['cpu_usage'].sum() / nodes_required / wall_time / config['CPU_FREQUENCY'] / config['CORES_PER_CPU']
+            # Same
+            cpu_node_usage = node_data['cpu_usage'].copy()
+            cpu_node_usage[cpu_node_usage < 0] = 0.0
+            cpu_node_usage[cpu_node_usage == np.NaN] = 0.0
+            cpu_util = cpu_node_usage.sum() / nodes_required / wall_time / config['CPU_FREQUENCY'] / config['CORES_PER_CPU']
+            assert (cpu_util >= 0)
+            # cpu_util should be between 0 an 2 (2 CPUs)
+
             cpu_trace = cpu_util
             # TODO use total energy for validation
             # Only Node Energy and GPU Energy is reported!
