@@ -172,7 +172,6 @@ def get_job_stats(engine: Engine):
         avg_ntx_u = sum_ntx_u / len(engine.job_history_dict)
         avg_nrx_u = sum_nrx_u / len(engine.job_history_dict)
 
-
         avg_awrt = sum_awrt / sum_agg_node_hours
         psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
     else:
@@ -187,6 +186,11 @@ def get_job_stats(engine: Engine):
         min_turnaround_time, max_turnaround_time, avg_turnaround_time = -1,-1,-1
         min_awrt, max_awrt, avg_awrt = -1,-1,-1
         psf = -1
+
+        min_cpu_u, max_cpu_u, avg_cpu_u = -1,-1,-1
+        min_gpu_u, max_gpu_u, avg_gpu_u = -1,-1,-1
+        min_ntx_u, max_ntx_u, avg_ntx_u = -1,-1,-1
+        min_nrx_u, max_nrx_u, avg_nrx_u = -1,-1,-1
 
     job_stats = {
         'jobs completed': engine.jobs_completed,

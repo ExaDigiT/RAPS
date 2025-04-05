@@ -49,7 +49,7 @@ parser.add_argument('-w', '--workload', type=str, choices=choices, default=choic
 choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
 choices = [policy.value for policy in PolicyType]
-parser.add_argument('--policy', type=str, choices=choices, default=choices[0], help='Schedule policy to use')
+parser.add_argument('--policy', type=str, choices=choices, default=None, help='Schedule policy to use')
 choices = [policy.value for policy in BackfillType]
 parser.add_argument('--backfill', type=str, choices=choices, default=None, help='Backfill Policy')
 
