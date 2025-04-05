@@ -109,6 +109,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         node_data = node_df[node_df['allocation_id'] == row['allocation_id']]
 
         wall_time = compute_wall_time(row['begin_timestamp'], row['end_timestamp'])
+
         samples = math.ceil(wall_time / config['TRACE_QUANTA'])
 
         if validate:
@@ -125,11 +126,19 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # Therefore we sum over all nodes and form the average node power.
             # TODO: Jobs could have a time-series per node!
             gpu_node_energy = node_data['gpu_energy'].copy()
-            gpu_power = (gpu_node_energy.sum() / nodes_required) / wall_time  # This is a single value
+            gpu_node_energy[gpu_node_energy < 0] = 0.0
+            gpu_node_energy[gpu_node_energy == np.NaN] = 0.0
+            if len(gpu_node_energy) < 1:
+                gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
+            else:
+                if wall_time > 0:
+                    gpu_power = (gpu_node_energy.sum() / nodes_required) / wall_time  # This is a single value
+                else:
+                    gpu_power = gpu_node_idle_power
             if gpu_power < gpu_node_idle_power:
                 # print(gpu_power, gpu_node_idle_power)  # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
-            assert (gpu_power >= gpu_node_idle_power)
+            assert gpu_power >= gpu_node_idle_power, f"{gpu_power} >= {gpu_node_idle_power}" + f" gpu_power = ({gpu_node_energy.sum()} / {nodes_required}) / {wall_time}"
             gpu_min_power = gpu_node_idle_power
             gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
             # power_to_utilization has issues! As it is unclear if gpu_power is for a single gpu or all gpus of a node.
@@ -144,8 +153,11 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             cpu_node_usage = node_data['cpu_usage'].copy()
             cpu_node_usage[cpu_node_usage < 0] = 0.0
             cpu_node_usage[cpu_node_usage == np.NaN] = 0.0
-            cpu_util = cpu_node_usage.sum() / nodes_required / wall_time / config['CPU_FREQUENCY'] / config['CORES_PER_CPU']
-            assert (cpu_util >= 0)
+            if wall_time > 0:
+                cpu_util = cpu_node_usage.sum() / nodes_required / wall_time / config['CPU_FREQUENCY'] / config['CORES_PER_CPU']
+            else:
+                cpu_util = 0.0
+            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / {nodes_required} / {wall_time} / {config['CPU_FREQUENCY']} / {config['CORES_PER_CPU']}"
             # cpu_util should be between 0 an 2 (2 CPUs)
 
             cpu_trace = cpu_util
