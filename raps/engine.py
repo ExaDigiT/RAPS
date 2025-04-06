@@ -309,12 +309,21 @@ class Engine:
         all_jobs.sort(key=lambda j: j['submit_time'])
 
         self.add_running_jobs_to_queue(all_jobs)
+        # Set policy to replay and no backfill to get the original prefilled placement.
+        target_policy = self.scheduler.policy
+        self.scheduler.policy = PolicyType.REPLAY
+        target_bfpolicy = self.scheduler.bfpolicy
+        self.scheduler.bfpolicy = None
+
         # Now process job queue one by one (needed to get the start_time right!)
         for job in self.queue[:]:  # operate over a slice copy to be able to remove jobs from queue if placed.
             self.scheduler.schedule([job], self.running, job.start_time, accounts=self.accounts, sorted=True)
             self.queue.remove(job)
         if replay and len(self.queue) != 0:
             raise ValueError(f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
+        # Restore the target policy and backfill for the remainder of the simulation.
+        self.scheduler.policy = target_policy
+        self.scheduler.bfpolicy = target_bfpolicy
 
     def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
         """Generator that yields after each simulation tick."""
