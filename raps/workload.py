@@ -122,6 +122,7 @@ class Workload:
             # Create job info for this partition
             job_info = job_dict(
                 nodes_required=config['AVAILABLE_NODES'],
+                scheduled_nodes=[],  # Down nodes, therefore doesnt work list(range(config['AVAILABLE_NODES'])),
                 name=f"Max Test {partition}",
                 account=ACCT_NAMES[0],
                 cpu_trace=cpu_trace,
@@ -129,7 +130,6 @@ class Workload:
                 ntx_trace=net_tx,
                 nrx_trace=net_rx,
                 end_state='COMPLETED',
-                scheduled_nodes=list(range(config['AVAILABLE_NODES'])),
                 id=None,
                 priority=100,
                 partition=partition,
@@ -167,11 +167,12 @@ class Workload:
                 ntx_trace=net_tx,
                 nrx_trace=net_rx,
                 end_state='COMPLETED',
-                scheduled_nodes=list(range(config['AVAILABLE_NODES'])),
+                scheduled_nodes=[],  # list(range(config['AVAILABLE_NODES'])),
                 id=None,
                 priority=100,
                 partition=partition,
                 time_limit=job_time + 1,
+                submit_time=0,
                 start_time=0,
                 end_time=job_time,
                 wall_time=job_time,
@@ -194,8 +195,6 @@ class Workload:
             config = self.config_map[partition]
             net_tx, net_rx = [], []
 
-            list_of_all_nodes = list(range(config['AVAILABLE_NODES']))
-
             # Max test
             cpu_util, gpu_util = 1, 4
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
@@ -204,7 +203,7 @@ class Workload:
 
             job_info = job_dict(
                 nodes_required=config['AVAILABLE_NODES'],
-                scheduled_nodes=list_of_all_nodes,
+                scheduled_nodes=[],  # Explicit scheduled nodes will not work due to down nodes
                 name=f"Max Test {partition}",
                 account=account,
                 cpu_trace=cpu_trace,
@@ -233,7 +232,7 @@ class Workload:
 
             job_info = job_dict(
                 nodes_required=config['AVAILABLE_NODES'],
-                scheduled_nodes=list_of_all_nodes,
+                scheduled_nodes=[],  # Explicit scheduled nodes will not work due to down nodes
                 name=f"OpenMxP {partition}",
                 account=account,
                 cpu_trace=cpu_trace,
@@ -261,7 +260,7 @@ class Workload:
             job_time = len(gpu_trace) * config['TRACE_QUANTA']
             job_info = job_dict(
                 nodes_required=config['AVAILABLE_NODES'],
-                scheduled_nodes=list_of_all_nodes,
+                scheduled_nodes=[],  # Explicit scheduled nodes will not work due to down nodes
                 name=f"HPL {partition}",
                 account=account,
                 cpu_trace=cpu_trace,
@@ -288,7 +287,7 @@ class Workload:
             job_time = len(gpu_trace) * config['TRACE_QUANTA']
             job_info = job_dict(
                 nodes_required=config['AVAILABLE_NODES'],
-                scheduled_nodes=list_of_all_nodes,
+                scheduled_nodes=[],  # Explicit scheduled nodes will not work due to down nodes
                 name=f"Idle Test {partition}",
                 account=account,
                 cpu_trace=cpu_trace,

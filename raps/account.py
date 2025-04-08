@@ -40,7 +40,7 @@ class Account:
 
     def update_fugaku_points(self, average_energy, average_power):
         if average_power == 0:
-            raise ValueError(f"{average_power} is zero")
+            return
         self.fugaku_points = (average_energy - self.energy_allocated) / average_power
 
     def update_statistics(self, jobstats, average_user):
