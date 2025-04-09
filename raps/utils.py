@@ -7,6 +7,7 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 """
 
 from datetime import timedelta
+from enum import Enum
 
 import hashlib
 import math
@@ -382,3 +383,13 @@ def get_utilization(trace, time_quanta_index):
         return float(trace)
     else:
         raise TypeError(f"Invalid type for utilization: {type(trace)}.")
+
+
+class ValueComparableEnum(Enum):
+    def __eq__(self, other):
+        if isinstance(other, Enum):
+            return self.value == other.value
+        return self.value == other
+
+    def __hash__(self):  # required if you override __eq__
+        return hash(self.value)

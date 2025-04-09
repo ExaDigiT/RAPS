@@ -1,7 +1,7 @@
-from enum import Enum
+from .utils import ValueComparableEnum
 
 
-class PolicyType(Enum):
+class PolicyType(ValueComparableEnum):
     """Supported scheduling policies."""
     REPLAY = 'replay'  # Default is specified in each scheduler!
     FCFS = 'fcfs'
@@ -9,7 +9,8 @@ class PolicyType(Enum):
     SJF = 'sjf'
     LJF = 'ljf'
 
-class BackfillType(Enum):
+
+class BackfillType(ValueComparableEnum):
     """Supported backfilling policies."""
     NONE = None
     FIRSTFIT = 'firstfit'
