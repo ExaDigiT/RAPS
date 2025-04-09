@@ -87,11 +87,6 @@ class Scheduler:
                     self.backfill(queue, running, current_time)
 
                 # After backfill dedice continue processing the queue or wait, continuing may result in fairness issues.
-                print(f"if {self.policy} in [PolicyType.REPLAY]")  # REPLAY NEEDS TO BE THERE
-                print(f"== {self.policy in [PolicyType.REPLAY]}")  # REPLAY NEEDS TO BE THERE
-                print(f"==value {self.policy.value in [PolicyType.REPLAY.value]}")  # REPLAY NEEDS TO BE THERE
-                print(f"type {type(self.policy)} in [{type(PolicyType.REPLAY)}]")  # REPLAY NEEDS TO BE THERE
-                print(f"id {id(self.policy)} in [{id(PolicyType.REPLAY)}]")  # REPLAY NEEDS TO BE THERE
                 if self.policy in [PolicyType.REPLAY]:  # REPLAY NEEDS TO BE THERE
                     continue  # Regardless if the job at the front of the queue doenst fit, try placing all of them.
                 elif self.policy in [PolicyType.ACCT_FUGAKU_PTS,
