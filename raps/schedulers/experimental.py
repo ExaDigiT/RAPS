@@ -13,7 +13,7 @@ class ExtendedPolicyType(ValueComparableEnum):
     ACCT_FUGAKU_PTS = 'acct_fugaku_pts'
     ACCT_AVG_P = 'acct_avg_power'
     ACCT_LOW_AVG_P = 'acct_low_avg_power'
-    ACCT_AVG_PW4LJ = 'acct_avg_power_w4jl'
+    ACCT_AVG_PW4LJ = 'acct_avg_power_w4lj'
     ACCT_EDP = 'acct_edp'
     ACCT_ED2P = 'acct_ed2p'
     ACCT_PDP = 'acct_pdp'
