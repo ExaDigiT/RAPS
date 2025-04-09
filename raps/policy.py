@@ -6,7 +6,6 @@ class PolicyType(Enum):
     REPLAY = 'replay'  # Default is specified in each scheduler!
     FCFS = 'fcfs'
     PRIORITY = 'priority'
-    FUGAKU_PTS = 'fugaku_pts'
     SJF = 'sjf'
     LJF = 'ljf'
 

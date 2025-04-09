@@ -46,10 +46,10 @@ choices = ['random', 'benchmark', 'peak', 'idle']
 parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
-choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux']
+choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux', 'experimental']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
 choices = [policy.value for policy in PolicyType]
-parser.add_argument('--policy', type=str, choices=choices, default=None, help='Schedule policy to use')
+parser.add_argument('--policy', type=str, default=None, help='Schedule policy to use, e.g.:' + str(choices) + " or extended policies")
 choices = [policy.value for policy in BackfillType]
 parser.add_argument('--backfill', type=str, choices=choices, default=None, help='Backfill Policy')
 

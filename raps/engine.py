@@ -184,7 +184,12 @@ class Engine:
                 # job ended before.
                 # For every other error condition trace_start_ and
                 # _end_time are used!
-                #print(type(job.cpu_trace))
+                # #print(type(job.cpu_trace))
+                if time_quanta_index < 0:
+                    time_quanta_index = 0
+                # Similar with the first time_quanta index: If the job started
+                # in the past and no trace if there, read index 0 until values
+                # are available.
                 if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
                     if time_quanta_index < len(job.cpu_trace):
                         cpu_util = get_utilization(job.cpu_trace, time_quanta_index)

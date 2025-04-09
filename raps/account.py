@@ -40,12 +40,13 @@ class Account:
 
     def update_fugaku_points(self, average_energy, average_power):
         if average_power == 0:
-            return
-        self.fugaku_points = (average_energy - self.energy_allocated) / average_power
+            self.fugaku_points = 0
+        else:
+            self.fugaku_points = (average_energy - self.energy_allocated) / average_power
 
     def update_statistics(self, jobstats, average_user):
         self.jobs_completed += 1
-        self.time_allocated += jobstats.run_time
+        self.time_allocated += jobstats.run_time * jobstats.num_nodes
         self.energy_allocated += jobstats.energy
         if self.time_allocated == 0:
             self.avg_power = 0

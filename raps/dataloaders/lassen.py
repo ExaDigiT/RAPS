@@ -154,10 +154,12 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             cpu_node_usage[cpu_node_usage < 0] = 0.0
             cpu_node_usage[cpu_node_usage == np.NaN] = 0.0
             if wall_time > 0:
-                cpu_util = cpu_node_usage.sum() / nodes_required / wall_time / config['CPU_FREQUENCY'] / config['CORES_PER_CPU']
+                threads_per_core = config['THREADS_PER_CORE']
+                cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core
             else:
                 cpu_util = 0.0
-            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / {nodes_required} / {wall_time} / {config['CPU_FREQUENCY']} / {config['CORES_PER_CPU']}"
+            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / 10e9 / {nodes_required} / {wall_time} / {threads_per_core}"
+
             # cpu_util should be between 0 an 2 (2 CPUs)
 
             cpu_trace = cpu_util
@@ -169,7 +171,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else []
         ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else []
 
-        net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        #net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
 
         # no priorities defined!
         priority = row.get('priority', 0)

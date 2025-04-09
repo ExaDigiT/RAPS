@@ -1,9 +1,5 @@
 from typing import List
-from enum import Enum
 from ..utils import summarize_ranges
-
-from ..workload import MAX_PRIORITY
-
 from ..policy import PolicyType, BackfillType
 
 
@@ -27,12 +23,10 @@ class Scheduler:
             return sorted(queue, key=lambda job: job.submit_time)
         elif self.policy == PolicyType.PRIORITY:
             return sorted(queue, key=lambda job: job.priority, reverse=True)
-        elif self.policy == PolicyType.FUGAKU_PTS:
-            return self.sort_fugaku_redeeming(queue, accounts)
-        if self.policy == PolicyType.SJF:
+        elif self.policy == PolicyType.SJF:
             return sorted(queue, key=lambda job: job.time_limit)
-        if self.policy == PolicyType.LJF:
-            return sorted(queue, key=lambda job: job.nodes_required)
+        elif self.policy == PolicyType.LJF:
+            return sorted(queue, key=lambda job: job.nodes_required, reverse=True)
         elif self.policy == PolicyType.REPLAY:
             return sorted(queue, key=lambda job: job.start_time)
         else:
@@ -66,7 +60,7 @@ class Scheduler:
                     # print(f"Nodes available {nodes_available} - Req:{len(job.requested_nodes)} N-avail:{len(self.resource_manager.available_nodes)}")
                     continue  # Regardless if the job at the front of the queue doenst fit, try placing all of them.
                 elif self.policy in [PolicyType.FCFS, PolicyType.PRIORITY,
-                                     PolicyType.FUGAKU_PTS, PolicyType.LJF]:
+                                     PolicyType.LJF, PolicyType.SJF]:
                     break  # The job at the front of the queue doesnt fit stop processing the queue.
                 else:
                     raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
@@ -199,36 +193,3 @@ class Scheduler:
             else:
                 continue
         return None
-
-
-    def sort_fugaku_redeeming(self, queue, accounts=None):
-        if queue == []:
-            return queue
-        # Priority queues not yet implemented:
-        # Strategy: Sort by Fugaku Points Representing the Priority Queue
-        # Everything with negative Fugaku Points get sorted according to normal priority
-        priority_triple_list = []
-        for job in queue:
-            fugaku_priority = accounts.account_dict[job.account].fugaku_points
-            # Create a tuple of the job and the priority
-            priority = job.priority
-            priority_triple_list.append((fugaku_priority,priority,job))
-        # Sort everythin according to fugaku_points
-        priority_triple_list = sorted(priority_triple_list, key=lambda x:x[0], reverse=True)
-        # Find the first element with negative fugaku_points
-        for cutoff, triple in enumerate(priority_triple_list):
-            fugaku_priority, _, _ = triple
-            if fugaku_priority < 0:
-                break
-        first_part = priority_triple_list[:cutoff]
-        # Sort everything afterwards according to job priority
-        second_part = sorted(priority_triple_list[cutoff:], key=lambda x:x[1], reverse=True)
-        queue_a = []
-        queue_b = []
-        if first_part != []:
-            _, _, queue_a = zip(*first_part)
-            queue_a = list(queue_a)
-        if second_part != []:
-            _, _, queue_b = zip(*second_part)
-            queue_b = list(queue_b)
-        return queue_a + queue_b
