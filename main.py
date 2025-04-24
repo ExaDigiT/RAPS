@@ -33,6 +33,7 @@ from raps.account import Accounts
 from raps.weather import Weather
 from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats
+from raps.utils import convert_numpy_to_builtin
 
 config = ConfigManager(system_name=args.system).get_config()
 
@@ -281,5 +282,5 @@ if args.output:
                     json_string = json.dumps(sc.accounts.to_dict())
                     f.write(json_string)
             except TypeError:
-                raise TypeError(f"{sc.accounts} could not be parsed by json.dump")
+                write_dict_to_file(sc.accounts.to_dict(), OPATH / 'accounts.json')
     print("Output directory is: ", OPATH)  # If output is enabled, the user wants this information as last output

@@ -360,7 +360,8 @@ def write_dict_to_file(dictionary, file_path):
             if isinstance(value, dict):
                 file.write(f"{key}: {{\n")
                 for subkey, subvalue in value.items():
-                    file.write(f"  {subkey}: {subvalue}\n")
+                    base_subvalue = convert_numpy_to_builtin(subvalue)
+                    file.write(f"  {subkey}: {base_subvalue}\n")
                 file.write("}\n")
             else:
                 file.write(f"{key}: {value}\n")
@@ -373,6 +374,27 @@ def toJSON(obj):
         default=lambda o:o.__dict__,
         sort_keys=True,
         indent=4)
+
+
+def convert_numpy_to_builtin(obj):
+    if isinstance(obj, dict):
+        tmp_obj = dict()
+        for k,v in obj.items():
+            tmp_obj[k] = convert_numpy_to_builtin(v)
+        return tmp_obj
+    elif isinstance(obj, list):
+        return [convert_numpy_to_builtin(i) for i in obj]
+    elif isinstance(obj, np.ndarray):
+        tmplist = obj.tolist()
+        return convert_numpy_to_builtin(tmplist)
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    else:
+        return obj
 
 
 def get_utilization(trace, time_quanta_index):
