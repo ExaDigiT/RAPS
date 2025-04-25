@@ -356,15 +356,23 @@ def encrypt(name):
 def write_dict_to_file(dictionary, file_path):
     """Function to write dictionary to a text file"""
     with open(file_path, 'w') as file:
-        for key, value in dictionary.items():
+        file.write("{")
+        for j, (key, value) in enumerate(dictionary.items()):
             if isinstance(value, dict):
-                file.write(f"{key}: {{\n")
-                for subkey, subvalue in value.items():
+                file.write(f"\"{str(key)}\": {{\n")
+                for i, (subkey, subvalue) in enumerate(value.items()):
                     base_subvalue = convert_numpy_to_builtin(subvalue)
-                    file.write(f"  {subkey}: {base_subvalue}\n")
-                file.write("}\n")
+                    json_string = toJSON(base_subvalue)
+                    file.write(f"  \"{str(subkey)}\": {json_string}")
+                    if i < len(value.items()) - 1:
+                        file.write(", ")
+                file.write("}")
             else:
-                file.write(f"{key}: {value}\n")
+                file.write(f"\"{str(key)}\": {value}")
+            if j < len(dictionary.items()) - 1:
+                file.write(", ")
+            file.write("\n")
+        file.write("}")
 
 
 def toJSON(obj):
