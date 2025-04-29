@@ -123,6 +123,7 @@ class Engine:
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
 
         for job in completed_jobs:
+            self.power_manager.set_idle(job.scheduled_nodes)
             job.state = JobState.COMPLETED
 
             self.running.remove(job)
