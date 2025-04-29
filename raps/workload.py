@@ -42,7 +42,7 @@ ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
 
 MAX_PRIORITY = 500000
 
-from .utils import truncated_normalvariate, determine_state, next_arrival
+from .utils import truncated_normalvariate, determine_state, next_arrival, truncated_weibull
 
 
 class Workload:
@@ -65,20 +65,44 @@ class Workload:
             partition = random.choice(self.partitions)
             # Get the corresponding config for the selected partition
             config = self.config_map[partition]
-
-            nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
-            name = random.choice(JOB_NAMES)
-            account = random.choice(ACCT_NAMES)
-            cpu_util = random.random() * config['CPUS_PER_NODE']
-            gpu_util = random.random() * config['GPUS_PER_NODE']
-            mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
-            sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
-            end_state = determine_state(config['JOB_END_PROBS'])
-            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
-            priority = random.randint(0, MAX_PRIORITY)
-            net_tx, net_rx = [], []
+            wes_random = False
+            if wes_random:
+                nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
+                name = random.choice(JOB_NAMES)
+                account = random.choice(ACCT_NAMES)
+                cpu_util = random.random() * config['CPUS_PER_NODE']
+                gpu_util = random.random() * config['GPUS_PER_NODE']
+                mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
+                sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
+                wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
+                time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+                end_state = determine_state(config['JOB_END_PROBS'])
+                cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
+                priority = random.randint(0, MAX_PRIORITY)
+                net_tx, net_rx = [], []
+            else:
+                max_nodes = config['MAX_NODES_PER_JOB']
+                min_nodes = 1
+                nodes_required = truncated_weibull(max_nodes, 0.1, min_nodes, max_nodes)
+                name = random.choice(JOB_NAMES)
+                account = random.choice(ACCT_NAMES)
+                cpu_util = random.random() * config['CPUS_PER_NODE']
+                gpu_util = random.random() * config['GPUS_PER_NODE']
+                mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
+                sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
+                wall_time = truncated_weibull(3 * config['MIN_WALL_TIME'],0.75,config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
+                time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 300 * 300  # to 5 minutes
+                end_state = determine_state(config['JOB_END_PROBS'])
+                cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
+                if nodes_required < max_nodes * .10:
+                    priority = 0
+                elif nodes_required < max_nodes * .20:
+                    priority = 1
+                elif nodes_required < max_nodes * .50:
+                    priority = 2
+                else:
+                    priority = 3
+                net_tx, net_rx = [], []
 
             # Jobs arrive according to Poisson process
             time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])

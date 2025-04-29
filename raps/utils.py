@@ -64,6 +64,13 @@ def truncated_normalvariate(mu, sigma, lower, upper):
             return number
 
 
+def truncated_weibull(scale, shape, min, max):
+    while True:
+        number = random.weibullvariate(scale, shape)
+        if min < number <= max:
+            return int(number)
+
+
 def linear_to_3d_index(linear_index, shape):
     """
     Convert linear index to 3D index.
