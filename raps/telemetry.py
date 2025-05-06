@@ -121,6 +121,30 @@ if __name__ == "__main__":
     print(f'Nodes required (max): {np.max(nr_list)}')
     print(f'Nodes required (std): {np.std(nr_list):.2f}')
 
+    # ——— compute avg network traces ———
+    ntx_means = []
+    nrx_means = []
+    for job_vec in jobs:
+        ntx = np.array(job_vec.get('ntx_trace', []))
+        nrx = np.array(job_vec.get('nrx_trace', []))
+
+        # only if there’s at least one valid sample
+        if ntx.size > 0 and not np.all(np.isnan(ntx)):
+            ntx_means.append(np.nanmean(ntx))
+        if nrx.size > 0 and not np.all(np.isnan(nrx)):
+            nrx_means.append(np.nanmean(nrx))
+
+    if ntx_means:
+        print(f'Average ntx_trace per job: {np.mean(ntx_means):.2f}')
+    else:
+        print('No valid ntx_trace data found.')
+
+    if nrx_means:
+        print(f'Average nrx_trace per job: {np.mean(nrx_means):.2f}')
+    else:
+        print('No valid nrx_trace data found.')
+    # ————————————————————————————
+
     if args.plot:
         #plot_nodes_histogram(nr_list)
         #plot_submit_times(submit_times, nr_list)
