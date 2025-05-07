@@ -58,10 +58,14 @@ def truncated_normalvariate(mu, sigma, lower, upper):
     float
         Random number from the truncated normal distribution.
     """
-    while True:
+    CUTOFF = 100000000
+    i = 0
+    while i < CUTOFF:
         number = random.normalvariate(mu, sigma)
         if lower < number < upper:
-            return number
+            return int(number)
+        i += 1
+    raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
 
 
 def truncated_weibull(scale, shape, min, max):

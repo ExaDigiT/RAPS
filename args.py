@@ -1,6 +1,8 @@
 import argparse
 from raps.schedulers.default import PolicyType, BackfillType
 
+from raps.workload import add_workload_to_parser
+
 parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulator (RAPS)')
 
 # System configurations
@@ -42,8 +44,9 @@ parser.add_argument('--jid', type=str, default='*', help='Replay job id')
 parser.add_argument('--scale', type=int, default=0, help='Scale telemetry to max nodes specified in order to run telemetry on a smaller smaller target system/partition, e.g., --scale 192')
 
 # Synthetic workloads
-choices = ['random', 'benchmark', 'peak', 'idle']
-parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
+parser = add_workload_to_parser(parser)
+#choices = ['random', 'benchmark', 'peak', 'idle','synthetic']
+#parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
 choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux', 'experimental']
@@ -61,6 +64,7 @@ parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, 
 parser.add_argument('--accounts', action='store_true', help='Flag indicating if accounts should be tracked')
 parser.add_argument('--accounts-json', type=str, help='Json of account stats generated in previous run. see raps/accounts.py')
 
+
+# ### At the end get args and an args_dict. import this if needed.
 args = parser.parse_args()
 args_dict = vars(args)
-print(args_dict)

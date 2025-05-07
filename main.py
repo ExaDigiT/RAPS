@@ -13,9 +13,6 @@ from tqdm import tqdm
 from raps.helpers import check_python_version
 check_python_version()
 
-from args import args
-args_dict = vars(args)
-print(args_dict)
 
 from raps.config import ConfigManager
 from raps.constants import OUTPUT_PATH, SEED
@@ -34,6 +31,9 @@ from raps.weather import Weather
 from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats
 from raps.utils import convert_numpy_to_builtin
+
+from args import args, args_dict
+
 
 config = ConfigManager(system_name=args.system).get_config()
 
@@ -125,7 +125,7 @@ if args.replay:
 
 else:  # Synthetic jobs
     wl = Workload(config)
-    jobs = getattr(wl, args.workload)(num_jobs=args.numjobs)
+    jobs = getattr(wl, args.workload)(args=args)
 
     if args.verbose:
         for job_vector in jobs:

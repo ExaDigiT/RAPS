@@ -17,7 +17,7 @@ class ConfigManager:
         base_path = CONFIG_PATH / system_name
         config_files = ['system.json', 'power.json', 'scheduler.json']
         optional_files = ['cooling.json', 'uq.json']
-        
+
         for config_file in config_files + optional_files:
             file_path = base_path / config_file
             if config_file in optional_files and not file_path.exists():
@@ -26,7 +26,7 @@ class ConfigManager:
                 raise FileNotFoundError(f"Mandatory configuration file {config_file} not found.")
             config_data = self.load_config_file(file_path)
             self.config.update(config_data)
-        
+
     @staticmethod
     def load_config_file(file_path: Path) -> dict[str, Any]:
         with open(file_path, 'r') as file:
