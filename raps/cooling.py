@@ -112,6 +112,10 @@ class ThermoFluidsModel:
 
         outputs = get_matching_variables(var_model, r'.*(\.summary\.|^summary).*')
 
+        # print("NUMBER OF FMU OUTPUTS")
+        # print(len(outputs))
+        # breakpoint()
+
         # Get the value references for the variables we want to get/set
         self.inputs = [v for v in model_description.modelVariables if v.causality == 'input']
         self.outputs = [v for v in model_description.modelVariables if v.name in outputs]
@@ -155,8 +159,9 @@ class ThermoFluidsModel:
             # Get temperature from weather data
             temperature = self.weather.get_temperature(target_datetime) or self.config['WET_BULB_TEMP']
 
-        # Set the temperature value
-        runtime_values[self.config['TEMPERATURE_KEY']] = temperature
+        # Set the temperature value(s)
+        for temperature_key in self.config['TEMPERATURE_KEYS']:
+            runtime_values[temperature_key] = temperature
 
         return runtime_values
     
