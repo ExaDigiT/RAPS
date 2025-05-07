@@ -261,13 +261,6 @@ class LayoutManager:
                 f"[{data_styles[i]}]{power_row[1][col]}[/]" for i, col in enumerate(power_columns)
             ]
 
-            # DEBUGGING
-            # print("len(cooling_keys): " + str(len(cooling_keys)))
-            # print("Contents of power_columns:")
-            # for element in cooling_keys:
-            #     print(element)
-            # breakpoint()
-
             cooling_values = [
                 f"[{data_styles[i + len(power_columns)]}]{cooling_row[1][key]:.1f}[/]" for i, key in enumerate(cooling_keys)
             ]

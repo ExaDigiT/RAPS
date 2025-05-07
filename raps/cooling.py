@@ -112,10 +112,6 @@ class ThermoFluidsModel:
 
         outputs = get_matching_variables(var_model, r'.*(\.summary\.|^summary).*')
 
-        # print("NUMBER OF FMU OUTPUTS")
-        # print(len(outputs))
-        # breakpoint()
-
         # Get the value references for the variables we want to get/set
         self.inputs = [v for v in model_description.modelVariables if v.causality == 'input']
         self.outputs = [v for v in model_description.modelVariables if v.name in outputs]
