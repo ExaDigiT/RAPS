@@ -225,7 +225,7 @@ class Engine:
 
                     # Get the maximum allowed bandwidth from the configuration.
                     if net_util > 1: #network_congestion_threshold:
-                        print(f"congested {net_util} > {max_link_bw}")
+                        print(f"congested net_util: {net_util}, max_link_bw: {max_link_bw}")
                         print(f"length of {len(job.gpu_trace)} before dilation")
                         # Use our network helper functions to get current bandwidth usage.
                         #current_bw = get_current_bandwidth_usage(link_id="link_1")
@@ -233,7 +233,8 @@ class Engine:
                         dilation_factor = network_dilation_factor(current_bw, max_link_bw)
                         dilation_factor = min(dilation_factor, 2) # set max dilation factor
                         # Optionally, only apply dilation once per job to avoid compounding the effect.
-                        print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor) #if not hasattr(job, 'network_dilated') or not job.network_dilated:
+                        print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor) 
+                        #if not hasattr(job, 'network_dilated') or not job.network_dilated:
                         if not job.network_dilated:
                             print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
                             job.apply_dilation(dilation_factor)
