@@ -31,6 +31,7 @@ class TickData:
     avg_net_tx: float
     avg_net_rx: float
     avg_net_util: float
+    slowdown_per_job: float
 
 
 class Engine:
@@ -62,7 +63,8 @@ class Engine:
         self.scheduler_running_history = []
         self.avg_net_tx = []
         self.avg_net_rx = []
-        self.avg_net_util = []
+        self.net_util_history = []
+        self.slowdown_history = []
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
@@ -171,6 +173,9 @@ class Engine:
         net_rx_list = []
         if self.debug:
                 print(f"Current Time: {self.current_time}")
+
+        slowdown_factors = []
+
         for job in self.running:
             if job.end_time == self.current_time:
                 job.state = JobState.COMPLETED
@@ -259,6 +264,10 @@ class Engine:
                             job.dilated = True
                             if self.debug:
                                 print(f"length of {len(job.gpu_trace)} after dilation")
+                    else:
+                        slowdown_factor = 1
+
+                    slowdown_factors.append(slowdown_factor)
 
                 else:
                     net_utils.append(0)
@@ -335,10 +344,14 @@ class Engine:
         avg_rx   = sum(net_rx_list) / n
         avg_net  = sum(net_utils)   / n
 
+        n = len(slowdown_factors) or 1
+        slowdown_per_job = sum(slowdown_factors) / n
+        self.slowdown_history.append(slowdown_per_job)
+
         # Save network history
         self.avg_net_tx.append(avg_tx)
         self.avg_net_rx.append(avg_rx)
-        self.avg_net_util.append(avg_net)
+        self.net_util_history.append(avg_net)
 
         tick_data = TickData(
             current_time=self.current_time,
@@ -356,7 +369,8 @@ class Engine:
             num_free_nodes=self.num_free_nodes,
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
-            avg_net_util=avg_net
+            avg_net_util=avg_net,
+            slowdown_per_job=slowdown_per_job
         )
 
         self.current_time += 1
@@ -433,6 +447,58 @@ class Engine:
             tick_data = self.tick()
             tick_data.completed = completed_jobs
             yield tick_data
+
+
+    def get_stats(self):
+        """ Return output statistics """
+        sum_values = lambda values: sum(x[1] for x in values) if values else 0
+        min_value = lambda values: min(x[1] for x in values) if values else 0
+        max_value = lambda values: max(x[1] for x in values) if values else 0
+        num_samples = len(self.power_manager.history) if self.power_manager else 0
+
+        throughput = self.jobs_completed / self.timesteps * 3600 if self.timesteps else 0  # Jobs per hour
+        average_power_mw = sum_values(self.power_manager.history) / num_samples / 1000 if num_samples else 0
+        average_loss_mw = sum_values(self.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
+        min_loss_mw = min_value(self.power_manager.loss_history) / 1000 if num_samples else 0
+        max_loss_mw = max_value(self.power_manager.loss_history) / 1000 if num_samples else 0
+
+        loss_fraction = average_loss_mw / average_power_mw if average_power_mw else 0
+        efficiency = 1 - loss_fraction if loss_fraction else 0
+        total_energy_consumed = average_power_mw * self.timesteps / 3600 if self.timesteps else 0  # MW-hr
+        emissions = total_energy_consumed * 852.3 / 2204.6 / efficiency if efficiency else 0
+        total_cost = total_energy_consumed * 1000 * self.config.get('POWER_COST', 0)  # Total cost in dollars
+
+        stats = {
+            'num_samples': num_samples,
+            'jobs completed': self.jobs_completed,
+            'throughput': f'{throughput:.2f} jobs/hour',
+            'jobs still running': [job.id for job in self.running],
+            'jobs still in queue': [job.id for job in self.queue],
+            'average power': f'{average_power_mw:.2f} MW',
+            'min loss': f'{min_loss_mw:.2f} MW',
+            'average loss': f'{average_loss_mw:.2f} MW',
+            'max loss': f'{max_loss_mw:.2f} MW',
+            'system power efficiency': f'{efficiency * 100:.2f}%',
+            'total energy consumed': f'{total_energy_consumed:.2f} MW-hr',
+            'carbon emissions': f'{emissions:.2f} metric tons CO2',
+            'total cost': f'${total_cost:.2f}'
+        }
+
+        if self.net_util_history:
+            mean_net_util = sum(self.net_util_history) / len(self.net_util_history)
+        else:
+            mean_net_util = 0.0
+
+        stats["avg network util"] = f"{mean_net_util*100:.2f}%"
+
+        if self.slowdown_history:
+            avg_job_slow = sum(self.slowdown_history) / len(self.slowdown_history)
+        else:
+            avg_job_slow = 1.0
+        stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
+
+        return stats
+
 
     def get_job_history_dict(self):
         return self.job_history_dict

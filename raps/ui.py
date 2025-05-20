@@ -143,7 +143,7 @@ class LayoutManager:
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
-    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util):
+    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util, slowdown):
         """
         Updates the status information table with the provided system status data.
 
@@ -165,7 +165,7 @@ class LayoutManager:
         # Define columns with header styles
         columns = [
           "Time", "Jobs Running", "Jobs Queued",
-          "Active Nodes", "Free Nodes", "Down Nodes", "Net Util (%)"
+          "Active Nodes", "Free Nodes", "Down Nodes", "Net Util (%)", "SPJ"
         ]
         table = Table(header_style="bold magenta", expand=True)
         for col in columns:
@@ -179,7 +179,8 @@ class LayoutManager:
             str(active_nodes),
             str(free_nodes),
             str(len(down_nodes)),
-            f"{avg_net_util * 100:.0f}%"
+            f"{avg_net_util * 100:.0f}%",
+            f"{slowdown:.1f}x"
         ]
         # Add the row with the 'white' style applied to the whole row
         table.add_row(*row, style="white")
@@ -441,7 +442,8 @@ class LayoutManager:
             data.num_active_nodes,
             data.num_free_nodes,
             data.down_nodes,
-            data.avg_net_util
+            data.avg_net_util,
+            data.slowdown_per_job
         )
 
         self.update_power_array(
