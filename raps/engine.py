@@ -5,7 +5,7 @@ import numpy as np
 
 from .job import Job, JobState
 from .policy import PolicyType
-from .network import network_utilization, get_current_bandwidth_usage, network_dilation_factor
+from .network import network_utilization, network_congestion, network_slowdown
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
@@ -165,6 +165,7 @@ class Engine:
         scheduled_nodes = []
         cpu_utils = []
         gpu_utils = []
+        net_congs = []
         net_utils = []
         net_tx_list = []
         net_rx_list = []
@@ -229,25 +230,24 @@ class Engine:
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx, max_link_bw)
+                    net_cong = network_congestion(net_tx, net_rx, max_link_bw)
                     net_tx_list.append(net_tx)
                     net_rx_list.append(net_rx)
-                    #net_utils.append(net_util)
                     if self.debug:
                         print("time:", self.current_time, "net util:", net_util)
                         print("jid", job.id, "net_tx", net_tx)
                         print("jid", job.id, "net_rx", net_tx)
+                    net_congs.append(net_cong)
                     net_utils.append(net_util)
 
                     # Get the maximum allowed bandwidth from the configuration.
-                    if net_util > 1: #network_congestion_threshold:
+                    if net_cong > 1: #network_congestion_threshold:
                         if self.debug:
-                            print(f"congested net_util: {net_util}, max_link_bw: {max_link_bw}")
+                            print(f"congested net_cong: {net_cong}, max_link_bw: {max_link_bw}")
                             print(f"length of {len(job.gpu_trace)} before dilation")
-                        # Use our network helper functions to get current bandwidth usage.
-                        #current_bw = get_current_bandwidth_usage(link_id="link_1")
                         current_bw = net_tx + net_rx
-                        slowdown_factor = network_slowdown_factor(current_bw, max_link_bw)
-                        slowdown_factor = min(slowdown_factor, 2) # set max dilation factor
+                        slowdown_factor = network_slowdown(current_bw, max_link_bw)
+                        slowdown_factor = min(slowdown_factor, 2) # set max slowdown factor
                         # Optionally, only apply slowdown once per job to avoid compounding the effect.
                         if self.debug:
                             print("***", hasattr(job, 'dilated'), current_bw, max_link_bw, slowdown_factor)
@@ -262,6 +262,7 @@ class Engine:
 
                 else:
                     net_utils.append(0)
+                    net_congs.append(0)
 
                 scheduled_nodes.append(job.scheduled_nodes)  # ?
                 cpu_utils.append(cpu_util)

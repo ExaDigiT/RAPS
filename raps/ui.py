@@ -179,7 +179,7 @@ class LayoutManager:
             str(active_nodes),
             str(free_nodes),
             str(len(down_nodes)),
-            f"{avg_net_util * 100:.1f}%"
+            f"{avg_net_util * 100:.0f}%"
         ]
         # Add the row with the 'white' style applied to the whole row
         table.add_row(*row, style="white")
