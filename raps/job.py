@@ -182,6 +182,7 @@ class Job:
         self.ntx_trace = dilate_trace(self.ntx_trace, factor)
         self.nrx_trace = dilate_trace(self.nrx_trace, factor)
         self.wall_time = int(np.round(self.wall_time * factor))
+        self.end_time = self.start_time + self.wall_time
 
 
 

@@ -5,7 +5,7 @@ import numpy as np
 
 from .job import Job, JobState
 from .policy import PolicyType
-from .network import network_utilization
+from .network import network_utilization, get_current_bandwidth_usage, network_dilation_factor
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
@@ -214,25 +214,31 @@ class Engine:
                 net_util = 0
 
                 if (isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray)) and len(job.ntx_trace) and (isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,list)) and len(job.nrx_trace):
+                    max_link_bw = self.config.get('NETWORK_MAX_BW')
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
-                    net_util = network_utilization(net_tx, net_rx)
+                    net_util = network_utilization(net_tx, net_rx, max_link_bw)
                     print("time:", self.current_time, "net util:", net_util)
                     print("jid", job.id, "net_tx", net_tx)
                     print("jid", job.id, "net_rx", net_tx)
                     net_utils.append(net_util)
 
                     # Get the maximum allowed bandwidth from the configuration.
-                    network_congestion_threshold = self.config.get('NETWORK_MAX_BW', 100.0)
-                    if net_util > network_congestion_threshold:
+                    if net_util > 1: #network_congestion_threshold:
+                        print(f"congested {net_util} > {max_link_bw}")
+                        print(f"length of {len(job.gpu_trace)} before dilation")
                         # Use our network helper functions to get current bandwidth usage.
-                        current_bw = get_current_bandwidth_usage(link_id="link_1")
-                        dilation_factor = network_dilation_factor(current_bw, network_congestion_threshold)
+                        #current_bw = get_current_bandwidth_usage(link_id="link_1")
+                        current_bw = net_tx + net_rx
+                        dilation_factor = network_dilation_factor(current_bw, max_link_bw)
+                        dilation_factor = min(dilation_factor, 2) # set max dilation factor
                         # Optionally, only apply dilation once per job to avoid compounding the effect.
-                        if not hasattr(job, 'network_dilated') or not job.network_dilated:
+                        print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor) #if not hasattr(job, 'network_dilated') or not job.network_dilated:
+                        if not job.network_dilated:
                             print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
                             job.apply_dilation(dilation_factor)
                             job.network_dilated = True
+                            print(f"length of {len(job.gpu_trace)} after dilation")
 
                 else:
                     net_utils.append(0)

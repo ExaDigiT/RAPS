@@ -1,10 +1,7 @@
-TX_MAX = 10000
-RX_MAX = 20000
-
-def network_utilization(tx, rx):
+def network_utilization(tx, rx, MAX):
     """Compute average network utilization"""
-    tx_util = min(tx / TX_MAX, 1.0)  # Clamp to 1.0
-    rx_util = min(rx / RX_MAX, 1.0)
+    tx_util = float(tx) / MAX
+    rx_util = float(rx) / MAX
     return (tx_util + rx_util) / 2.0
 
 def network_dilation_factor(current_bw, max_bw):

@@ -171,8 +171,9 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else []
         ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else []
 
-        #net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
-        net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        net_tx, net_rx = generate_network_sequences_avg(ib_tx, ib_rx, samples, lambda_poisson=0.3)
 
         # no priorities defined!
         priority = row.get('priority', 0)
@@ -284,6 +285,24 @@ def generate_network_sequences(total_tx, total_rx, intervals, lambda_poisson):
     # Adjust bursts for both tx and rx
     tx_bursts = adjust_bursts(burst_intervals, total_tx, intervals)
     rx_bursts = adjust_bursts(burst_intervals, total_rx, intervals)
+
+    return tx_bursts, rx_bursts
+
+
+def generate_network_sequences_avg(total_tx, total_rx, intervals, lambda_poisson):
+
+    if not total_tx or not total_rx:
+        return [], []
+
+    # Generate sporadic bursts using a Poisson distribution (shared for both tx and rx)
+    #burst_intervals = np.random.poisson(lam=lambda_poisson, size=intervals)
+
+    # Ensure some intervals have no traffic (both tx and rx will share zero intervals)
+    #burst_intervals = np.where(burst_intervals > 0, burst_intervals, 0)
+
+    # Adjust bursts for both tx and rx
+    tx_bursts = [total_tx // intervals] * intervals
+    rx_bursts = [total_rx // intervals] * intervals
 
     return tx_bursts, rx_bursts
 

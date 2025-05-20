@@ -1,5 +1,5 @@
 {
     "NETWORK_MODEL": "capacity",
-    "UPLINK_CAPACITY": 1000,
-    "NETWORK_MAX_BW": 1000
+    "UPLINK_CAPACITY": 10,
+    "NETWORK_MAX_BW": 20000
 }
