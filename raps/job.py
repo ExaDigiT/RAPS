@@ -1,3 +1,4 @@
+import numpy as np
 from enum import Enum
 import numpy as np
 
@@ -11,11 +12,13 @@ Implementing such using something like:
     job = SimpleNamespace(**job_dict(...))
 """
 
-def job_dict(*,nodes_required, name, account, \
-             cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
+
+def job_dict(*, nodes_required, name, account,
+             cpu_trace, gpu_trace, ntx_trace, nrx_trace,
              end_state, scheduled_nodes=None, id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
-             wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0, trace_missing_values=False):
+             wall_time=0, trace_time=0, trace_start_time=0, trace_end_time=0,
+             trace_missing_values=False):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -39,9 +42,33 @@ def job_dict(*,nodes_required, name, account, \
         'trace_time': trace_time,
         'trace_start_time': trace_start_time,
         'trace_end_time': trace_end_time,
-        'trace_missing_values': trace_missing_values
-
+        'trace_missing_values': trace_missing_values,
+        'dilated': False
     }
+
+
+def dilate_trace(trace, factor):
+    """
+    Scale a trace in the time dimension by the given factor.
+
+    Parameters:
+    - trace (list of float): the original trace values.
+    - factor (float): the dilation factor; >1 to slow down (stretch) and <1 to speed up (compress).
+
+    Returns:
+    - list of float: the dilated trace.
+    """
+    if trace is None or len(trace) == 0:
+        return trace
+    original_length = len(trace)
+    # Compute the new length (rounding to the nearest integer)
+    new_length = int(np.round(original_length * factor))
+    # Create arrays for the old and new indices
+    old_indices = np.linspace(0, original_length - 1, num=original_length)
+    new_indices = np.linspace(0, original_length - 1, num=new_length)
+    # Use linear interpolation to compute the new trace values
+    new_trace = np.interp(new_indices, old_indices, trace).tolist()
+    return new_trace
 
 
 class JobState(Enum):
@@ -140,15 +167,26 @@ class Job:
         return cls._id_counter
 
     def statistics(self):
-        """ Derive job statistics from the Job Class and return
-        """
+        """ Derive job statistics from the Job Class and return """
         return JobStatistics(self)
+
+    def apply_dilation(self, factor):
+        """
+        Apply a dilation factor to the job’s execution traces and wall time.
+
+        Parameters:
+        - factor (float): the dilation factor; >1 to slow down (lengthen the traces) and <1 to speed up.
+        """
+        self.cpu_trace = dilate_trace(self.cpu_trace, factor)
+        self.gpu_trace = dilate_trace(self.gpu_trace, factor)
+        self.ntx_trace = dilate_trace(self.ntx_trace, factor)
+        self.nrx_trace = dilate_trace(self.nrx_trace, factor)
+        self.wall_time = int(np.round(self.wall_time * factor))
+
 
 
 class JobStatistics:
-    """
-    Reduced class for handling statistics after the job has finished.
-    """
+    """ Reduced class for handling statistics after the job has finished.  """
 
     def __init__(self,job):
         self.id = job.id
@@ -203,3 +241,62 @@ class JobStatistics:
             self.avg_node_power = sum(job.power_history) / len(job.power_history) / self.num_nodes
             self.max_node_power = max(job.power_history) / self.num_nodes
         self.energy = self.run_time * self.avg_node_power * self.num_nodes
+
+
+if __name__ == "__main__":
+    import random
+
+    # Each sample in the trace represents 15 seconds.
+    trace_quanta = 15  # seconds per sample
+    wall_time = 600    # total job wall time in seconds (600s = 10 minutes)
+    num_samples = wall_time // trace_quanta  # should be 40 samples
+
+    # Generate a random GPU trace (values between 0 and 4 for 4 GPUs total)
+    gpu_trace = [random.uniform(0, 4) for _ in range(num_samples)]
+    # Generate a random CPU trace (values between 0 and 1)
+    cpu_trace = [random.uniform(0, 1) for _ in range(num_samples)]
+    # Dummy network traces
+    ntx_trace = [random.uniform(0, 10) for _ in range(num_samples)]
+    nrx_trace = [random.uniform(0, 10) for _ in range(num_samples)]
+
+    # Create a job dictionary using the existing job_dict helper.
+    jdict = job_dict(
+        nodes_required=1,
+        name="test_job",
+        account="test_account",
+        cpu_trace=cpu_trace,
+        gpu_trace=gpu_trace,
+        ntx_trace=ntx_trace,
+        nrx_trace=nrx_trace,
+        wall_time=wall_time,
+        end_state="",
+        scheduled_nodes=[],
+        time_offset=0,
+        job_id=0
+    )
+
+    # Instantiate the Job.
+    job_instance = Job(jdict, current_time=0)
+
+    # Print original job properties.
+    print("Original wall_time:", job_instance.wall_time)
+    print("Original cpu_trace length:", len(job_instance.cpu_trace))
+    print("Original gpu_trace length:", len(job_instance.gpu_trace))
+
+    # Apply a dilation factor, e.g., 1.5 for a 50% slowdown (traces become 50% longer)
+    dilation_factor = 1.5
+    job_instance.apply_dilation(dilation_factor)
+
+    # Calculate the expected new lengths.
+    expected_samples = int(np.round(num_samples * dilation_factor))
+    expected_wall_time = int(np.round(wall_time * dilation_factor))
+
+    # Print the dilated job properties.
+    print("\nAfter applying a dilation factor of", dilation_factor)
+    print("New wall_time:", job_instance.wall_time, "(expected:", expected_wall_time, ")")
+    print("New cpu_trace length:", len(job_instance.cpu_trace), "(expected:", expected_samples, ")")
+    print("New gpu_trace length:", len(job_instance.gpu_trace), "(expected:", expected_samples, ")")
+
+    # Optionally, print a few sample values from the new traces.
+    print("\nSample cpu_trace values:", job_instance.cpu_trace[:5])
+    print("Sample gpu_trace values:", job_instance.gpu_trace[:5])

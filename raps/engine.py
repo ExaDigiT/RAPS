@@ -218,6 +218,19 @@ class Engine:
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx)
                     net_utils.append(net_util)
+
+                    # Get the maximum allowed bandwidth from the configuration.
+                    network_congestion_threshold = self.config.get('NETWORK_MAX_BW', 100.0)
+                    if net_util > network_congestion_threshold:
+                        # Use our network helper functions to get current bandwidth usage.
+                        current_bw = get_current_bandwidth_usage(link_id="link_1")
+                        dilation_factor = network_dilation_factor(current_bw, network_congestion_threshold)
+                        # Optionally, only apply dilation once per job to avoid compounding the effect.
+                        if not hasattr(job, 'network_dilated') or not job.network_dilated:
+                            print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
+                            job.apply_dilation(dilation_factor)
+                            job.network_dilated = True
+
                 else:
                     net_utils.append(0)
 
