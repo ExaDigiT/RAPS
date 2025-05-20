@@ -133,6 +133,10 @@ class LayoutManager:
                 nodes_display,
                 convert_seconds(job.running_time)
             ]
+
+            if job.dilated:
+                row = [f"[yellow]{x}[/yellow]" for x in row]
+
             # Add the row with the 'white' style applied to the whole row
             table.add_row(*row, style="white")
 
