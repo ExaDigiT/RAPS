@@ -44,6 +44,14 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
     # Adastra MI250
     python main.py --system adastraMI250 -f AdastaJobsMI250_15days.parquet 
 
+## Perform Network Simulation
+
+Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
+get the datasets. To run a network simulation, use the following command:
+
+    python main.py -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --reschedule poisson -t 1h -d
+
+
 ## Snapshot of extracted workload data
 
 To reduce the expense of extracting the needed data from the telemetry parquet files,

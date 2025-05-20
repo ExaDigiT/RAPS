@@ -139,7 +139,8 @@ class LayoutManager:
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
-    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes):
+    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes,
+                      avg_net_tx, avg_net_rx, avg_net_util):
         """
         Updates the status information table with the provided system status data.
 
@@ -159,7 +160,11 @@ class LayoutManager:
             List of nodes that are down.
         """
         # Define columns with header styles
-        columns = ["Time", "Jobs Running", "Jobs Queued", "Active Nodes", "Free Nodes", "Down Nodes"]
+        columns = [
+          "Time", "Jobs Running", "Jobs Queued",
+          "Active Nodes", "Free Nodes", "Down Nodes",
+          "Net TX (Mbps)", "Net RX (Mbps)", "Net Util (%)"
+        ]
         table = Table(header_style="bold magenta", expand=True)
         for col in columns:
             table.add_column(col, justify="center")
@@ -171,7 +176,10 @@ class LayoutManager:
             str(nqueue),
             str(active_nodes),
             str(free_nodes),
-            str(len(down_nodes))
+            str(len(down_nodes)),
+            f"{avg_net_tx:.1e}",
+            f"{avg_net_rx:.1e}",
+            f"{avg_net_util * 100:.1f}%"
         ]
         # Add the row with the 'white' style applied to the whole row
         table.add_row(*row, style="white")
@@ -424,6 +432,24 @@ class LayoutManager:
                 self.render()
         self.update_progress(1)
 
+        self.update_scheduled_jobs(data.running + data.queue)
+
+        self.update_status(
+            data.current_time,
+            len(data.running),
+            len(data.queue),
+            data.num_active_nodes,
+            data.num_free_nodes,
+            data.down_nodes,
+            data.avg_net_tx,
+            data.avg_net_rx,
+            data.avg_net_util,
+        )
+
+        self.update_power_array(
+            data.power_df, data.p_flops, data.g_flops_w,
+            data.system_util, uncertainties=uncertainties,
+        )
 
     def render(self):
         if not self.debug:

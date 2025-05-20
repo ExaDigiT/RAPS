@@ -28,6 +28,9 @@ class TickData:
     fmu_outputs: Optional[dict]
     num_active_nodes: int
     num_free_nodes: int
+    avg_net_tx: float
+    avg_net_rx: float
+    avg_net_util: float
 
 
 class Engine:
@@ -57,6 +60,9 @@ class Engine:
         self.sys_util_history = []
         self.scheduler_queue_history = []
         self.scheduler_running_history = []
+        self.avg_net_tx = []
+        self.avg_net_rx = []
+        self.avg_net_util = []
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
@@ -160,8 +166,13 @@ class Engine:
         cpu_utils = []
         gpu_utils = []
         net_utils = []
+        net_tx_list = []
+        net_rx_list = []
         if self.debug:
                 print(f"Current Time: {self.current_time}")
+        for job in self.running:
+            if job.end_time == self.current_time:
+                job.state = JobState.COMPLETED
 
         for job in self.running:
 
@@ -218,28 +229,36 @@ class Engine:
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx, max_link_bw)
-                    print("time:", self.current_time, "net util:", net_util)
-                    print("jid", job.id, "net_tx", net_tx)
-                    print("jid", job.id, "net_rx", net_tx)
+                    net_tx_list.append(net_tx)
+                    net_rx_list.append(net_rx)
+                    #net_utils.append(net_util)
+                    if self.debug:
+                        print("time:", self.current_time, "net util:", net_util)
+                        print("jid", job.id, "net_tx", net_tx)
+                        print("jid", job.id, "net_rx", net_tx)
                     net_utils.append(net_util)
 
                     # Get the maximum allowed bandwidth from the configuration.
                     if net_util > 1: #network_congestion_threshold:
-                        print(f"congested net_util: {net_util}, max_link_bw: {max_link_bw}")
-                        print(f"length of {len(job.gpu_trace)} before dilation")
+                        if self.debug:
+                            print(f"congested net_util: {net_util}, max_link_bw: {max_link_bw}")
+                            print(f"length of {len(job.gpu_trace)} before dilation")
                         # Use our network helper functions to get current bandwidth usage.
                         #current_bw = get_current_bandwidth_usage(link_id="link_1")
                         current_bw = net_tx + net_rx
                         dilation_factor = network_dilation_factor(current_bw, max_link_bw)
                         dilation_factor = min(dilation_factor, 2) # set max dilation factor
                         # Optionally, only apply dilation once per job to avoid compounding the effect.
-                        print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor) 
+                        if self.debug:
+                            print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor)
                         #if not hasattr(job, 'network_dilated') or not job.network_dilated:
                         if not job.network_dilated:
-                            print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
+                            if self.debug:
+                                print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
                             job.apply_dilation(dilation_factor)
                             job.network_dilated = True
-                            print(f"length of {len(job.gpu_trace)} after dilation")
+                            if self.debug:
+                                print(f"length of {len(job.gpu_trace)} after dilation")
 
                 else:
                     net_utils.append(0)
@@ -309,6 +328,17 @@ class Engine:
                 # Get a dataframe of the power data
                 power_df = self.power_manager.get_power_df(rack_power, rack_loss)
 
+        # Compute network averages
+        n = len(net_utils) or 1
+        avg_tx   = sum(net_tx_list) / n
+        avg_rx   = sum(net_rx_list) / n
+        avg_net  = sum(net_utils)   / n
+
+        # Save network history
+        self.avg_net_tx.append(avg_tx)
+        self.avg_net_rx.append(avg_rx)
+        self.avg_net_util.append(avg_net)
+
         tick_data = TickData(
             current_time=self.current_time,
             completed=None,
@@ -323,6 +353,9 @@ class Engine:
             fmu_outputs=cooling_outputs,
             num_active_nodes=self.num_active_nodes,
             num_free_nodes=self.num_free_nodes,
+            avg_net_tx=avg_tx,
+            avg_net_rx=avg_rx,
+            avg_net_util=avg_net
         )
 
         self.current_time += 1
