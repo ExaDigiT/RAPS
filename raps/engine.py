@@ -246,17 +246,17 @@ class Engine:
                         # Use our network helper functions to get current bandwidth usage.
                         #current_bw = get_current_bandwidth_usage(link_id="link_1")
                         current_bw = net_tx + net_rx
-                        dilation_factor = network_dilation_factor(current_bw, max_link_bw)
-                        dilation_factor = min(dilation_factor, 2) # set max dilation factor
-                        # Optionally, only apply dilation once per job to avoid compounding the effect.
+                        slowdown_factor = network_slowdown_factor(current_bw, max_link_bw)
+                        slowdown_factor = min(slowdown_factor, 2) # set max dilation factor
+                        # Optionally, only apply slowdown once per job to avoid compounding the effect.
                         if self.debug:
-                            print("***", hasattr(job, 'network_dilated'), current_bw, max_link_bw, dilation_factor)
-                        #if not hasattr(job, 'network_dilated') or not job.network_dilated:
-                        if not job.network_dilated:
+                            print("***", hasattr(job, 'dilated'), current_bw, max_link_bw, slowdown_factor)
+                        #if not hasattr(job, 'dilated') or not job.dilated:
+                        if not job.dilated:
                             if self.debug:
-                                print(f"Applying dilation factor {dilation_factor:.2f} to job {job.id} due to network congestion")
-                            job.apply_dilation(dilation_factor)
-                            job.network_dilated = True
+                                print(f"Applying slowdown factor {slowdown_factor:.2f} to job {job.id} due to network congestion")
+                            job.apply_dilation(slowdown_factor)
+                            job.dilated = True
                             if self.debug:
                                 print(f"length of {len(job.gpu_trace)} after dilation")
 

@@ -4,7 +4,7 @@ def network_utilization(tx, rx, MAX):
     rx_util = float(rx) / MAX
     return (tx_util + rx_util) / 2.0
 
-def network_dilation_factor(current_bw, max_bw):
+def network_slowdown_factor(current_bw, max_bw):
     """
     Calculate a dilation factor based on current network bandwidth usage.
     
