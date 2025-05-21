@@ -24,6 +24,10 @@ Usage Instructions:
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 365d -t 1d
+
+    # For the network replay this command gives suiteable snapshots:
+    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson
+
 """
 import math
 import os
