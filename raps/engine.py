@@ -337,6 +337,11 @@ class Engine:
             else:
                 # Get a dataframe of the power data
                 power_df = self.power_manager.get_power_df(rack_power, rack_loss)
+        elif power_df is None:  # Even if power didnt update, make sure its not None!
+            power_df = self.power_manager.get_power_df(rack_power, rack_loss)
+        else:  # We made sure there are values in there but power did not need to be updated.
+            pass
+
 
         # Compute network averages
         n = len(net_utils) or 1

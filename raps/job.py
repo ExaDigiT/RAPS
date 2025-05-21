@@ -58,7 +58,9 @@ def dilate_trace(trace, factor):
     Returns:
     - list of float: the dilated trace.
     """
-    if trace is None or len(trace) == 0:
+    if trace is None or (isinstance(trace,(list, np.ndarray)) and len(trace) == 0):
+        return trace
+    if isinstance(trace, (np.float64, float)): # This needs to be handled!
         return trace
     original_length = len(trace)
     # Compute the new length (rounding to the nearest integer)

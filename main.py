@@ -113,7 +113,7 @@ if args.replay:
         print(*args.replay)
         jobs, timestep_start_from_data, timestep_end = td.load_data(args.replay)
         timestep_start += timestep_start_from_data
-        td.save_snapshot((jobs, timestep_start, timestep_end, args), filename=DIR_NAME)
+        td.save_snapshot(jobs, timestep_start, timestep_end, args, filename=DIR_NAME)
 
     # Set number of timesteps based on the last job running which we assume
     # is the maximum value of submit_time + wall_time of all the jobs

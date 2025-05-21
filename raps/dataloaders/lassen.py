@@ -127,7 +127,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # TODO: Jobs could have a time-series per node!
             gpu_node_energy = node_data['gpu_energy'].copy()
             gpu_node_energy[gpu_node_energy < 0] = 0.0
-            gpu_node_energy[gpu_node_energy == np.NaN] = 0.0
+            gpu_node_energy[gpu_node_energy == np.nan] = 0.0
             if len(gpu_node_energy) < 1:
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
             else:
@@ -152,7 +152,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # Same
             cpu_node_usage = node_data['cpu_usage'].copy()
             cpu_node_usage[cpu_node_usage < 0] = 0.0
-            cpu_node_usage[cpu_node_usage == np.NaN] = 0.0
+            cpu_node_usage[cpu_node_usage == np.nan] = 0.0
             if wall_time > 0:
                 threads_per_core = config['THREADS_PER_CORE']
                 cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core

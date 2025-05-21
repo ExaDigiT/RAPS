@@ -7,7 +7,8 @@ from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
-from rich.progress import Progress,TextColumn,BarColumn,TaskProgressColumn,TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
+from rich.progress import Progress,TextColumn, BarColumn, TaskProgressColumn, \
+    TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
 
 from .utils import summarize_ranges, convert_seconds
 from .constants import ELLIPSES
@@ -390,9 +391,9 @@ class LayoutManager:
             total_table.add_row(
                 f"{system_util:.1f}%",
                 total_power_str,
-                str(f"{pflops:.2f}"),
-                str(f"{gflop_per_watt:.1f}"),
-                total_loss_str + " (" + percent_loss_str+ ")",
+                str(f"{pflops:.2f}" if pflops is not None else "None"),
+                str(f"{gflop_per_watt:.1f}" if gflop_per_watt is not None else "None"),
+                total_loss_str + " (" + percent_loss_str + ")",
                 style="white"  # Apply 'white' style to the entire row
             )
 
@@ -423,7 +424,7 @@ class LayoutManager:
             self.update_scheduled_jobs(data.running + data.queue)
             self.update_status(
                 data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
-                data.num_free_nodes, data.down_nodes,
+                data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job
             )
             self.update_power_array(
                 data.power_df, data.p_flops, data.g_flops_w,
