@@ -60,8 +60,10 @@ def dilate_trace(trace, factor):
     """
     if trace is None or (isinstance(trace,(list, np.ndarray)) and len(trace) == 0):
         return trace
-    if isinstance(trace, (np.float64, float)): # This needs to be handled!
-        return trace
+    # Traces can be list/np.array or single float values.
+    # In case of a single float, we adjust the value directly as it is applied to each timestep
+    if isinstance(trace, (np.float64, float)):
+        return trace / factor  # Single value
     original_length = len(trace)
     # Compute the new length (rounding to the nearest integer)
     new_length = int(np.round(original_length * factor))

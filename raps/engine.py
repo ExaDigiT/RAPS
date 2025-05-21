@@ -252,7 +252,7 @@ class Engine:
                             print(f"length of {len(job.gpu_trace)} before dilation")
                         current_bw = net_tx + net_rx
                         slowdown_factor = network_slowdown(current_bw, max_link_bw)
-                        slowdown_factor = min(slowdown_factor, 2) # set max slowdown factor
+                        #slowdown_factor = min(slowdown_factor, 2) # set max slowdown factor
                         # Optionally, only apply slowdown once per job to avoid compounding the effect.
                         if self.debug:
                             print("***", hasattr(job, 'dilated'), current_bw, max_link_bw, slowdown_factor)

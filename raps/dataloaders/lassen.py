@@ -41,7 +41,7 @@ def load_data(path, **kwargs):
     """
     Loads data from the given file paths and returns job info.
     """
-    nrows = None
+    nrows = 1E5  # None
     alloc_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
     node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
     step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
@@ -86,8 +86,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta
 
     # As these are >1.4M jobs, filtered to the simulated timestamps before creating the job structs.
-    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
-    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
+    #allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
+    #allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
 
     job_list = []
 
@@ -179,22 +179,21 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         priority = row.get('priority', 0)
         partition = row.get('partition', "0")
 
-        if arrival == 'poisson':  # Modify the submit times according to Poisson process
-            scheduled_nodes = None
-            submit_time = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-            start_time = None  # Scheduler will determine start time
-            end_time = None  # Scheduler will determine end time
-        else:  # Prescribed replay
-            scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
-            submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
-            start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
-            end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
-            time_limit = row['time_limit']
+        scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
+        submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
+        start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
+        end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
+        time_limit = row['time_limit']
 
-            trace_time = wall_time
-            trace_start_time = start_time
-            trace_end_time = end_time
-            trace_missing_values = False
+        trace_time = wall_time
+        trace_start_time = start_time
+        trace_end_time = end_time
+        trace_missing_values = False
+
+        if arrival == 'poisson':  # Modify the submit times according to Poisson process
+            start_time = 0
+            end_time = wall_time
+            submit_time = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
 
         if verbose:
             print('ib_tx, ib_rx, samples:', ib_tx, ib_rx, samples)
