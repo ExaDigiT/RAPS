@@ -473,7 +473,7 @@ def plot_job_hist(jobs):
     axs[1,0].set_xlabel("wall time [hh:mm]")
     #axs[1,0].set_yticklabels([str(n).zfill(2) + ':00' for n in np.arange(min(y)//3600, max(y)//3600, 1)])
     minx_s = 0
-    maxx_s = max(x2)
+    maxx_s = math.ceil(max(x2))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
