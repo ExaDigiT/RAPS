@@ -59,27 +59,58 @@ class Workload:
         gpu_trace = gpu_util * np.ones(int(wall_time) // trace_quanta)
         return (cpu_trace, gpu_trace)
 
-    def generate_uniform_jobs(self, *, num_jobs) -> list[list[any]]:
-        print("TODO Implement propper!")
+    def job_arrival_distribution_draw_poisson(self,args,config):
+        return next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+
+    def job_size_distribution_draw_uniform(self,args,config):
+        return random.randint(1, config['MAX_NODES_PER_JOB'])
+
+    def job_size_distribution_draw_weibull(self,args,config):
+        return truncated_weibull(args.weibull_job_scale, args.weibull_job_shape, 1, config['MAX_NODES_PER_JOB'])
+
+    def cpu_utilization_distribution_draw_uniform(self,args,config):
+        return random.uniform(0.0, config['CPUS_PER_NODE'])
+
+    def gpu_utilization_distribution_draw_uniform(self,args,config):
+        return random.uniform(0.0, config['GPUS_PER_NODE'])
+
+    def wall_time_distribution_draw_uniform(self,args,config):
+        return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
+
+    def wall_time_distribution_draw_normal(self,args,config):
+        return max(1,truncated_normalvariate(float(args.wall_time_mean), float(args.wall_time_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600)
+
+    def wall_time_distribution_draw_weibull(self,args,config):
+        wall_time = truncated_weibull((config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
+                                      # (config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
+                                      config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
+        return wall_time
+
+    def generate_jobs(self, *,
+                      job_arrival_distribution_to_draw_from,
+                      job_size_distribution_to_draw_from,
+                      cpu_util_distribution_to_draw_from,
+                      gpu_util_distribution_to_draw_from,
+                      wall_time_distribution_to_draw_from,
+                      args
+                      ) -> list[list[any]]:
         jobs = []
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
-
-        for job_index in range(num_jobs):
-
-            time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-
-            nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
+        for job_index in range(args.numjobs):
+            submit_time = job_arrival_distribution_to_draw_from(args,config)
+            start_time = submit_time
+            nodes_required = job_size_distribution_to_draw_from(args,config)
             name = random.choice(JOB_NAMES)
             account = random.choice(ACCT_NAMES)
-            cpu_util = random.random() * config['CPUS_PER_NODE']
-            gpu_util = random.random() * config['GPUS_PER_NODE']
-            mu = config["MIN_WALL_TIME"] * 1.0
-            sigma = 4.0
-            wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+            cpu_util = cpu_util_distribution_to_draw_from(args,config)
+            gpu_util = gpu_util_distribution_to_draw_from(args,config)
+            wall_time = wall_time_distribution_to_draw_from(args,config)
+            end_time = start_time + wall_time
+            time_limit = max(wall_time,wall_time_distribution_to_draw_from(args,config))
             end_state = determine_state(config['JOB_END_PROBS'])
-            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
+            cpu_trace = cpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
+            gpu_trace = gpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
             net_tx, net_rx = [], []
             jobs.append(job_dict(nodes_required=nodes_required, name=name,
@@ -88,154 +119,87 @@ class Workload:
                                  nrx_trace=net_rx, end_state=end_state,
                                  id=job_index, priority=priority,
                                  partition=partition,
-                                 submit_time=time_to_next_job - 100,
+                                 submit_time=submit_time,
                                  time_limit=time_limit,
-                                 start_time=time_to_next_job,
-                                 end_time=time_to_next_job + wall_time,
+                                 start_time=start_time,
+                                 end_time=end_time,
                                  wall_time=wall_time, trace_time=wall_time,
                                  trace_start_time=0, trace_end_time=wall_time))
         return jobs
 
-    def generate_normal_jobs(self, *, num_jobs) -> list[list[any]]:
-        print("TODO Implement propper!")
+    def synthetic(self, **kwargs):
+        args = kwargs.get('args',None)
+        print("ARGS")
+        print(args)
+        total_jobs = args.numjobs
+        orig_job_size_distribution = args.job_size_distribution
+        orig_wall_time_distribution = args.job_size_distribution
         jobs = []
-        partition = random.choice(self.partitions)
-        config = self.config_map[partition]
+        if len(args.job_size_distribution) != 1 and sum(args.multimodal) != 1.0:
+            raise Exception(f"Sum of --multimodal != 1.0 : {args.multimodal} == {sum(args.multimodal)}")
+        for i,(jsdist,wtdist,percentage) in enumerate(zip(args.job_size_distribution,args.wall_time_distribution,args.multimodal)):
 
-        for job_index in range(num_jobs):
+            args.numjobs = math.floor(total_jobs * percentage)
+            args.job_size_distribution = jsdist
+            args.wall_time_distribution = wtdist
 
-            time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+            job_arrival_distribution_to_draw_from = self.job_arrival_distribution_draw_poisson
+            match args.job_size_distribution:
+                case "uniform":
+                    job_size_distribution_to_draw_from = self.job_size_distribution_draw_uniform
+                case "weibull":
+                    job_size_distribution_to_draw_from = self.job_size_distribution_draw_weibull
+                case _:
+                    raise NotImplementedError(args.job_size_distribution)
+            cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_uniform
+            gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_uniform
+            match args.wall_time_distribution:
+                case "weibull":
+                    wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_weibull
+                case "normal":
+                    wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_normal
+                case "uniform":
+                    wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_uniform
 
-            nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
-            name = random.choice(JOB_NAMES)
-            account = random.choice(ACCT_NAMES)
-            cpu_util = random.random() * config['CPUS_PER_NODE']
-            gpu_util = random.random() * config['GPUS_PER_NODE']
-            mu = config["MIN_WALL_TIME"] * 1.0
-            sigma = 4.0
-            wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
-            end_state = determine_state(config['JOB_END_PROBS'])
-            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
-            priority = random.randint(0, MAX_PRIORITY)
-            net_tx, net_rx = [], []
-            jobs.append(job_dict(nodes_required=nodes_required, name=name,
-                                 account=account, cpu_trace=cpu_trace,
-                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
-                                 nrx_trace=net_rx, end_state=end_state,
-                                 id=job_index, priority=priority,
-                                 partition=partition,
-                                 submit_time=time_to_next_job - 100,
-                                 time_limit=time_limit,
-                                 start_time=time_to_next_job,
-                                 end_time=time_to_next_job + wall_time,
-                                 wall_time=wall_time, trace_time=wall_time,
-                                 trace_start_time=0, trace_end_time=wall_time))
+                case _:
+                    raise NotImplementedError(args.wall_time_distribution)
+
+            new_jobs = self.generate_jobs(
+                job_arrival_distribution_to_draw_from=job_arrival_distribution_to_draw_from,
+                job_size_distribution_to_draw_from=job_size_distribution_to_draw_from,
+                cpu_util_distribution_to_draw_from=cpu_util_distribution_to_draw_from,
+                gpu_util_distribution_to_draw_from=gpu_util_distribution_to_draw_from,
+                wall_time_distribution_to_draw_from=wall_time_distribution_to_draw_from,
+                args=args)
+            jobs.extend(new_jobs)
+        args.numjobs = total_jobs
+        args.job_size_distribution = orig_job_size_distribution
+        args.wall_time_distribution = orig_wall_time_distribution
         return jobs
-
-    def generate_weibull_jobs(self, *, shape, scale, num_jobs) -> list[list[any]]:
-        print("TODO Implement propper!")
-        jobs = []
-        partition = random.choice(self.partitions)
-        config = self.config_map[partition]
-
-        for job_index in range(num_jobs):
-
-            time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-
-            nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
-            name = random.choice(JOB_NAMES)
-            account = random.choice(ACCT_NAMES)
-            cpu_util = random.random() * config['CPUS_PER_NODE']
-            gpu_util = random.random() * config['GPUS_PER_NODE']
-            mu = config["MIN_WALL_TIME"] * 1.0
-            sigma = 4.0
-            #wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-
-            wall_time = truncated_weibull(
-                    (config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
-                    #(config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
-                    config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
-
-                #time_limit = truncated_weibull(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 300 * 300  # to 5 minutes
-            time_limit = truncated_weibull(config['MAX_WALL_TIME'] // 2 + config['MIN_WALL_TIME'], 1, wall_time, config['MAX_WALL_TIME']) // 300 * 300  # to 5 minutes
-
-
-            #time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
-            end_state = determine_state(config['JOB_END_PROBS'])
-            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
-            priority = random.randint(0, MAX_PRIORITY)
-            net_tx, net_rx = [], []
-            jobs.append(job_dict(nodes_required=nodes_required, name=name,
-                                 account=account, cpu_trace=cpu_trace,
-                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
-                                 nrx_trace=net_rx, end_state=end_state,
-                                 id=job_index, priority=priority,
-                                 partition=partition,
-                                 submit_time=time_to_next_job - 100,
-                                 time_limit=time_limit,
-                                 start_time=time_to_next_job,
-                                 end_time=time_to_next_job + wall_time,
-                                 wall_time=wall_time, trace_time=wall_time,
-                                 trace_start_time=0, trace_end_time=wall_time))
-        return jobs
-
-
 
     def generate_random_jobs(self, args) -> list[list[any]]:
         """ Generate random jobs with specified number of jobs. """
 
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
-        if args.mu is None:
-            mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
-        if args.sigma is None:
-            sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
 
         jobs = []
         for job_index in range(args.numjobs):
             # Randomly select a partition
             # Get the corresponding config for the selected partition
-            wes_random = False
-            if wes_random:
-                nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
-                name = random.choice(JOB_NAMES)
-                account = random.choice(ACCT_NAMES)
-                cpu_util = random.random() * config['CPUS_PER_NODE']
-                gpu_util = random.random() * config['GPUS_PER_NODE']
-                wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-                time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
-                end_state = determine_state(config['JOB_END_PROBS'])
-                cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
-                priority = random.randint(0, MAX_PRIORITY)
-                net_tx, net_rx = [], []
-            else:
-                max_nodes = config['MAX_NODES_PER_JOB']
-                min_nodes = 1
-                nodes_required = truncated_weibull(max_nodes, 0.1, min_nodes, max_nodes)
-                name = random.choice(JOB_NAMES)
-                account = random.choice(ACCT_NAMES)
-                cpu_util = random.random() * config['CPUS_PER_NODE']
-                gpu_util = random.random() * config['GPUS_PER_NODE']
-                #wall_time = truncated_weibull((config['MAX_WALL_TIME']/4)*3+config['MIN_WALL_TIME'],0.5,config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
-                wall_time = truncated_weibull(
-                    (config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
-                    #(config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
-                    config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
-
-                #time_limit = truncated_weibull(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 300 * 300  # to 5 minutes
-                time_limit = truncated_weibull(config['MAX_WALL_TIME'] // 2 + config['MIN_WALL_TIME'], 1, wall_time, config['MAX_WALL_TIME']) // 300 * 300  # to 5 minutes
-                end_state = determine_state(config['JOB_END_PROBS'])
-                cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
-                if nodes_required < max_nodes * .10:
-                    priority = 0
-                elif nodes_required < max_nodes * .20:
-                    priority = 1
-                elif nodes_required < max_nodes * .50:
-                    priority = 2
-                else:
-                    priority = 3
-                net_tx, net_rx = [], []
+            nodes_required = random.randint(1, config['MAX_NODES_PER_JOB'])
+            name = random.choice(JOB_NAMES)
+            account = random.choice(ACCT_NAMES)
+            cpu_util = random.random() * config['CPUS_PER_NODE']
+            gpu_util = random.random() * config['GPUS_PER_NODE']
+            mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
+            sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
+            wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
+            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+            end_state = determine_state(config['JOB_END_PROBS'])
+            cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
+            priority = random.randint(0, MAX_PRIORITY)
+            net_tx, net_rx = [], []
 
             # Jobs arrive according to Poisson process
             time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
@@ -252,31 +216,6 @@ class Workload:
                                  end_time=time_to_next_job + wall_time,
                                  wall_time=wall_time, trace_time=wall_time,
                                  trace_start_time=0, trace_end_time=wall_time))
-
-        return jobs
-
-    def synthetic(self, **kwargs):
-        args = kwargs.get('args',None)
-        print("ARGS")
-        print(args)
-        num_jobs = args.numjobs
-        #for key,value in kwargs.items():
-        #    print(key,value)
-        #print("HERE")
-        #print(sum(kwargs.get('multimodal')))
-        jobs = []
-        if len(args.distribution) != 1 and sum(args.multimodal) != 1.0:
-            raise Exception(f"Sum of --multimodal != 1.0 : {args.multimodal} == {sum(args.multimodal)}")
-        for dist,percentage in zip(args.distribution,args.multimodal):
-            print(args.distribution)
-            if "uniform" in args.distribution:
-                jobs.extend(self.generate_uniform_jobs(num_jobs=int(percentage * num_jobs)))
-            elif "weibull" in args.distribution:
-                jobs.extend(self.generate_weibull_jobs(shape=args.dist_shape,scale=args.dist_scale,num_jobs=int(percentage * num_jobs)))
-            elif "normal" in args.distribution:
-                jobs.extend(self.generate_normal_jobs(num_jobs=int(percentage * num_jobs)))
-            else:
-                pass
         return jobs
 
     def random(self, **kwargs):
@@ -535,7 +474,7 @@ def plot_job_hist(jobs):
     #axs[1,0].set_yticklabels([str(n).zfill(2) + ':00' for n in np.arange(min(y)//3600, max(y)//3600, 1)])
     minx_s = 0
     maxx_s = max(x2)
-    x_label_mins = [n for n in np.arange(minx_s // 60 ,maxx_s // 60 )]
+    x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
                             (x1,x2) in [(n // 60,n % 60) for
@@ -561,11 +500,16 @@ def add_workload_to_parser(parser):
     parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
     parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+", help="Percentage to draw from each distribution (list of floats)e.g. '0.2 0.8' percentages apply in order to the list of the  --distribution argument list.")
-    parser.add_argument("--distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
-    parser.add_argument("--dist_shape", nargs="+", type=float, required=False, help="Shape of weibull")
-    parser.add_argument("--dist_scale", nargs="+", type=float, required=False, help="Scale of weibull")
-    parser.add_argument("--mu", nargs="+", type=float, required=False, help="Mean (mu) for Normal distribution")
-    parser.add_argument("--sigma", nargs="+", type=float, required=False, help="Standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--job-size-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
+    parser.add_argument("--weibull-job-shape", type=float, required=False, help="Shape of weibull")
+    parser.add_argument("--weibull-job-scale", type=float, required=False, help="Scale of weibull")
+
+    parser.add_argument("--wall-time-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
+    parser.add_argument("--weibull-time-shape", type=float, required=False, help="Shape of weibull")
+    parser.add_argument("--weibull-time-scale", type=float, required=False, help="Scale of weibull")
+
+    parser.add_argument("--wall-time-mean", type=float, required=False, help="Mean (mu) for Normal distribution")
+    parser.add_argument("--wall-time-stddev", type=float, required=False, help="Standard deviation (sigma) for Normal distribution")
 
     return parser
 
