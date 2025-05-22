@@ -30,7 +30,7 @@ from tqdm import tqdm
 from .config import ConfigManager
 from .job import Job
 from .account import Accounts
-from .plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
+from .plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt, plot_network_histogram
 from .utils import next_arrival
 
 
@@ -143,9 +143,13 @@ if __name__ == "__main__":
         print(f'Average nrx_trace per job: {np.mean(nrx_means):.2f}')
     else:
         print('No valid nrx_trace data found.')
-    # ————————————————————————————
 
     if args.plot:
         #plot_nodes_histogram(nr_list)
         #plot_submit_times(submit_times, nr_list)
         plot_job_gantt(submit_times, end_times, nr_list)
+
+        if ntx_means and nrx_means:
+            # combine into total per‐job traffic
+            net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
+            plot_network_histogram(net_means)

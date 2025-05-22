@@ -280,7 +280,31 @@ def plot_job_gantt(start_times, end_times, node_counts):
 
     plt.tight_layout()
     plt.savefig('job_gantt.png', dpi=300)
-    plt.show()
+
+
+def plot_network_histogram(data, bins=50, save_path='network_histogram.png'):
+    """
+    Plot a histogram of network traffic per job, with scientific notation on the x-axis.
+    """
+    import matplotlib.pyplot as plt
+
+    plt.clf()
+    plt.figure(figsize=(10, 3))
+    plt.hist(data, bins=bins, edgecolor='black', alpha=0.7)
+
+    # log-scale the y-axis
+    plt.yscale('log')
+
+    # force scientific notation on x-axis
+    plt.ticklabel_format(style='scientific', axis='x', scilimits=(0,0))
+
+    plt.xlabel('Network Traffic per Job (bytes)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Network Traffic per Job')
+    plt.grid(True, which='both', ls='--', lw=0.5)
+
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
 
 
 if __name__ == "__main__":

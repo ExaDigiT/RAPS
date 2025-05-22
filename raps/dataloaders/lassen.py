@@ -13,8 +13,8 @@ Usage Instructions:
     git clone https://github.com/LLNL/LAST/ && cd LAST
     git lfs pull
 
-    # to analyze dataset
-    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -v
+    # to analyze dataset and plot histograms
+    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --plot
 
     # to simulate the dataset as submitted
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
@@ -24,6 +24,7 @@ Usage Instructions:
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 365d -t 1d
+
 """
 import math
 import os
