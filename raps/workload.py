@@ -442,7 +442,13 @@ class Workload:
         return jobs
 
 
-def plot_job_hist(jobs,num_dist=1,split=[1.0,0.0]):
+def plot_job_hist(jobs,dist_split=None):
+    # put args.multimodal in dist_split!
+    split = [1.0]
+    num_dist = 1
+    if dist_split:
+        num_dist = len(dist_split)
+        split = dist_split
 
     y = [y['nodes_required'] for y in jobs]
     x = [x['wall_time'] for x in jobs]
@@ -606,7 +612,4 @@ if __name__ == "__main__":
 
     workload = Workload(config)
     jobs = getattr(workload, args.workload)(args=args)
-    num_dist = 1
-    if args.multimodal:
-        num_dist = len(args.multimodal)
-    plot_job_hist(jobs,num_dist, args.multimodal)
+    plot_job_hist(jobs, args.multimodal)
