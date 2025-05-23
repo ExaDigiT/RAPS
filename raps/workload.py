@@ -66,7 +66,10 @@ class Workload:
         return random.randint(1, config['MAX_NODES_PER_JOB'])
 
     def job_size_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.weibull_job_scale, args.weibull_job_shape, 1, config['MAX_NODES_PER_JOB'])
+        return truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
+
+    def job_size_distribution_draw_normal(self,args,config):
+        return truncated_normalvariate(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
 
     def cpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['CPUS_PER_NODE'])
@@ -78,13 +81,18 @@ class Workload:
         return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
 
     def wall_time_distribution_draw_normal(self,args,config):
-        return max(1,truncated_normalvariate(float(args.wall_time_mean), float(args.wall_time_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600)
+        return max(1,truncated_normalvariate(float(args.walltime_normal_mean), float(args.walltime_normal_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) / 3600 * 3600)
 
     def wall_time_distribution_draw_weibull(self,args,config):
-        wall_time = truncated_weibull((config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
-                                      # (config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
-                                      config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
-        return wall_time
+        return truncated_weibull(args.walltime_weibull_scale, args.walltime_weibull_shape, config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
+
+        #wall_time = random.weibullvariate(args.walltime_weibull_scale,args.walltime_weibull_shape)
+        ##wall_time = truncated_weibull(args.walltime_weibull_scale,args.walltime_weibull_shape)
+
+        ##(config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
+        ##                              # (config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
+        ##                              config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
+        #return wall_time
 
     def generate_jobs(self, *,
                       job_arrival_distribution_to_draw_from,
@@ -132,28 +140,30 @@ class Workload:
         print("ARGS")
         print(args)
         total_jobs = args.numjobs
-        orig_job_size_distribution = args.job_size_distribution
-        orig_wall_time_distribution = args.job_size_distribution
+        orig_job_size_distribution = args.jobsize_distribution
+        orig_wall_time_distribution = args.jobsize_distribution
         jobs = []
-        if len(args.job_size_distribution) != 1 and sum(args.multimodal) != 1.0:
+        if len(args.jobsize_distribution) != 1 and sum(args.multimodal) != 1.0:
             raise Exception(f"Sum of --multimodal != 1.0 : {args.multimodal} == {sum(args.multimodal)}")
-        for i,(jsdist,wtdist,percentage) in enumerate(zip(args.job_size_distribution,args.wall_time_distribution,args.multimodal)):
+        for i,(jsdist,wtdist,percentage) in enumerate(zip(args.jobsize_distribution,args.walltime_distribution,args.multimodal)):
 
             args.numjobs = math.floor(total_jobs * percentage)
-            args.job_size_distribution = jsdist
-            args.wall_time_distribution = wtdist
+            args.jobsize_distribution = jsdist
+            args.walltime_distribution = wtdist
 
             job_arrival_distribution_to_draw_from = self.job_arrival_distribution_draw_poisson
-            match args.job_size_distribution:
+            match args.jobsize_distribution:
                 case "uniform":
                     job_size_distribution_to_draw_from = self.job_size_distribution_draw_uniform
+                case "normal":
+                    job_size_distribution_to_draw_from = self.job_size_distribution_draw_normal
                 case "weibull":
                     job_size_distribution_to_draw_from = self.job_size_distribution_draw_weibull
                 case _:
-                    raise NotImplementedError(args.job_size_distribution)
+                    raise NotImplementedError(args.jobsize_distribution)
             cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_uniform
             gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_uniform
-            match args.wall_time_distribution:
+            match args.walltime_distribution:
                 case "weibull":
                     wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_weibull
                 case "normal":
@@ -162,7 +172,7 @@ class Workload:
                     wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_uniform
 
                 case _:
-                    raise NotImplementedError(args.wall_time_distribution)
+                    raise NotImplementedError(args.walltime_distribution)
 
             new_jobs = self.generate_jobs(
                 job_arrival_distribution_to_draw_from=job_arrival_distribution_to_draw_from,
@@ -173,8 +183,8 @@ class Workload:
                 args=args)
             jobs.extend(new_jobs)
         args.numjobs = total_jobs
-        args.job_size_distribution = orig_job_size_distribution
-        args.wall_time_distribution = orig_wall_time_distribution
+        args.jobsize_distribution = orig_job_size_distribution
+        args.walltime_distribution = orig_wall_time_distribution
         return jobs
 
     def generate_random_jobs(self, args) -> list[list[any]]:
@@ -500,16 +510,24 @@ def add_workload_to_parser(parser):
     parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
     parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+", help="Percentage to draw from each distribution (list of floats)e.g. '0.2 0.8' percentages apply in order to the list of the  --distribution argument list.")
-    parser.add_argument("--job-size-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
-    parser.add_argument("--weibull-job-shape", type=float, required=False, help="Shape of weibull")
-    parser.add_argument("--weibull-job-scale", type=float, required=False, help="Scale of weibull")
 
-    parser.add_argument("--wall-time-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
-    parser.add_argument("--weibull-time-shape", type=float, required=False, help="Shape of weibull")
-    parser.add_argument("--weibull-time-scale", type=float, required=False, help="Scale of weibull")
+    # Jobsize:
+    parser.add_argument("--jobsize-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
 
-    parser.add_argument("--wall-time-mean", type=float, required=False, help="Mean (mu) for Normal distribution")
-    parser.add_argument("--wall-time-stddev", type=float, required=False, help="Standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--jobsize-normal-mean", type=float, required=False, help="Mean (mu) for Normal distribution")
+    parser.add_argument("--jobsize-normal-stddev", type=float, required=False, help="Standard deviation (sigma) for Normal distribution")
+
+    parser.add_argument("--jobsize-weibull-shape", type=float, required=False, help="Jobsize shape of weibull")
+    parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
+
+    # Walltime:
+    parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
+
+    parser.add_argument("--walltime-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--walltime-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+
+    parser.add_argument("--walltime-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
+    parser.add_argument("--walltime-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
 
     return parser
 
