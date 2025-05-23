@@ -323,8 +323,8 @@ def create_casename(prefix=''):
     return prefix + str(uuid.uuid4())[:7]
 
 
-def next_arrival(lambda_rate):
-    if not hasattr(next_arrival, 'next_time'):
+def next_arrival(lambda_rate,reset=False):
+    if not hasattr(next_arrival, 'next_time') or reset is True:
         # Initialize the first time it's called
         next_arrival.next_time = 0
     else:
