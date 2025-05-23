@@ -1,6 +1,6 @@
 {
-    "NUM_CDUS": 17,
-    "RACKS_PER_CDU": 16,
+    "NUM_CDUS": 257,
+    "RACKS_PER_CDU": 1,
     "NODES_PER_RACK": 18,
     "CHASSIS_PER_RACK": 1,
     "NODES_PER_BLADE": 1,
@@ -8,7 +8,7 @@
     "NICS_PER_NODE": 2,
     "RECTIFIERS_PER_CHASSIS": 5,
     "NODES_PER_RECTIFIER": 4,
-    "MISSING_RACKS": [257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271],
+    "MISSING_RACKS": [],
     "DOWN_NODES": [],
     "CPUS_PER_NODE": 2,
     "GPUS_PER_NODE": 6,
