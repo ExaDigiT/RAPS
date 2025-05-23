@@ -138,8 +138,6 @@ class Workload:
 
     def synthetic(self, **kwargs):
         args = kwargs.get('args',None)
-        print("ARGS")
-        print(args)
         total_jobs = args.numjobs
         orig_job_size_distribution = args.jobsize_distribution
         orig_wall_time_distribution = args.jobsize_distribution
@@ -444,15 +442,25 @@ class Workload:
         return jobs
 
 
-def plot_job_hist(jobs,num_dist=1):
+def plot_job_hist(jobs,num_dist=1,split=[1.0,0.0]):
 
     y = [y['nodes_required'] for y in jobs]
     x = [x['wall_time'] for x in jobs]
     x2 = [x['time_limit'] for x in jobs]
     fig_m = plt.figure()
-    gs = fig_m.add_gridspec(3, 1)
-    gs0 = gs[0:2].subgridspec(5,5)
-    gs1 = gs[2].subgridspec(1,1)
+    gs = fig_m.add_gridspec(30, 1)
+    gs0 = gs[0:20].subgridspec(500,500,hspace=0,wspace=0)
+    gs1 = gs[24:].subgridspec(1,1)
+
+    ax_top = fig_m.add_subplot(gs0[:])
+    ax_top.axis('off')
+    ax_top.set_title('Job Distribution')
+
+    ax_bot = fig_m.add_subplot(gs1[:])
+    ax_bot.axis('off')
+    ax_bot.set_title('Submit Time + Wall Time')
+
+
     #ax0 = fig_m.add_subplot(gs[:2,:])
     #ax1 = fig_m.add_subplot(gs[2:,:])
 
@@ -460,22 +468,17 @@ def plot_job_hist(jobs,num_dist=1):
     #fig, axs = plt.subplots(2, 2, gridspec_kw={'width_ratios': (4, 1), 'height_ratios': (1, 4)})
     axs = []
     col = []
-    col.append(fig_m.add_subplot(gs0[0,:4]))
-    col.append(fig_m.add_subplot(gs0[4:,4:]))
+    col.append(fig_m.add_subplot(gs0[:100,:433]))
+    col.append(fig_m.add_subplot(gs0[400:,433:]))
     axs.append(col.copy())
     col = []
-    col.append(fig_m.add_subplot(gs0[1:,:4]))
-    col.append(fig_m.add_subplot(gs0[1:,4:]))
+    col.append(fig_m.add_subplot(gs0[100:,:433]))
+    col.append(fig_m.add_subplot(gs0[100:,433:]))
     axs.append(col.copy())
 
     ax_b = fig_m.add_subplot(gs1[:,:])
-    #ax00 = fig_m.add_subplot(gs0[1:5,0])
-    #ax10 = ax1.add_subplot(gss[1:4,1:4])
-    #ax11 = ax1.add_subplot(gss[4:,1:4])
 
-    ## Remove space between subplots
-    #fig.subplots_adjust(wspace=0, hspace=0)
-    ## Create scatter plot
+    # Create scatter plot
     for i in range(len(x)):
         axs[1][0].plot([x[i],x2[i]],[y[i],y[i]],color='lightblue',zorder=1)
     axs[1][0].scatter(x2, y,marker='.',c='lightblue',zorder=2)
@@ -483,30 +486,21 @@ def plot_job_hist(jobs,num_dist=1):
 
     axs[0][0].hist(x2,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical',color='lightblue')
     axs[0][0].hist(x,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical')
-    ##print(x)
     axs[1][0].sharex(axs[0][0])
 
     axs[1][1].hist(y,bins=max(1,min(100,(max(y) - min(y)))), orientation='horizontal')
     axs[1][0].sharey(axs[1][1])
 
-    ## Remove ticks
+    # Remove ticks
     axs[0][0].set_xticks([])
-    #axs[0, 0].set_yticks([])
-    #axs[1, 1].set_xticks([])
     axs[1][1].set_yticks([])
-    #axs[0, 1].set_xticks([])
-    #axs[0, 1].set_yticks([])
-    #axs[0, 1].set_yticks([])
     axs[0][1].spines['top'].set_color('white')
     axs[0][1].set_yticks([])
     axs[0][1].set_xticks([])
-    #axs[0, 1].spines['bottom'].set_color('white')
-    #axs[0, 1].spines['left'].set_color('white')
     axs[0][1].spines['right'].set_color('white')
 
     axs[1][0].set_ylabel("nodes [N]")
     axs[1][0].set_xlabel("wall time [hh:mm]")
-    #axs[1,0].set_yticklabels([str(n).zfill(2) + ':00' for n in np.arange(min(y)//3600, max(y)//3600, 1)])
     minx_s = 0
     maxx_s = math.ceil(max(x2))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
@@ -514,7 +508,6 @@ def plot_job_hist(jobs,num_dist=1):
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
                             (x1,x2) in [(n // 60,n % 60) for
                                         n in x_label_mins[0::60]]]
-    print(x_label_str)
     axs[1][0].set_xticks(x_label_ticks,x_label_str)
 
     miny = min(y)
@@ -531,22 +524,37 @@ def plot_job_hist(jobs,num_dist=1):
     submit_t = [x['submit_time'] for x in jobs]
 
     offset = 0
-
+    split_index = 0
+    split_offset = math.floor(len(x) * split[split_index])
     gantt_nodes = args.gantt_nodes
     if gantt_nodes:
+        if split[0] == 0.0:
+            ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+            split_index += 1
         for i in range(len(x)):
             #ax_b.barh(i,duration[i], height=1.0, left=submit_t[i])
-            ax_b.barh(offset+nodes_required[i]/2,duration[i], height=nodes_required[i], left=submit_t[i])
+            ax_b.barh(offset + nodes_required[i] / 2,duration[i], height=nodes_required[i], left=submit_t[i])
             offset += nodes_required[i]
-            if len(x)%num_dist:
-                ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5*sum(nodes_required)*0.01)
+            if i != len(x) - 1 and i == split_offset - 1 and split_index < len(split):
+                ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+                split_index += 1
+                split_offset += math.floor(len(x) * split[split_index])
                 #ax_b.axhline(y=(len(x)/num_dist * i)-0.5, color='red', linestyle='--',lw=0.5)
+        if split[-1] == 0.0:
+            ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+            split_index += 1
+        ax_b.set_ylabel("Jobs' acc. nodes")
     else:
         for i in range(len(x)):
             ax_b.barh(i,duration[i], height=1.0, left=submit_t[i])
         for i in range(1,num_dist):
-            ax_b.axhline(y=(len(x)/num_dist * i)-0.5, color='red', linestyle='--',lw=0.5)
+            if num_dist == 1:
+                break
+            ax_b.axhline(y=(len(x) * split[split_index]) - 0.5, color='red', linestyle='--',lw=0.5)
+            split_index += 1
+        ax_b.set_ylabel("Job ID")
         #ax_b labels:
+    ax_b.set_xlabel("time [hh:mm]")
     minx_s = 0
     maxx_s = math.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
@@ -601,4 +609,4 @@ if __name__ == "__main__":
     num_dist = 1
     if args.multimodal:
         num_dist = len(args.multimodal)
-    plot_job_hist(jobs,num_dist)
+    plot_job_hist(jobs,num_dist, args.multimodal)
