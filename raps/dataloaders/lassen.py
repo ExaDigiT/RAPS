@@ -169,12 +169,18 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # total_energy = node_data['energy'].sum() # Joules
 
         # Network utilization - since values are given in octets / quarter of a byte, multiply by 4 to get bytes
-        ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else []
-        ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else []
+        total_ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else 0
+        total_ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else 0
+
+        n = 1 # use total bytes per job
+        #n = nodes_required or 1 # use average bytes per node
+        #print("***", n, total_ib_tx, total_ib_rx)
+        ib_tx_per_node = total_ib_tx / n
+        ib_rx_per_node = total_ib_rx / n
 
         # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
         # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
-        net_tx, net_rx = generate_network_sequences_avg(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        net_tx, net_rx = throughput_traces(ib_tx_per_node, ib_rx_per_node, samples)
 
         # no priorities defined!
         priority = row.get('priority', 0)
@@ -289,18 +295,11 @@ def generate_network_sequences(total_tx, total_rx, intervals, lambda_poisson):
     return tx_bursts, rx_bursts
 
 
-def generate_network_sequences_avg(total_tx, total_rx, intervals, lambda_poisson):
+def throughput_traces(total_tx, total_rx, intervals):
 
     if not total_tx or not total_rx:
         return [], []
 
-    # Generate sporadic bursts using a Poisson distribution (shared for both tx and rx)
-    #burst_intervals = np.random.poisson(lam=lambda_poisson, size=intervals)
-
-    # Ensure some intervals have no traffic (both tx and rx will share zero intervals)
-    #burst_intervals = np.where(burst_intervals > 0, burst_intervals, 0)
-
-    # Adjust bursts for both tx and rx
     tx_bursts = [total_tx // intervals] * intervals
     rx_bursts = [total_rx // intervals] * intervals
 

@@ -218,24 +218,26 @@ class Engine:
                 else:
                     raise NotImplementedError()
 
-                if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
+                if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace, np.ndarray):
                     if time_quanta_index < len(job.gpu_trace):
                         gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     else:
                         gpu_util = get_utilization(job.gpu_trace, len(job.gpu_trace) - 1)
-                elif isinstance(job.gpu_trace,float) or isinstance(job.gpu_trace,int):
+                elif isinstance(job.gpu_trace, float) or isinstance(job.gpu_trace, int):
                     gpu_util = job.gpu_trace
                 else:
                     raise NotImplementedError()
 
                 net_util = 0
 
-                if (isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray)) and len(job.ntx_trace) and (isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,list)) and len(job.nrx_trace):
-                    max_link_bw = self.config.get('NETWORK_MAX_BW')
+                if (isinstance(job.ntx_trace, list) or isinstance(job.ntx_trace, np.ndarray)) and \
+                   (isinstance(job.nrx_trace, list) or isinstance(job.nrx_trace, list)) and \
+                   len(job.ntx_trace) and len(job.nrx_trace):
+                    max_throughput = self.config.get('NETWORK_MAX_BW') * self.config.get('TRACE_QUANTA')
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
-                    net_util = network_utilization(net_tx, net_rx, max_link_bw)
-                    net_cong = network_congestion(net_tx, net_rx, max_link_bw)
+                    net_util = network_utilization(net_tx, net_rx, max_throughput)
+                    net_cong = network_congestion(net_tx, net_rx, max_throughput)
                     net_tx_list.append(net_tx)
                     net_rx_list.append(net_rx)
                     if self.debug:
@@ -248,14 +250,14 @@ class Engine:
                     # Get the maximum allowed bandwidth from the configuration.
                     if net_cong > 1: #network_congestion_threshold:
                         if self.debug:
-                            print(f"congested net_cong: {net_cong}, max_link_bw: {max_link_bw}")
+                            print(f"congested net_cong: {net_cong}, max_throughput: {max_throughput}")
                             print(f"length of {len(job.gpu_trace)} before dilation")
-                        current_bw = net_tx + net_rx
-                        slowdown_factor = network_slowdown(current_bw, max_link_bw)
+                        throughput = net_tx + net_rx
+                        slowdown_factor = network_slowdown(throughput, max_throughput)
                         #slowdown_factor = min(slowdown_factor, 2) # set max slowdown factor
                         # Optionally, only apply slowdown once per job to avoid compounding the effect.
                         if self.debug:
-                            print("***", hasattr(job, 'dilated'), current_bw, max_link_bw, slowdown_factor)
+                            print("***", hasattr(job, 'dilated'), throughput, max_throughput, slowdown_factor)
                         #if not hasattr(job, 'dilated') or not job.dilated:
                         if not job.dilated:
                             if self.debug:
