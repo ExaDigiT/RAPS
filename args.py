@@ -59,6 +59,8 @@ parser.add_argument('--backfill', type=str, choices=choices, default=None, help=
 # Redistribution of job arrival
 choices = ['prescribed', 'poisson']
 parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
+parser.add_argument('--arrival-poisson-rate', default=1, type=float, help='Modify arrival rate of poisson distribution (default 1)')
+
 
 # Account options
 parser.add_argument('--accounts', action='store_true', help='Flag indicating if accounts should be tracked')

@@ -45,7 +45,7 @@ ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
 
 MAX_PRIORITY = 500000
 
-from raps.utils import truncated_normalvariate, determine_state, next_arrival, truncated_weibull
+from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, truncated_weibull
 
 
 class Workload:
@@ -61,7 +61,7 @@ class Workload:
         return (cpu_trace, gpu_trace)
 
     def job_arrival_distribution_draw_poisson(self,args,config):
-        return next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+        return next_arrival(args.arrival_poisson_rate / config['JOB_ARRIVAL_TIME'])
 
     def job_size_distribution_draw_uniform(self,args,config):
         return random.randint(1, config['MAX_NODES_PER_JOB'])
@@ -70,19 +70,31 @@ class Workload:
         return truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
 
     def job_size_distribution_draw_normal(self,args,config):
-        return truncated_normalvariate(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
+        return truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
 
     def cpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['CPUS_PER_NODE'])
 
+    def cpu_utilization_distribution_draw_normal(self,args,config):
+        return truncated_normalvariate_float(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
+
+    def cpu_utilization_distribution_draw_weibull(self,args,config):
+        return truncated_weibull(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
+
     def gpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['GPUS_PER_NODE'])
+
+    def gpu_utilization_distribution_draw_normal(self,args,config):
+        return truncated_normalvariate_float(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
+
+    def gpu_utilization_distribution_draw_weibull(self,args,config):
+        return truncated_weibull(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
 
     def wall_time_distribution_draw_uniform(self,args,config):
         return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
 
     def wall_time_distribution_draw_normal(self,args,config):
-        return max(1,truncated_normalvariate(float(args.walltime_normal_mean), float(args.walltime_normal_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) / 3600 * 3600)
+        return max(1,truncated_normalvariate_int(float(args.walltime_normal_mean), float(args.walltime_normal_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) / 3600 * 3600)
 
     def wall_time_distribution_draw_weibull(self,args,config):
         return truncated_weibull(args.walltime_weibull_scale, args.walltime_weibull_shape, config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
@@ -138,17 +150,26 @@ class Workload:
 
     def synthetic(self, **kwargs):
         args = kwargs.get('args',None)
+        print(args)
         total_jobs = args.numjobs
         orig_job_size_distribution = args.jobsize_distribution
         orig_wall_time_distribution = args.jobsize_distribution
+        orig_cpuutil_distribution = args.cpuutil_distribution
+        orig_gpuutil_distribution = args.gpuutil_distribution
         jobs = []
         if len(args.jobsize_distribution) != 1 and sum(args.multimodal) != 1.0:
             raise Exception(f"Sum of --multimodal != 1.0 : {args.multimodal} == {sum(args.multimodal)}")
-        for i,(jsdist,wtdist,percentage) in enumerate(zip(args.jobsize_distribution,args.walltime_distribution,args.multimodal)):
+        for i,(jsdist,wtdist,cudist,gudist,percentage) in enumerate(zip(args.jobsize_distribution,
+                                                                        args.walltime_distribution,
+                                                                        args.cpuutil_distribution,
+                                                                        args.gpuutil_distribution,
+                                                                        args.multimodal)):
 
             args.numjobs = math.floor(total_jobs * percentage)
             args.jobsize_distribution = jsdist
             args.walltime_distribution = wtdist
+            args.cpuutil_distribution = cudist
+            args.gpuutil_distribution = gudist
 
             job_arrival_distribution_to_draw_from = self.job_arrival_distribution_draw_poisson
             match args.jobsize_distribution:
@@ -160,8 +181,7 @@ class Workload:
                     job_size_distribution_to_draw_from = self.job_size_distribution_draw_weibull
                 case _:
                     raise NotImplementedError(args.jobsize_distribution)
-            cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_uniform
-            gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_uniform
+
             match args.walltime_distribution:
                 case "weibull":
                     wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_weibull
@@ -169,9 +189,28 @@ class Workload:
                     wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_normal
                 case "uniform":
                     wall_time_distribution_to_draw_from = self.wall_time_distribution_draw_uniform
-
                 case _:
                     raise NotImplementedError(args.walltime_distribution)
+
+            match args.cpuutil_distribution:
+                case "uniform":
+                    cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_uniform
+                case "normal":
+                    cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_normal
+                case "weibull":
+                    cpu_util_distribution_to_draw_from = self.cpu_utilization_distribution_draw_weibull
+                case _:
+                    raise NotImplementedError(args.cpuutil_distribution)
+
+            match args.gpuutil_distribution:
+                case "uniform":
+                    gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_uniform
+                case "normal":
+                    gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_normal
+                case "weibull":
+                    gpu_util_distribution_to_draw_from = self.gpu_utilization_distribution_draw_weibull
+                case _:
+                    raise NotImplementedError(args.gpuutil_distribution)
 
             new_jobs = self.generate_jobs(
                 job_arrival_distribution_to_draw_from=job_arrival_distribution_to_draw_from,
@@ -184,6 +223,8 @@ class Workload:
             jobs.extend(new_jobs)
         args.numjobs = total_jobs
         args.jobsize_distribution = orig_job_size_distribution
+        args.cpuutil_distribution = orig_cpuutil_distribution
+        args.gpuutil_distribution = orig_gpuutil_distribution
         args.walltime_distribution = orig_wall_time_distribution
         return jobs
 
@@ -204,8 +245,8 @@ class Workload:
             gpu_util = random.random() * config['GPUS_PER_NODE']
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = truncated_normalvariate(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+            wall_time = truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
+            time_limit = truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
@@ -442,7 +483,7 @@ class Workload:
         return jobs
 
 
-def plot_job_hist(jobs,dist_split=None):
+def plot_job_hist(jobs,config=None,dist_split=None):
     # put args.multimodal in dist_split!
     split = [1.0]
     num_dist = 1
@@ -475,7 +516,7 @@ def plot_job_hist(jobs,dist_split=None):
     axs = []
     col = []
     col.append(fig_m.add_subplot(gs0[:100,:433]))
-    col.append(fig_m.add_subplot(gs0[400:,433:]))
+    col.append(fig_m.add_subplot(gs0[:100,433:]))
     axs.append(col.copy())
     col = []
     col.append(fig_m.add_subplot(gs0[100:,:433]))
@@ -490,6 +531,27 @@ def plot_job_hist(jobs,dist_split=None):
     axs[1][0].scatter(x2, y,marker='.',c='lightblue',zorder=2)
     axs[1][0].scatter(x, y,zorder=3)
 
+    cpu_util = [x['cpu_trace'] for x in jobs]
+    gpu_util = [x['gpu_trace'] for x in jobs]
+    if not all([x == 0 for x in gpu_util]):
+        axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
+        axs[0][1].hist(gpu_util,bins=100,orientation='horizontal',zorder=1, density=True,color='tab:purple')
+        axs[0][1].axhline(np.mean(gpu_util), color='r', linewidth=1,zorder=3)
+        axs[0][1].set(ylim=[0,config['GPUS_PER_NODE']])
+        axs[0][1].set_ylabel("gpu util")
+        axs[0][1].yaxis.set_label_coords(1.15, 0.5)
+        axs[0][1].yaxis.set_label_position("right")
+        axs[0][1].yaxis.tick_right()
+    else:
+        axs[0][1].set_yticks([])
+        pass
+    axs[0][1].hist(cpu_util,bins=100,orientation='vertical',zorder=1, density=True,color='tab:cyan')
+    axs[0][1].axvline(np.mean(cpu_util), color='r', linewidth=1,zorder=3)
+    axs[0][1].set(xlim=[0,config['CPUS_PER_NODE']])
+    axs[0][1].set_xlabel("cpu util")
+    axs[0][1].xaxis.set_label_coords(0.5,1.30)
+    axs[0][1].xaxis.set_label_position("top")
+    axs[0][1].xaxis.tick_top()
     axs[0][0].hist(x2,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical',color='lightblue')
     axs[0][0].hist(x,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical')
     axs[1][0].sharex(axs[0][0])
@@ -501,10 +563,7 @@ def plot_job_hist(jobs,dist_split=None):
     axs[0][0].set_xticks([])
     axs[1][1].set_yticks([])
     axs[0][1].spines['top'].set_color('white')
-    axs[0][1].set_yticks([])
-    axs[0][1].set_xticks([])
     axs[0][1].spines['right'].set_color('white')
-
     axs[1][0].set_ylabel("nodes [N]")
     axs[1][0].set_xlabel("wall time [hh:mm]")
     minx_s = 0
@@ -525,6 +584,7 @@ def plot_job_hist(jobs,dist_split=None):
     axs[0][0].tick_params(axis="x", labelbottom=False)
     axs[1][1].tick_params(axis="y", labelleft=False)
 
+    # Submit_time and Wall_time
     duration = [x['wall_time'] for x in jobs]
     nodes_required = [x['nodes_required'] for x in jobs]
     submit_t = [x['submit_time'] for x in jobs]
@@ -577,6 +637,7 @@ def plot_job_hist(jobs,dist_split=None):
 
 def add_workload_to_parser(parser):
 
+
     choices = ['random', 'benchmark', 'peak', 'idle','synthetic']
     parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
@@ -599,6 +660,25 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--walltime-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
     parser.add_argument("--walltime-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
+
+    # Utilizations
+    parser.add_argument("--cpuutil-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=['uniform'], help='Distribution type')
+
+    parser.add_argument("--cpuutil-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--cpuutil-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+
+    parser.add_argument("--cpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
+    parser.add_argument("--cpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
+
+    parser.add_argument("--gpuutil-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=['uniform'], help='Distribution type')
+
+    parser.add_argument("--gpuutil-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--gpuutil-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+
+    parser.add_argument("--gpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
+    parser.add_argument("--gpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
+
+
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
 
     return parser
@@ -612,4 +692,4 @@ if __name__ == "__main__":
 
     workload = Workload(config)
     jobs = getattr(workload, args.workload)(args=args)
-    plot_job_hist(jobs, args.multimodal)
+    plot_job_hist(jobs, config=config, dist_split=args.multimodal)

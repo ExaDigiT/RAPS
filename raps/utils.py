@@ -38,7 +38,37 @@ def convert_seconds(seconds):
     return f"{h}:{m}"
 
 
-def truncated_normalvariate(mu, sigma, lower, upper):
+def truncated_normalvariate_int(mu, sigma, lower, upper):
+    """
+    Generate a random number from a truncated normal distribution.
+
+    Parameters
+    ----------
+    mu : float
+        Mean of the distribution.
+    sigma : float
+        Standard deviation of the distribution.
+    lower : float
+        Lower bound of the truncated distribution.
+    upper : float
+        Upper bound of the truncated distribution.
+
+    Returns
+    -------
+    int
+        Random number from the truncated normal distribution.
+    """
+    CUTOFF = 100000000
+    i = 0
+    while i < CUTOFF:
+        number = random.normalvariate(mu, sigma)
+        if lower < number < upper:
+            return int(number)
+        i += 1
+    raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
+
+
+def truncated_normalvariate_float(mu, sigma, lower, upper):
     """
     Generate a random number from a truncated normal distribution.
 
@@ -63,7 +93,7 @@ def truncated_normalvariate(mu, sigma, lower, upper):
     while i < CUTOFF:
         number = random.normalvariate(mu, sigma)
         if lower < number < upper:
-            return int(number)
+            return number
         i += 1
     raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
 

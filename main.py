@@ -107,7 +107,7 @@ if args.replay:
             print("available nodes:", config['AVAILABLE_NODES'])
             for job in tqdm(jobs, desc="Rescheduling jobs"):
                 job['requested_nodes'] = None
-                job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+                job['submit_time'] = next_arrival(args.arrival_poisson_rate / config['JOB_ARRIVAL_TIME'])  # default arrival rate = 1
 
     else:  # custom data loader
         print(*args.replay)
