@@ -9,6 +9,7 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 from datetime import timedelta
 from enum import Enum
 
+import os
 import hashlib
 import math
 import numpy as np
@@ -351,6 +352,40 @@ def create_casename(prefix=''):
         Unique case name.
     """
     return prefix + str(uuid.uuid4())[:7]
+
+
+def create_file_indexed(prefix:str, path:str = None, ending:str = None, create=True) -> str:
+    if path is not None:
+        os.makedirs(path, exist_ok=True)
+    else:
+        path = "./"
+    index = 1
+    while True:
+        if ending:
+            filename = f"{prefix}_{index:03d}.{ending}"
+        else:
+            filename = f"{prefix}_{index:03d}"
+        filepath = os.path.join(path, filename)
+        if not os.path.exists(filepath):
+            if create:
+                open(filepath, "w").close()
+            return filepath
+        index += 1
+
+
+def create_dir_indexed(dir:str, path:str = None) -> str:
+    if dir is None:
+        raise ValueError("'dir' cannot be none")
+    if path is None:
+        path = os.getcwd()
+    index = 1
+    while True:
+        dirname = f"{dir}_{index:03d}"
+        fullpath = os.path.join(path,dirname)
+        if not os.path.exists(fullpath):
+            os.makedirs(fullpath,exist_ok=False)
+            return fullpath
+        index += 1
 
 
 def next_arrival(lambda_rate,reset=False):
