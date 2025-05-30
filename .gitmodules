@@ -1,0 +1,3 @@
+[submodule "models/POWER9CSM"]
+	path = models/POWER9CSM
+	url = https://code.ornl.gov/exadigit/POWER9CSM.git

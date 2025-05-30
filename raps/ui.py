@@ -260,6 +260,7 @@ class LayoutManager:
             power_values = [
                 f"[{data_styles[i]}]{power_row[1][col]}[/]" for i, col in enumerate(power_columns)
             ]
+
             cooling_values = [
                 f"[{data_styles[i + len(power_columns)]}]{cooling_row[1][key]:.1f}[/]" for i, key in enumerate(cooling_keys)
             ]

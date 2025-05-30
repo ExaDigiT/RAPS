@@ -155,8 +155,9 @@ class ThermoFluidsModel:
             # Get temperature from weather data
             temperature = self.weather.get_temperature(target_datetime) or self.config['WET_BULB_TEMP']
 
-        # Set the temperature value
-        runtime_values[self.config['TEMPERATURE_KEY']] = temperature
+        # Set the temperature value(s)
+        for temperature_key in self.config['TEMPERATURE_KEYS']:
+            runtime_values[temperature_key] = temperature
 
         return runtime_values
     
