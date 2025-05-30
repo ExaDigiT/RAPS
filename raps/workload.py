@@ -27,9 +27,7 @@ JOB_END_PROBS : list
 import math
 import random
 import numpy as np
-import argparse
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 
 from raps.job import job_dict
 
@@ -98,14 +96,6 @@ class Workload:
 
     def wall_time_distribution_draw_weibull(self,args,config):
         return truncated_weibull(args.walltime_weibull_scale, args.walltime_weibull_shape, config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
-
-        #wall_time = random.weibullvariate(args.walltime_weibull_scale,args.walltime_weibull_shape)
-        ##wall_time = truncated_weibull(args.walltime_weibull_scale,args.walltime_weibull_shape)
-
-        ##(config['MAX_WALL_TIME'] // 2) + config['MIN_WALL_TIME'], 1,
-        ##                              # (config['MAX_WALL_TIME'] // 4) + config['MIN_WALL_TIME'],
-        ##                              config['MIN_WALL_TIME'],config['MAX_WALL_TIME']) // 60 * 60  # to 1 minute
-        #return wall_time
 
     def generate_jobs(self, *,
                       job_arrival_distribution_to_draw_from,
@@ -507,7 +497,6 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     ax_bot.axis('off')
     ax_bot.set_title('Submit Time + Wall Time')
 
-
     #ax0 = fig_m.add_subplot(gs[:2,:])
     #ax1 = fig_m.add_subplot(gs[2:,:])
 
@@ -532,7 +521,11 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][0].scatter(x, y,zorder=3)
 
     cpu_util = [x['cpu_trace'] for x in jobs]
+    if isinstance(cpu_util[0],np.ndarray):
+        cpu_util = np.concatenate(cpu_util).ravel()
     gpu_util = [x['gpu_trace'] for x in jobs]
+    if isinstance(gpu_util[0],np.ndarray):
+        gpu_util = np.concatenate(gpu_util).ravel()
     if not all([x == 0 for x in gpu_util]):
         axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
         axs[0][1].hist(gpu_util,bins=100,orientation='horizontal',zorder=1, density=True,color='tab:purple')
@@ -637,7 +630,6 @@ def plot_job_hist(jobs,config=None,dist_split=None):
 
 def add_workload_to_parser(parser):
 
-
     choices = ['random', 'benchmark', 'peak', 'idle','synthetic']
     parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
@@ -677,7 +669,6 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--gpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
     parser.add_argument("--gpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
-
 
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
 
