@@ -3,7 +3,7 @@
     "WET_BULB_TEMP": 290.0,
     "ZIP_CODE": 37831,
     "COUNTRY_CODE": "US",
-    "FMU_PATH": "models/summit.fmu",
+    "FMU_PATH": "models/POWER9CSM/fmus/summit.fmu",
     "FMU_COLUMN_MAPPING": {
         "T_sec_r_C": "Rack Return Temperature (\u00b0C)",
         "T_sec_s_C": "Rack Supply Temperature (\u00b0C)",

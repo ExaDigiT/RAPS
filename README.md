@@ -52,6 +52,22 @@ given instead of the parquet files for more quickly running subsequent simulatio
 
     python main.py -f jobs_2024-02-20_12-20-39.npz
 
+
+## Cooling models
+
+We provide several cooling models in the repo https://code.ornl.gov/exadigit/POWER9CSM
+
+    git submodule update --init --recursive
+
+Will install the POWER9CSM in the models folder. To activate cooling when running RAPS,
+use `--cooling` or `-c` argument. e.g.,
+
+    python main.py --system marconi100 -c
+
+    python main.py --system lassen -c
+
+    python main.py --system summit -c
+
 ## Support for multiple system partitions
 
 Multi-partition systems are supported by running the `multi-part-sim.py` script, where a list of configurations can be specified using the `-x` flag as follows:
