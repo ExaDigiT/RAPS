@@ -6,6 +6,7 @@ import numpy as np
 from .job import Job, JobState
 from .policy import PolicyType
 from .network import network_utilization, network_congestion, network_slowdown
+from .network import build_fattree, link_loads_for_job, worst_link_util
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
@@ -82,6 +83,13 @@ class Engine:
               f", with policy {self.scheduler.policy} "\
               f"and backfill {self.scheduler.bfpolicy}")
 
+        # Network
+        self.topology = self.config.get('TOPOLOGY')
+        # if fat-tree, build the graph once
+        if self.topology == "fat-tree":
+            k = config.get("FATTREE_K", 8)
+            self.net_graph = build_fattree(k)
+        self.max_link_bw = self.config.get("NETWORK_MAX_BW")
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -208,17 +216,17 @@ class Engine:
                 # Similar with the first time_quanta index: If the job started
                 # in the past and no trace if there, read index 0 until values
                 # are available.
-                if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
+                if isinstance(job.cpu_trace, list) or isinstance(job.cpu_trace, np.ndarray):
                     if time_quanta_index < len(job.cpu_trace):
                         cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                     else:
                         cpu_util = get_utilization(job.cpu_trace, len(job.cpu_trace) - 1)
-                elif isinstance(job.cpu_trace,float) or isinstance(job.cpu_trace,int):
+                elif isinstance(job.cpu_trace, float) or isinstance(job.cpu_trace, int):
                     cpu_util = job.cpu_trace
                 else:
                     raise NotImplementedError()
 
-                if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace, np.ndarray):
+                if isinstance(job.gpu_trace, list) or isinstance(job.gpu_trace, np.ndarray):
                     if time_quanta_index < len(job.gpu_trace):
                         gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     else:
@@ -237,11 +245,19 @@ class Engine:
                     net_tx = get_utilization(job.ntx_trace, time_quanta_index)
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx, max_throughput)
-                    net_cong = network_congestion(net_tx, net_rx, max_throughput)
+
+                    if self.topology == "fat-tree":
+                        loads = link_loads_for_job(self.net_graph, job.requested_nodes, net_tx)
+                        net_cong = worst_link_util(loads, max_throughput)
+                    else:
+                        # capacity model: simple α+β or normalized overload
+                        net_cong = network_congestion(net_tx, net_rx, max_throughput)
+        
+                    # collect for stats
                     net_tx_list.append(net_tx)
                     net_rx_list.append(net_rx)
                     if self.debug:
-                        print("time:", self.current_time, "net util:", net_util)
+                        print("time:", self.current_time, "net util:", net_util, "net congestion:", net_cong)
                         print("jid", job.id, "net_tx", net_tx)
                         print("jid", job.id, "net_rx", net_tx)
                     net_congs.append(net_cong)

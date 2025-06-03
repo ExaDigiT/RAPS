@@ -1,7 +1,5 @@
 {
-    "TOPOLOGY": "fat-tree",
-    "NETWORK_MODEL": "capacity",
-    "UPLINK_CAPACITY": 10,
+    "TOPOLOGY": "capacity",
     "NETWORK_MAX_BW": 100e9,
     "LATENCY": 1
 }
