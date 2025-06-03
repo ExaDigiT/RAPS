@@ -250,6 +250,7 @@ class Engine:
 
                     if job.nodes_required == 1:
                         net_cong = 0
+                        net_util = 0
 
                     elif self.topology == "fat-tree":
 
