@@ -52,8 +52,20 @@ class Telemetry:
 
     def load_snapshot(self, snapshot: str) -> list:
         """Reads a snapshot from a compressed file and returns the jobs."""
-        jobs, start_timestep, end_timestep, args = np.load(snapshot, allow_pickle=True, mmap_mode='r')  # This is untested and may need fixing!
-        return jobs['jobs'].tolist(), start_timestep, end_timestep, args
+        data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
+
+        # 'data["jobs"]' is already a 1-D ndarray of dicts, so just turn it into a Python list:
+        jobs_arr = data["jobs"]                # e.g. array([ {...}, {...}, … ], dtype=object)
+        jobs_list = jobs_arr.tolist()          # now it’s a Python list of job-dicts
+
+        # If 'start_timestep'/'end_timestep' are 0-d arrays, convert to int
+        start_timestep = int(data["start_timestep"])
+        end_timestep   = int(data["end_timestep"])
+
+        # 'data["args"]' is a 0-d object array containing a Namespace, so do .item() to pull it out:
+        args_from_file = data["args"].item()
+
+        return jobs_list, start_timestep, end_timestep, args_from_file
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
