@@ -430,8 +430,7 @@ class LayoutManager:
                 data.power_df, data.p_flops, data.g_flops_w,
                 data.system_util, uncertainties=uncertainties,
             )
-            if False:
-                self.render()
+
         self.update_progress(1)
 
         self.update_scheduled_jobs(data.running + data.queue)
@@ -452,16 +451,17 @@ class LayoutManager:
             data.system_util, uncertainties=uncertainties,
         )
 
-    def render(self):
-        if not self.debug:
-            self.console.clear()
-            self.console.print(self.layout)
-
     def run(self, jobs, timestep_start, timestep_end):
         """ Runs the UI, blocking until the simulation is complete """
-        with Live(self.layout, refresh_per_second=5):
+        if self.debug:
+            # Debug mode: don’t use Live—just iterate without rendering
             for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
                 self.update(data)
+        else:
+            # Normal UI mode: use Live to render layout automatically
+            with Live(self.layout, refresh_per_second=5):
+                for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
+                    self.update(data)
 
     def run_stepwise(self, jobs, timestep_start, timestep_end):
         """ Prepares the UI and returns a generator for the simulation """
