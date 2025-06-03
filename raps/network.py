@@ -120,3 +120,15 @@ def worst_link_util(loads, throughput):
         if util > max_util:
             max_util = util
     return max_util
+
+def node_id_to_host_name(node_id: int, k: int) -> str:
+    """
+    Map a 0-based integer node_id into one of the fat-tree hosts "h_{pod}_{edge}_{h}".
+    There are (k^3/4) total hosts, assigned in ascending order across pod → edge → h.
+    """
+    hosts_per_pod = (k // 2) * (k // 2)   # e.g. for k=8, hosts_per_pod = 16
+    pod    = node_id // hosts_per_pod
+    offset = node_id %  hosts_per_pod
+    edge   = offset // (k // 2)
+    idx    = offset %  (k // 2)
+    return f"h_{pod}_{edge}_{idx}"

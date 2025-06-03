@@ -166,7 +166,7 @@ class LayoutManager:
         # Define columns with header styles
         columns = [
           "Time", "Jobs Running", "Jobs Queued",
-          "Active Nodes", "Free Nodes", "Down Nodes", "Net Util (%)", "SPJ"
+          "Active Nodes", "Free Nodes", "Down Nodes", "Net Util (%)", "Slowdown per job"
         ]
         table = Table(header_style="bold magenta", expand=True)
         for col in columns:

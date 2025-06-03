@@ -146,7 +146,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # The multiplication by GPUS_PER_NODE fixes this but is patch-work! TODO Refactor and fix
             gpu_util = power_to_utilization(gpu_power,gpu_min_power,gpu_max_power)
             # gpu_util should to be between 0 an 4 (4 GPUs), where 4 is all GPUs full utilization.
-            gpu_trace = gpu_util * config['GPUS_PER_NODE']
+            gpu_util_scalar = gpu_util * config['GPUS_PER_NODE']
 
             # Compute CPU power from CPU usage time
             # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
@@ -163,10 +163,15 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
             # cpu_util should be between 0 an 2 (2 CPUs)
 
-            cpu_trace = cpu_util
+            cpu_util_scalar = cpu_util
             # TODO use total energy for validation
             # Only Node Energy and GPU Energy is reported!
             # total_energy = node_data['energy'].sum() # Joules
+
+            # Expand into lists of length=samples
+            cpu_trace = [cpu_util_scalar] * samples
+            gpu_trace = [gpu_util_scalar] * samples
+
 
         # Network utilization - since values are given in octets / quarter of a byte, multiply by 4 to get bytes
         total_ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else 0

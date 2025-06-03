@@ -6,7 +6,7 @@ import numpy as np
 from .job import Job, JobState
 from .policy import PolicyType
 from .network import network_utilization, network_congestion, network_slowdown
-from .network import build_fattree, link_loads_for_job, worst_link_util
+from .network import build_fattree, link_loads_for_job, worst_link_util, node_id_to_host_name
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
@@ -87,8 +87,10 @@ class Engine:
         self.topology = self.config.get('TOPOLOGY')
         # if fat-tree, build the graph once
         if self.topology == "fat-tree":
-            k = config.get("FATTREE_K", 8)
-            self.net_graph = build_fattree(k)
+            print("building fat tree...")
+            self.fattree_k = config.get("FATTREE_K")
+            self.net_graph = build_fattree(self.fattree_k)
+            print(self.net_graph)
         self.max_link_bw = self.config.get("NETWORK_MAX_BW")
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
@@ -246,11 +248,20 @@ class Engine:
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx, max_throughput)
 
-                    if self.topology == "fat-tree":
-                        loads = link_loads_for_job(self.net_graph, job.requested_nodes, net_tx)
+                    if job.nodes_required == 1:
+                        net_cong = 0
+
+                    elif self.topology == "fat-tree":
+
+                        # Map integers to hostnames
+                        host_list = [node_id_to_host_name(n, self.fattree_k) for n in job.scheduled_nodes]
+                        loads     = link_loads_for_job(self.net_graph, host_list, net_tx)
                         net_cong = worst_link_util(loads, max_throughput)
-                    else:
-                        # capacity model: simple α+β or normalized overload
+
+                        if self.debug:
+                            print("  fat-tree hosts:", host_list)
+
+                    else: # capacity model: simple α+β or normalized overload
                         net_cong = network_congestion(net_tx, net_rx, max_throughput)
         
                     # collect for stats
@@ -264,17 +275,17 @@ class Engine:
                     net_utils.append(net_util)
 
                     # Get the maximum allowed bandwidth from the configuration.
-                    if net_cong > 1: #network_congestion_threshold:
+                    if net_cong > 1:
                         if self.debug:
                             print(f"congested net_cong: {net_cong}, max_throughput: {max_throughput}")
                             print(f"length of {len(job.gpu_trace)} before dilation")
                         throughput = net_tx + net_rx
                         slowdown_factor = network_slowdown(throughput, max_throughput)
-                        #slowdown_factor = min(slowdown_factor, 2) # set max slowdown factor
-                        # Optionally, only apply slowdown once per job to avoid compounding the effect.
+
                         if self.debug:
                             print("***", hasattr(job, 'dilated'), throughput, max_throughput, slowdown_factor)
-                        #if not hasattr(job, 'dilated') or not job.dilated:
+
+                        # Only apply slowdown once per job to avoid compounding the effect.
                         if not job.dilated:
                             if self.debug:
                                 print(f"Applying slowdown factor {slowdown_factor:.2f} to job {job.id} due to network congestion")
@@ -450,14 +461,16 @@ class Engine:
                 jobs += [job for job in all_jobs if job['submit_time'] <= timestep + batch_window]
                 all_jobs[:] = [job for job in all_jobs if job['submit_time'] > timestep + batch_window]
 
-            # Start Siulation loop:
+            # Start Simulation loop:
             # 1. Cleanup old jobs
             completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
+
             # 3. Schedule jobs that are now in the queue.
-            self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
+            self.scheduler.schedule(self.queue, self.running, self.current_time, \
+                           accounts=self.accounts, sorted=(not has_new_additions))
 
             # Stop the simulation if no more jobs are running or in the queue or in the job list.
             if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:
