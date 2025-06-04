@@ -177,11 +177,9 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         total_ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else 0
         total_ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else 0
 
-        n = 1 # use total bytes per job
-        #n = nodes_required or 1 # use average bytes per node
-        #print("***", n, total_ib_tx, total_ib_rx)
-        ib_tx_per_node = total_ib_tx / n
-        ib_rx_per_node = total_ib_rx / n
+        n = nodes_required
+        ib_tx_per_node = total_ib_tx / n # average bytes per node
+        ib_rx_per_node = total_ib_rx / n # average bytes per node
 
         # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
         # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)

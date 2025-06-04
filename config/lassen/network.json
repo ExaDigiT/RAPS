@@ -1,6 +1,6 @@
 {
     "TOPOLOGY": "capacity",
-    "NETWORK_MAX_BW": 10e9,
+    "NETWORK_MAX_BW": 1e9,
     "FATTREE_K": 16,
     "DRAGONFLY_D": 11,
     "DRAGONFLY_A": 9,
