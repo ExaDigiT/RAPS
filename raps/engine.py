@@ -87,7 +87,7 @@ class Engine:
         self.topology = self.config.get('TOPOLOGY')
         # if fat-tree, build the graph once
         if self.topology == "fat-tree":
-            print("building fat tree...")
+            print("building fat-tree...")
             self.fattree_k = config.get("FATTREE_K")
             self.net_graph = build_fattree(self.fattree_k)
             print(self.net_graph)
@@ -95,12 +95,11 @@ class Engine:
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
-        Mofifies jobs_to_submit
-        and self.queue
+        Modifies jobs_to_submit and self.queue
 
         This is a preparatory step and should only be called before the main
         loop of run_simulation.
-        Adds running jobs to the queueu, and removes them from the jobs_to_submit
+        Adds running jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
         # Build a list of jobs whose start_time is <= current_time.
@@ -116,10 +115,9 @@ class Engine:
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
-        Mofifies jobs_to_submit
-        and self.queue
+        Modifies jobs_to_submit and self.queue
 
-        Adds eligible jobs to the queueu, and removes them from the jobs_to_submit
+        Adds eligible jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
         # Build a list of jobs whose submit_time is <= current_time.
