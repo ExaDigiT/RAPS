@@ -19,6 +19,7 @@ class LayoutManager:
     def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, **config):
         self.engine = engine
         self.config = config
+        self.topology = self.engine.config.get("TOPOLOGY", "none")
         self.console = Console()
         self.layout = Layout()
         self.hascooling = layout_type == "layout2"
@@ -102,8 +103,17 @@ class LayoutManager:
         show_nodes : bool, optional
             Flag indicating whether to display node information (default is False).
         """
-        # Define columns with header styles
-        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES", "NODE SEGMENTS"]
+
+        # Decide whether to show "SLOWDOWN" (if real topology) or "NODE SEGMENTS" (if capacity/none)
+        show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
+
+        # Build the column headers
+        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
+        if show_slowdown:
+            columns.append("SLOWDOWN")
+        else:
+            columns.append("NODE SEGMENTS")
+
         if show_nodes:
             columns.append("NODELIST")
         columns.append("TIME")
@@ -113,32 +123,60 @@ class LayoutManager:
         for col in columns:
             table.add_column(col, justify="center")
 
-        # Add data rows with white values
+        # Add data rows
         for job in jobs:
-            node_segments = summarize_ranges(job.scheduled_nodes)
-            if show_nodes:
+            # Number of requested nodes as a string
+            n_nodes = str(job.nodes_required)
+
+            if show_slowdown:
+                # Each Job should have job.net_congestion set in Engine.tick()
+                slow = getattr(job, "slowdown_factor", 0.0)
+                # Format as "1.23×" (if ≤1.00 you will see "1.00×")
+                slowdown_str = f"{slow:.2f}×"
+                col_slow = slowdown_str
+            else:
+                # Fallback to original NODE SEGMENTS logic
+                node_segments = summarize_ranges(job.scheduled_nodes)
+                if show_nodes:
+                    if len(node_segments) > 4:
+                        nodes_display = ", ".join(node_segments[:2] + [ELLIPSES] + node_segments[-2:])
+                    else:
+                        nodes_display = ", ".join(node_segments)
+                    col_slow = nodes_display  # reused variable name for simplicity
+                else:
+                    col_slow = str(len(node_segments))
+
+            # If show_nodes is True, we need to append NODELIST as well
+            if show_nodes and not show_slowdown:
+                # use the same node_segments variable to build the list of nodes
                 if len(node_segments) > 4:
                     nodes_display = ", ".join(node_segments[:2] + [ELLIPSES] + node_segments[-2:])
                 else:
                     nodes_display = ", ".join(node_segments)
-            else:
-                nodes_display = str(len(node_segments))
+                col_nodelist = nodes_display
 
+            # Build the row
             row = [
                 str(job.id).zfill(5),
                 convert_seconds(job.wall_time),
                 str(job.name),
                 str(job.account),
                 job.state.value,
-                str(job.nodes_required),
-                nodes_display,
-                convert_seconds(job.running_time)
+                n_nodes,
+                col_slow,
             ]
 
-            if job.dilated:
+            if show_nodes:
+                # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
+                row.append(col_nodelist)
+
+            # Finally, append the running‐time column
+            row.append(convert_seconds(job.running_time))
+
+            # If the job has been flagged as “dilated”, show its row in yellow
+            if getattr(job, "dilated", False):
                 row = [f"[yellow]{x}[/yellow]" for x in row]
 
-            # Add the row with the 'white' style applied to the whole row
             table.add_row(*row, style="white")
 
         # Update the layout

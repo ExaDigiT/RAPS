@@ -332,6 +332,8 @@ class Engine:
                     else:
                         slowdown_factor = 1
 
+                    job.slowdown_factor = slowdown_factor
+
                     slowdown_factors.append(slowdown_factor)
 
                 else:
