@@ -5,13 +5,21 @@ import numpy as np
 
 from .job import Job, JobState
 from .policy import PolicyType
-from .network import network_utilization, network_congestion, network_slowdown
-from .network import build_fattree, link_loads_for_job, worst_link_util, node_id_to_host_name
 from .utils import summarize_ranges, expand_ranges, get_utilization
 from .utils import sum_values, min_value, max_value
 from .resmgr import ResourceManager
 from .schedulers import load_scheduler
-
+from .network import (
+    network_utilization,
+    network_congestion,
+    network_slowdown,
+    build_fattree,
+    link_loads_for_job,
+    worst_link_util,
+    node_id_to_host_name,
+    build_dragonfly,
+    dragonfly_node_id_to_host_name,
+)
 
 @dataclasses.dataclass
 class TickData:
@@ -87,10 +95,23 @@ class Engine:
         self.topology = self.config.get('TOPOLOGY')
         # if fat-tree, build the graph once
         if self.topology == "fat-tree":
-            print("building fat-tree...")
+            print("building fat-tree graph...")
             self.fattree_k = config.get("FATTREE_K")
             self.net_graph = build_fattree(self.fattree_k)
             print(self.net_graph)
+        elif self.topology == "dragonfly":
+            print("building dragonfly graph...")
+            D = config["DRAGONFLY_D"]     # groups
+            A = config["DRAGONFLY_A"]     # routers per group
+            P = config["DRAGONFLY_P"]     # hosts per router
+            self.net_graph = build_dragonfly(D, A, P)
+            print(self.net_graph)
+
+            real_ids = self.resource_manager.available_nodes
+            real_ids.sort()
+            self.real_to_fat_idx = {rid: idx for idx, rid in enumerate(real_ids)}
+            # e.g. real_to_fat_idx[10] = 0, real_to_fat_idx[11] = 1, etc., up to 791 → 791
+
         self.max_link_bw = self.config.get("NETWORK_MAX_BW")
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
@@ -246,12 +267,11 @@ class Engine:
                     net_rx = get_utilization(job.nrx_trace, time_quanta_index)
                     net_util = network_utilization(net_tx, net_rx, max_throughput)
 
-                    if job.nodes_required == 1:
+                    if job.nodes_required <= 1:
                         net_cong = 0
                         net_util = 0
 
                     elif self.topology == "fat-tree":
-
                         # Map integers to hostnames
                         host_list = [node_id_to_host_name(n, self.fattree_k) for n in job.scheduled_nodes]
                         loads     = link_loads_for_job(self.net_graph, host_list, net_tx)
@@ -259,6 +279,23 @@ class Engine:
 
                         if self.debug:
                             print("  fat-tree hosts:", host_list)
+
+                    elif self.topology == "dragonfly":
+                        D = self.config["DRAGONFLY_D"]
+                        A = self.config["DRAGONFLY_A"]
+                        P = self.config["DRAGONFLY_P"]
+
+                        host_list = []
+                        for real_n in job.scheduled_nodes:
+                            fat_idx  = self.real_to_fat_idx[real_n]   # contiguous in [0..(D*A*P−1)]
+                            host_list.append(dragonfly_node_id_to_host_name(fat_idx, D, A, P))
+                        if self.debug:
+                            print("  dragonfly hosts:", host_list)
+                        ##if len(host_list) <= 1:
+                        #    net_cong = 0.0
+                        #else:
+                        loads    = link_loads_for_job(self.net_graph, host_list, net_tx)
+                        net_cong = worst_link_util(loads, max_throughput)
 
                     else: # capacity model: simple α+β or normalized overload
                         net_cong = network_congestion(net_tx, net_rx, max_throughput)
