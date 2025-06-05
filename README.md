@@ -71,6 +71,12 @@ or simply:
 
     python multi-part-sim.py -x 'setonix/*' # zsh
 
+To run this in parallel use:
+
+    mpiexec -n 2 python multi-part-sim-mpi.py -x setonix/part-cpu setonix/part-gpu
+
+*Note: first install `mpi4py` via pip or conda.*
+
 This will simulate synthetic workloads on two partitions as defined in `config/setonix-cpu` and `config/setonix-gpu`. To replay telemetry workloads from another system, e.g., Marconi100's PM100 dataset, first create a .npz snapshot of the telemetry data, e.g., 
 
     python main.py --system marconi100 -f /path/to/marconi100/job_table.parquet
