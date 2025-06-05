@@ -1,5 +1,5 @@
 {
-    "TOPOLOGY": "capacity",
+    "TOPOLOGY": "fat-tree",
     "NETWORK_MAX_BW": 1e9,
     "FATTREE_K": 16,
     "DRAGONFLY_D": 11,

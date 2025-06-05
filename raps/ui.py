@@ -110,7 +110,7 @@ class LayoutManager:
         # Build the column headers
         columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
         if show_slowdown:
-            columns.append("SLOWDOWN")
+            columns.append("SLOW DOWN")
         else:
             columns.append("NODE SEGMENTS")
 
