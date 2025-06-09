@@ -44,7 +44,7 @@ ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
 
 MAX_PRIORITY = 500000
 
-from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, truncated_weibull
+from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull
 
 
 class Workload:
@@ -60,7 +60,7 @@ class Workload:
         return (cpu_trace, gpu_trace)
 
     def job_arrival_distribution_draw_poisson(self,args,config):
-        return next_arrival(args.arrival_poisson_rate / config['JOB_ARRIVAL_TIME'])
+        return next_arrival_byconfargs(config,args)
 
     def job_size_distribution_draw_uniform(self,args,config):
         return random.randint(1, config['MAX_NODES_PER_JOB'])
@@ -244,7 +244,7 @@ class Workload:
             net_tx, net_rx = [], []
 
             # Jobs arrive according to Poisson process
-            time_to_next_job = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+            time_to_next_job = next_arrival_byconfargs(config,args)
 
             jobs.append(job_dict(nodes_required=nodes_required, name=name,
                                  account=account, cpu_trace=cpu_trace,
@@ -546,8 +546,8 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[0][1].xaxis.set_label_coords(0.5,1.30)
     axs[0][1].xaxis.set_label_position("top")
     axs[0][1].xaxis.tick_top()
-    axs[0][0].hist(x2,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical',color='lightblue')
-    axs[0][0].hist(x,bins=max(1,min(100,(max(x2) - min(x)))), orientation='vertical')
+    axs[0][0].hist(x2,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical',color='lightblue')
+    axs[0][0].hist(x,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical')
     axs[1][0].sharex(axs[0][0])
 
     axs[1][1].hist(y,bins=max(1,min(100,(max(y) - min(y)))), orientation='horizontal')
@@ -568,10 +568,10 @@ def plot_job_hist(jobs,config=None,dist_split=None):
                             (x1,x2) in [(n // 60,n % 60) for
                                         n in x_label_mins[0::60]]]
     axs[1][0].set_xticks(x_label_ticks,x_label_str)
-
     miny = min(y)
     maxy = max(y)
-    y_ticks = np.arange(0,maxy,maxy // 10)
+    interval = max(1,maxy // 10)
+    y_ticks = np.arange(0, maxy, interval)
     y_ticks[0] = miny
     axs[1][0].set_yticks(y_ticks)
 

@@ -28,7 +28,7 @@ from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.account import Accounts
 from raps.weather import Weather
-from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival
+from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival_byconfargs
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats
 from raps.utils import convert_numpy_to_builtin
 
@@ -107,7 +107,7 @@ if args.replay:
             print("available nodes:", config['AVAILABLE_NODES'])
             for job in tqdm(jobs, desc="Rescheduling jobs"):
                 job['requested_nodes'] = None
-                job['submit_time'] = next_arrival(args.arrival_poisson_rate / config['JOB_ARRIVAL_TIME'])  # default arrival rate = 1
+                job['submit_time'] = next_arrival_byconfargs(config,args)
 
     else:  # custom data loader
         print(*args.replay)

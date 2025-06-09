@@ -59,7 +59,8 @@ parser.add_argument('--backfill', type=str, choices=choices, default=None, help=
 # Redistribution of job arrival
 choices = ['prescribed', 'poisson']
 parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
-parser.add_argument('--arrival-poisson-rate', default=1, type=float, help='Modify arrival rate of poisson distribution (default 1)')
+parser.add_argument('--job-arrival-time', type=int, help='Modify job arrival for poisson distribution (in seconds). Overrides config/*/scheduler.json value.')  # no defaults as this overrides system config files
+parser.add_argument('--job-arrival-rate', type=float, help='Modify arrival rate of poisson distribution (default 1)')  # no defaults as this overrides system config files
 
 
 # Account options

@@ -20,6 +20,7 @@ import uuid
 import json
 
 
+
 def sum_values(values):
     return sum(x[1] for x in values) if values else 0
 
@@ -386,6 +387,26 @@ def create_dir_indexed(dir:str, path:str = None) -> str:
             os.makedirs(fullpath,exist_ok=False)
             return fullpath
         index += 1
+
+
+def next_arrival_byconfargs(config,args,reset=False):
+    arrival_rate = 1
+    arrival_time = config['JOB_ARRIVAL_TIME']
+    if args.job_arrival_rate:
+        arrival_rate = args.job_arrival_rate
+    if args.job_arrival_time:
+        arrival_time = args.job_arrival_time
+    return next_arrival(arrival_rate / arrival_time, reset)
+
+
+def next_arrival_byconfkwargs(config,kwargs,reset=False):
+    arrival_rate = 1
+    arrival_time = config['JOB_ARRIVAL_TIME']
+    if kwargs['job_arrival_rate']:
+        arrival_rate = kwargs['job_arrival_rate']
+    if kwargs['job_arrival_time']:
+        arrival_time = kwargs['job_arrival_time']
+    return next_arrival(arrival_rate / arrival_time, reset)
 
 
 def next_arrival(lambda_rate,reset=False):

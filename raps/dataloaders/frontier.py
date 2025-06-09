@@ -14,7 +14,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict
-from ..utils import power_to_utilization, next_arrival, encrypt
+from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt
 
 
 def aging_boost(nnodes):
@@ -255,7 +255,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
-            submit_time = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+            submit_time = next_arrival_byconfkwargs(config,kwargs)
             start_time = None  # ?
             end_time = None  # ?
             priority = aging_boost(nodes_required)

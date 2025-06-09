@@ -31,7 +31,7 @@ from .config import ConfigManager
 from .job import Job
 from .account import Accounts
 from .plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
-from .utils import next_arrival
+from .utils import next_arrival_byconfargs
 
 
 class Telemetry:
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         if args.arrival == "poisson":
             for job in tqdm(jobs, desc="Updating requested_nodes"):
                 job['requested_nodes'] = None
-                job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+                job['submit_time'] = next_arrival_byconfargs(config,args)
     else:
         jobs,_,_ = td.load_data(args.replay)
 

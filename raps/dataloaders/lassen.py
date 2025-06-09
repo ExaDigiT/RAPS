@@ -38,7 +38,7 @@ from tqdm import tqdm
 from datetime import timedelta
 
 from ..job import job_dict
-from ..utils import power_to_utilization, next_arrival, convert_to_seconds
+from ..utils import power_to_utilization, next_arrival_byconfkwargs, convert_to_seconds
 
 
 def load_data(path, **kwargs):
@@ -184,7 +184,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         if arrival == 'poisson':  # Modify the submit times according to Poisson process
             scheduled_nodes = None
-            submit_time = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
+            submit_time = next_arrival_byconfkwargs(config,kwargs)
             start_time = None  # Scheduler will determine start time
             end_time = None  # Scheduler will determine end time
         else:  # Prescribed replay
