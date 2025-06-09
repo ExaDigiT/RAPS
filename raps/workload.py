@@ -28,7 +28,7 @@ import math
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-
+from raps.telemetry import Telemetry
 from raps.job import job_dict
 from raps.utils import create_file_indexed, create_dir_indexed
 
@@ -678,12 +678,15 @@ def add_workload_to_parser(parser):
 
 if __name__ == "__main__":
 
-    from args import args
+    from args import args, args_dict
     from raps.config import ConfigManager
     config = ConfigManager(system_name=args.system).get_config()
-
-    workload = Workload(config)
-    jobs = getattr(workload, args.workload)(args=args)
+    if args.replay:
+        td = Telemetry(**args_dict)
+        jobs,_,_,_ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
+    else:
+        workload = Workload(config)
+        jobs = getattr(workload, args.workload)(args=args)
     plot_job_hist(jobs, config=config, dist_split=args.multimodal)
     if args.output:
         filename = create_file_indexed('wl',create=False)

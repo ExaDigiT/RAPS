@@ -4,6 +4,7 @@ import json
 import numpy as np
 import random
 import pandas as pd
+import sys
 import os
 import re
 import time
@@ -74,54 +75,8 @@ if args.fastforward:
 if args.replay:
 
     td = Telemetry(**args_dict)
-
-    # Try to extract date from given name to use as case directory
-    matched_date = re.search(r"\d{4}-\d{2}-\d{2}", args.replay[0])
-    if matched_date:
-        extracted_date = matched_date.group(0)
-        DIR_NAME = "sim=" + extracted_date
-    else:
-        extracted_date = "Date not found"
-        DIR_NAME = create_casename()
-
-    # Read telemetry data (either npz file or via custom data loader)
-    if args.replay[0].endswith(".npz"):  # Replay .npz file
-        print(f"Loading {args.replay[0]}...")
-        jobs, timestep_start_from_file, timestep_end_from_file, args_from_file = td.load_snapshot(args.replay[0])
-        if args_from_file.fastforward is None:
-            args_from_file.fastforward = 0
-        print("File was generated with:" +\
-              f"\n--system {args_from_file.system} " +\
-              f"-ff {args_from_file.fastforward} " +\
-              f"-t {args_from_file.time}\n" +\
-              f"All Args:\n{args_from_file}"
-              )
-        timestep_end = timestep_end_from_file
-
-        if args.scale:
-            for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-                job['nodes_required'] = random.randint(1, args.scale)
-                job['requested_nodes'] = None  # Setting to None triggers scheduler to assign nodes
-
-        if args.policy == 'poisson':
-            print("available nodes:", config['AVAILABLE_NODES'])
-            for job in tqdm(jobs, desc="Rescheduling jobs"):
-                job['requested_nodes'] = None
-                job['submit_time'] = next_arrival_byconfargs(config,args)
-
-    else:  # custom data loader
-        print(*args.replay)
-        jobs, timestep_start_from_data, timestep_end = td.load_data(args.replay)
-        timestep_start += timestep_start_from_data
-        td.save_snapshot((jobs, timestep_start, timestep_end, args), filename=DIR_NAME)
-
-    # Set number of timesteps based on the last job running which we assume
-    # is the maximum value of submit_time + wall_time of all the jobs
-    if args.time:
-        timestep_end = timestep_start + convert_to_seconds(args.time)
-    elif not timestep_end:
-        timestep_end = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
-
+    jobs, timestep_start, timestep_end, args_from_file = td.load_jobs_times_args_from_files(files=args.replay, args=args)
+    # TODO: Merge args and args_from_files? see telemetry.py:97
 
 else:  # Synthetic jobs
     wl = Workload(config)
@@ -138,7 +93,9 @@ else:  # Synthetic jobs
     else:
         timestep_end = 88200  # 24 hours
 
-    DIR_NAME = create_casename()
+    td = Telemetry(**args_dict)
+    td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
+
 
 sc = Engine(
     power_manager=power_manager,
@@ -148,6 +105,7 @@ sc = Engine(
     **args_dict,
 )
 
+DIR_NAME = td.dirname
 OPATH = OUTPUT_PATH / DIR_NAME
 print("Output directory is: ", OPATH)
 sc.opath = OPATH

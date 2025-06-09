@@ -195,7 +195,7 @@ class Engine:
                     if time_quanta_index < len(job.cpu_trace):
                         cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                     else:
-                        cpu_util = get_utilization(job.cpu_trace, len(job.cpu_trace) - 1)
+                        cpu_util = get_utilization(job.cpu_trace, max(0,len(job.cpu_trace) - 1))
                 elif isinstance(job.cpu_trace,float) or isinstance(job.cpu_trace,int):
                     cpu_util = job.cpu_trace
                 else:
