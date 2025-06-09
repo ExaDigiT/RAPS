@@ -73,7 +73,8 @@ class Engine:
         self.avg_net_tx = []
         self.avg_net_rx = []
         self.net_util_history = []
-        self.slowdown_history = []
+        self.avg_slowdown_history = []
+        self.max_slowdown_history = []
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
@@ -417,8 +418,10 @@ class Engine:
         avg_net  = sum(net_utils)   / n
 
         n = len(slowdown_factors) or 1
-        slowdown_per_job = sum(slowdown_factors) / n
-        self.slowdown_history.append(slowdown_per_job)
+        avg_slowdown_per_job = sum(slowdown_factors) / n
+        self.avg_slowdown_history.append(avg_slowdown_per_job)
+        max_slowdown_per_job = max(slowdown_factors)
+        self.max_slowdown_history.append(max_slowdown_per_job)
 
         # Save network history
         self.avg_net_tx.append(avg_tx)
@@ -442,7 +445,7 @@ class Engine:
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
-            slowdown_per_job=slowdown_per_job
+            slowdown_per_job=avg_slowdown_per_job
         )
 
         self.current_time += 1
@@ -558,18 +561,26 @@ class Engine:
             'total cost': f'${total_cost:.2f}'
         }
 
+        network_stats = get_network_stats()
+        stats.update(network_stats)
+
         if self.net_util_history:
             mean_net_util = sum(self.net_util_history) / len(self.net_util_history)
         else:
             mean_net_util = 0.0
-
         stats["avg network util"] = f"{mean_net_util*100:.2f}%"
 
-        if self.slowdown_history:
-            avg_job_slow = sum(self.slowdown_history) / len(self.slowdown_history)
+        if self.avg_slowdown_history:
+            avg_job_slow = sum(self.avg_slowdown_history) / len(self.avg_slowdown_history)
         else:
             avg_job_slow = 1.0
         stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
+
+        if self.max_slowdown_history:
+            max_job_slow = max(self.max_slowdown_history)
+        else:
+            max_job_slow = 1.0
+        stats["max per-job slowdown"] = f"{max_job_slow:.2f}x"
 
         return stats
 
