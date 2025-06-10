@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict
-from raps.utils import create_file_indexed, create_dir_indexed
+from raps.utils import create_file_indexed, create_dir_indexed, return_nearest_power_of
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
              "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
@@ -63,13 +63,16 @@ class Workload:
         return next_arrival_byconfargs(config,args)
 
     def job_size_distribution_draw_uniform(self,args,config):
-        return random.randint(1, config['MAX_NODES_PER_JOB'])
+        number = random.randint(1, config['MAX_NODES_PER_JOB'])
+        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
 
     def job_size_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
+        number = truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
+        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
 
     def job_size_distribution_draw_normal(self,args,config):
-        return truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
+        number = truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
+        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
 
     def cpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['CPUS_PER_NODE'])
@@ -644,6 +647,8 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--jobsize-weibull-shape", type=float, required=False, help="Jobsize shape of weibull")
     parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
+
+    parser.add_argument("--jobsize-nearest-power-of", default=1, type=int,required=False,help="Map random samples to the nearest power of N your choice. (Experimental: This changes the shape of the distribution, as density of powers change on the numberline!)")
 
     # Walltime:
     parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')

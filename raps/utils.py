@@ -107,6 +107,18 @@ def truncated_weibull(scale, shape, min, max):
             return int(number)
 
 
+def return_nearest_power_of(*,number,base):
+    if base == 1:
+        return number
+    else:
+        next_num = base ** math.ceil(math.log(number,base))
+        prev_num = base ** math.floor(math.log(number,base))
+        if next_num - number < number - prev_num:
+            return next_num
+        else:
+            return prev_num
+
+
 def linear_to_3d_index(linear_index, shape):
     """
     Convert linear index to 3D index.
@@ -409,10 +421,10 @@ def next_arrival_byconfkwargs(config,kwargs,reset=False):
     return next_arrival(arrival_rate / arrival_time, reset)
 
 
-def next_arrival(lambda_rate,reset=False):
+def next_arrival(lambda_rate,reset=False, start_time=0):
     if not hasattr(next_arrival, 'next_time') or reset is True:
         # Initialize the first time it's called
-        next_arrival.next_time = 0
+        next_arrival.next_time = start_time
     else:
         next_arrival.next_time += \
             -math.log(1.0 - random.random()) / lambda_rate
