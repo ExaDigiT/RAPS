@@ -29,7 +29,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict
-from ..utils import power_to_utilization, next_arrival
+from ..utils import power_to_utilization, next_arrival_byconfkwargs
 
 
 def load_data(jobs_path, **kwargs):
@@ -148,10 +148,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         priority = int(jobs_df.loc[jidx, 'priority'])
         partition = int(jobs_df.loc[jidx, 'partition'])
 
-        submit_timestamp = jobs_df.loc[jidx, 'submit_time']
-        diff = submit_timestamp - telemetry_start_timestamp
-        submit_time = int(diff.total_seconds())
-
         time_limit = jobs_df.loc[jidx, 'time_limit']
 
         start_timestamp = jobs_df.loc[jidx, 'start_time']
@@ -168,6 +164,19 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         if wall_time != (end_time - start_time):
             print("wall_time != (end_time - start_time)")
             print(f"{wall_time} != {(end_time - start_time)}")
+
+        if arrival == 'poisson':  # Modify the arrival times according to Poisson distribution
+            scheduled_nodes = None
+            submit_time = next_arrival_byconfkwargs(config,kwargs)
+            start_time = None
+            end_time = None
+        else:  # Prescribed replay
+            scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
+
+            submit_timestamp = jobs_df.loc[jidx, 'submit_time']
+            diff = submit_timestamp - telemetry_start_timestamp
+            submit_time = int(diff.total_seconds())
+
 
         trace_time = gpu_trace.size * config['TRACE_QUANTA'] # seconds
         trace_start_time = 0
@@ -198,12 +207,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         #    # When extracting out a single job, run one iteration past the end of the job
         #    submit_time = config['UI_UPDATE_FREQ']
 
-        if arrival == 'poisson':  # Modify the arrival times according to Poisson distribution
-            scheduled_nodes = None
-            time_submit = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-            time_start = None
-        else:  # Prescribed replay
-            scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
 

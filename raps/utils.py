@@ -9,6 +9,7 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 from datetime import timedelta
 from enum import Enum
 
+import os
 import hashlib
 import math
 import numpy as np
@@ -17,6 +18,7 @@ import random
 import sys
 import uuid
 import json
+
 
 
 def sum_values(values):
@@ -38,7 +40,37 @@ def convert_seconds(seconds):
     return f"{h}:{m}"
 
 
-def truncated_normalvariate(mu, sigma, lower, upper):
+def truncated_normalvariate_int(mu, sigma, lower, upper):
+    """
+    Generate a random number from a truncated normal distribution.
+
+    Parameters
+    ----------
+    mu : float
+        Mean of the distribution.
+    sigma : float
+        Standard deviation of the distribution.
+    lower : float
+        Lower bound of the truncated distribution.
+    upper : float
+        Upper bound of the truncated distribution.
+
+    Returns
+    -------
+    int
+        Random number from the truncated normal distribution.
+    """
+    CUTOFF = 100000000
+    i = 0
+    while i < CUTOFF:
+        number = random.normalvariate(mu, sigma)
+        if lower < number < upper:
+            return int(number)
+        i += 1
+    raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
+
+
+def truncated_normalvariate_float(mu, sigma, lower, upper):
     """
     Generate a random number from a truncated normal distribution.
 
@@ -58,10 +90,33 @@ def truncated_normalvariate(mu, sigma, lower, upper):
     float
         Random number from the truncated normal distribution.
     """
-    while True:
+    CUTOFF = 100000000
+    i = 0
+    while i < CUTOFF:
         number = random.normalvariate(mu, sigma)
         if lower < number < upper:
             return number
+        i += 1
+    raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
+
+
+def truncated_weibull(scale, shape, min, max):
+    while True:
+        number = random.weibullvariate(scale, shape)
+        if min < number <= max:
+            return int(number)
+
+
+def return_nearest_power_of(*,number,base):
+    if base == 1:
+        return number
+    else:
+        next_num = base ** math.ceil(math.log(number,base))
+        prev_num = base ** math.floor(math.log(number,base))
+        if next_num - number < number - prev_num:
+            return next_num
+        else:
+            return prev_num
 
 
 def linear_to_3d_index(linear_index, shape):
@@ -312,10 +367,64 @@ def create_casename(prefix=''):
     return prefix + str(uuid.uuid4())[:7]
 
 
-def next_arrival(lambda_rate):
-    if not hasattr(next_arrival, 'next_time'):
+def create_file_indexed(prefix:str, path:str = None, ending:str = None, create=True) -> str:
+    if path is not None:
+        os.makedirs(path, exist_ok=True)
+    else:
+        path = "./"
+    index = 1
+    while True:
+        if ending:
+            filename = f"{prefix}_{index:03d}.{ending}"
+        else:
+            filename = f"{prefix}_{index:03d}"
+        filepath = os.path.join(path, filename)
+        if not os.path.exists(filepath):
+            if create:
+                open(filepath, "w").close()
+            return filepath
+        index += 1
+
+
+def create_dir_indexed(dir:str, path:str = None) -> str:
+    if dir is None:
+        raise ValueError("'dir' cannot be none")
+    if path is None:
+        path = os.getcwd()
+    index = 1
+    while True:
+        dirname = f"{dir}_{index:03d}"
+        fullpath = os.path.join(path,dirname)
+        if not os.path.exists(fullpath):
+            os.makedirs(fullpath,exist_ok=False)
+            return fullpath
+        index += 1
+
+
+def next_arrival_byconfargs(config,args,reset=False):
+    arrival_rate = 1
+    arrival_time = config['JOB_ARRIVAL_TIME']
+    if args.job_arrival_rate:
+        arrival_rate = args.job_arrival_rate
+    if args.job_arrival_time:
+        arrival_time = args.job_arrival_time
+    return next_arrival(arrival_rate / arrival_time, reset)
+
+
+def next_arrival_byconfkwargs(config,kwargs,reset=False):
+    arrival_rate = 1
+    arrival_time = config['JOB_ARRIVAL_TIME']
+    if kwargs['job_arrival_rate']:
+        arrival_rate = kwargs['job_arrival_rate']
+    if kwargs['job_arrival_time']:
+        arrival_time = kwargs['job_arrival_time']
+    return next_arrival(arrival_rate / arrival_time, reset)
+
+
+def next_arrival(lambda_rate,reset=False, start_time=0):
+    if not hasattr(next_arrival, 'next_time') or reset is True:
         # Initialize the first time it's called
-        next_arrival.next_time = 0
+        next_arrival.next_time = start_time
     else:
         next_arrival.next_time += \
             -math.log(1.0 - random.random()) / lambda_rate

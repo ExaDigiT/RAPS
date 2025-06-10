@@ -6,7 +6,10 @@ parsing parquet files, and generating job state information.
 The module defines a `Telemetry` class for managing telemetry data and several
 helper functions for data encryption and conversion between node name and index formats.
 """
-
+import json
+import re
+import sys
+import random
 import argparse
 
 if __name__ == "__main__":
@@ -27,11 +30,11 @@ import importlib
 import numpy as np
 from tqdm import tqdm
 
-from .config import ConfigManager
-from .job import Job
-from .account import Accounts
-from .plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
-from .utils import next_arrival
+from raps.config import ConfigManager
+from raps.job import Job
+#from raps.account import Accounts
+from raps.plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
+from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seconds
 
 
 class Telemetry:
@@ -41,19 +44,32 @@ class Telemetry:
         self.kwargs = kwargs
         self.system = kwargs.get('system')
         self.config = kwargs.get('config')
+        self.dirname = create_casename()
         try:
-            self.dataloader = importlib.import_module(f".dataloaders.{self.system}", package=__package__)
+            self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
         except:
             print("WARNING: Failed to load dataloader")
 
-    def save_snapshot(self, jobs: list, filename: str):
+    def save_snapshot(self,*, jobs: list, timestep_start, timestep_end, args, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
-        np.savez_compressed(filename, jobs=jobs)
+        np.savez_compressed(filename, jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
 
     def load_snapshot(self, snapshot: str) -> list:
-        """Reads a snapshot from a compressed file and returns the jobs."""
-        jobs = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        return jobs['jobs'].tolist()
+        """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
+
+        :param str snapshot: Filename
+        :returns:
+            - job list
+            - timestep_start
+            - timestep_end
+            - args, which were used to generate the loaded snapshot
+        """
+        data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
+        return data['jobs'].tolist(), \
+               int(data['timestep_start']), \
+               int(data['timestep_end']), \
+               data['args'].tolist()
+
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -75,6 +91,73 @@ class Telemetry:
         """ Return (row, col) tuple for a cdu index """
         return self.dataloader.cdu_pos(index, config=self.config)
 
+    def load_jobs_times_args_from_files(self,*,files, args):
+        """ Load all files as combined jobs """
+        # Read telemetry data (either npz file or via custom data loader)
+        # TODO: Merge args? See main.py:79
+        timestep_end = 0
+        timestep_start = sys.maxsize
+        jobs = []
+        trigger_custom_dataloader = False
+        for i,file in enumerate(files):
+            if file.endswith(".npz"):  # Replay .npz file
+                print(f"Loading {file}...")
+                jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(file)
+                if not hasattr(args_from_file,'fastforward') or args_from_file.fastforward is None:
+                    args_from_file.fastforward = 0
+                print("File was generated with:" +\
+                      f"\n--system {args_from_file.system} " +\
+                      f"-ff {args_from_file.fastforward} " +\
+                      f"-t {args_from_file.time}\n" +\
+                      f"All Args:\n{args_from_file}" +\
+                      "To use these set them from the commandline!"
+                      )
+                jobs.extend(jobs_from_file)
+                timestep_start = min(timestep_start,timestep_start_from_file)
+                timestep_end = max(timestep_end, timestep_end_from_file)
+
+                if hasattr(args,'scale') and args.scale:
+                    for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
+                        job['nodes_required'] = random.randint(1, args.scale)
+                        job['requested_nodes'] = None  # Setting to None triggers scheduler to assign nodes
+
+                if hasattr(args,'policy') and args.policy == 'poisson':
+                    print("available nodes:", config['AVAILABLE_NODES'])
+                    for job in tqdm(jobs, desc="Rescheduling jobs"):
+                        job['requested_nodes'] = None
+                        job['submit_time'] = next_arrival_byconfargs(config,args)
+            elif i == 0:
+                trigger_custom_dataloader = True
+                break
+            else:
+                print("Multiple files given as input.")
+                break
+
+        if trigger_custom_dataloader:  # custom data loader
+            # Try to extract date from given name to use as case directory
+            matched_date = re.search(r"\d{4}-\d{2}-\d{2}", args.replay[0])
+            if matched_date:
+                extracted_date = matched_date.group(0)
+                self.dirname = "sim=" + extracted_date
+            else:
+                extracted_date = "Date not found"
+                self.dirname = create_casename()
+
+            print(*args.replay)
+            jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
+            timestep_start = min(timestep_start, timestep_start_from_data)
+            timestep_end = max(timestep_end, timestep_end_from_data)
+            self.save_snapshot(jobs=jobs,
+                               timestep_start=timestep_start,
+                               timestep_end=timestep_end,
+                               args=args, filename=self.dirname)
+        if args.time:
+            timestep_end = timestep_start + convert_to_seconds(args.time)
+        elif not timestep_end:
+            timestep_end = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
+
+        return jobs, timestep_start, timestep_end, args
+
 
 if __name__ == "__main__":
 
@@ -82,18 +165,9 @@ if __name__ == "__main__":
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
+    jobs, timestep_start, timestep_end, _ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
 
-    if args.replay[0].endswith(".npz"):
-        print(f"Loading {args.replay[0]}...")
-        jobs,_,_ = td.load_snapshot(args.replay[0])
-        if args.arrival == "poisson":
-            for job in tqdm(jobs, desc="Updating requested_nodes"):
-                job['requested_nodes'] = None
-                job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-    else:
-        jobs,_,_ = td.load_data(args.replay)
-
-    timesteps = int(max(job['wall_time'] + job['submit_time'] for job in jobs))
+    timesteps = timestep_end - timestep_start
 
     dt_list = []
     wt_list = []
