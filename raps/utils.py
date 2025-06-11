@@ -20,7 +20,6 @@ import uuid
 import json
 
 
-
 def sum_values(values):
     return sum(x[1] for x in values) if values else 0
 
@@ -310,6 +309,7 @@ def create_binary_array_numpy(max_time, trace_quanta, util):
         traces[i, :int(util * num_quanta / 100)] = 1
     return traces
 
+
 def extract_data_csv(fileName, skiprows, header):
     """ Read passed csv file path
         @ In, filename, dataframe, facility telemetry data
@@ -322,15 +322,17 @@ def extract_data_csv(fileName, skiprows, header):
     df = df.dropna()
     return df
 
+
 def resampledf(df, time_resampled):
     """ Match key and return idx
         @ In, None
         @ Out, CDU_names, list, list of CDU names
     """
-    df.set_index('time',inplace =True)
+    df.set_index('time',inplace=True)
     df = df.reindex(df.index.union(time_resampled)).interpolate('values').loc[time_resampled]
     df = df.reset_index()
     return df
+
 
 def output_dict(d, title='', output_file=sys.stdout):
     """
@@ -349,6 +351,7 @@ def output_dict(d, title='', output_file=sys.stdout):
         file.write(title + '\n')
         for key, value in d.items():
             file.write(f"{key}: {value}\n")
+
 
 def create_casename(prefix=''):
     """
@@ -432,6 +435,8 @@ def next_arrival(lambda_rate,reset=False, start_time=0):
 
 
 def convert_to_seconds(time_str):
+    if isinstance(time_str, int):
+        return time_str  # this happens....
     # Define the conversion factors
     time_factors = {
         'd': 86400,  # 1 day = 86400 seconds

@@ -131,7 +131,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # TODO: Jobs could have a time-series per node!
             gpu_node_energy = node_data['gpu_energy'].copy()
             gpu_node_energy[gpu_node_energy < 0] = 0.0
-            gpu_node_energy[gpu_node_energy == np.NaN] = 0.0
+            gpu_node_energy[gpu_node_energy == np.nan] = 0.0
             if len(gpu_node_energy) < 1:
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
             else:
@@ -156,7 +156,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # Same
             cpu_node_usage = node_data['cpu_usage'].copy()
             cpu_node_usage[cpu_node_usage < 0] = 0.0
-            cpu_node_usage[cpu_node_usage == np.NaN] = 0.0
+            cpu_node_usage[cpu_node_usage == np.nan] = 0.0
             if wall_time > 0:
                 threads_per_core = config['THREADS_PER_CORE']
                 cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core
@@ -192,12 +192,13 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
             start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
             end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
-            time_limit = row['time_limit']
 
-            trace_time = wall_time
-            trace_start_time = start_time
-            trace_end_time = end_time
-            trace_missing_values = False
+        time_limit = row['time_limit']
+
+        trace_time = wall_time
+        trace_start_time = start_time
+        trace_end_time = end_time
+        trace_missing_values = False
 
         if verbose:
             print('ib_tx, ib_rx, samples:', ib_tx, ib_rx, samples)
@@ -314,5 +315,5 @@ if __name__ == "__main__":
     intervals = 20  # number of 20-second intervals
     lambda_poisson = 0.3  # control sporadicity
 
-    tx_sequence, rx_sequence = generate_ib_tx_rx_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
+    tx_sequence, rx_sequence = generate_network_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
     print(tx_sequence, rx_sequence)

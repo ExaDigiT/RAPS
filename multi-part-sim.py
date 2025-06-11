@@ -63,7 +63,7 @@ else:  # Synthetic workload
     wl = Workload(*configs)
 
     # Generate jobs based on workload type
-    jobs = getattr(wl, args.workload)(num_jobs=args.numjobs)
+    jobs = getattr(wl, args.workload)(args=args)
 
 # Group jobs by partition
 jobs_by_partition = {partition: [] for partition in partition_names}

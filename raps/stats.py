@@ -54,8 +54,15 @@ def min_max_sum(value,min,max,sum):
 
 
 def get_scheduler_stats(engine: Engine):
-    average_queue = sum(engine.scheduler_queue_history) / len(engine.scheduler_queue_history)
-    average_running = sum(engine.scheduler_running_history) / len(engine.scheduler_running_history)
+    if len(engine.scheduler_queue_history) != 0:
+        average_queue = sum(engine.scheduler_queue_history) / len(engine.scheduler_queue_history)
+    else:
+        average_queue = 0
+    if len(engine.scheduler_running_history) != 0:
+        average_running = sum(engine.scheduler_running_history) / len(engine.scheduler_running_history)
+    else:
+        average_running = 0
+
     stats = {
         'average_queue': average_queue,
         'average_running': average_running,

@@ -4,16 +4,11 @@ import json
 import numpy as np
 import random
 import pandas as pd
-import sys
 import os
-import re
 import time
-
-from tqdm import tqdm
 
 from raps.helpers import check_python_version
 check_python_version()
-
 
 from raps.config import ConfigManager
 from raps.constants import OUTPUT_PATH, SEED
@@ -66,12 +61,6 @@ args_dict['config'] = config
 flops_manager = FLOPSManager(**args_dict)
 
 
-timestep_start = 0
-if args.fastforward:
-    args.fastforward = convert_to_seconds(args.fastforward)
-    timestep_start = args.fastforward
-
-
 if args.replay:
 
     td = Telemetry(**args_dict)
@@ -88,13 +77,21 @@ else:  # Synthetic jobs
             print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
         time.sleep(2)
 
-    if args.time:
-        timestep_end = convert_to_seconds(args.time)
+    timestep_start = 0
+    if hasattr(jobs[0],'end_time'):
+        timestep_end = max([job.end_time for job in jobs])
     else:
         timestep_end = 88200  # 24 hours
 
     td = Telemetry(**args_dict)
     td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
+
+if args.fastforward:
+    args.fastforward = convert_to_seconds(args.fastforward)
+    timestep_start = args.fastforward
+
+if args.time:
+    timestep_end = convert_to_seconds(args.time)
 
 
 sc = Engine(
@@ -129,7 +126,7 @@ if args.verbose:
     print(jobs)
 
 total_timesteps = timestep_end - timestep_start
-print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds')
+print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end)
 

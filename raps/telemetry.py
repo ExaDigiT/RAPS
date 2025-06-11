@@ -6,7 +6,6 @@ parsing parquet files, and generating job state information.
 The module defines a `Telemetry` class for managing telemetry data and several
 helper functions for data encryption and conversion between node name and index formats.
 """
-import json
 import re
 import sys
 import random
@@ -25,6 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     args = parser.parse_args()
+    args_dict = vars(args)
 
 import importlib
 import numpy as np
@@ -69,7 +69,6 @@ class Telemetry:
                int(data['timestep_start']), \
                int(data['timestep_end']), \
                data['args'].tolist()
-
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -160,8 +159,6 @@ class Telemetry:
 
 
 if __name__ == "__main__":
-
-    args_dict = vars(args)
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)

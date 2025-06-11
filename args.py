@@ -2,6 +2,7 @@ import argparse
 from raps.schedulers.default import PolicyType, BackfillType
 
 from raps.workload import add_workload_to_parser
+from raps.utils import convert_to_seconds
 
 parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulator (RAPS)')
 
@@ -70,4 +71,12 @@ parser.add_argument('--accounts-json', type=str, help='Json of account stats gen
 
 # ### At the end get args and an args_dict. import this if needed.
 args = parser.parse_args()
+# Do conversions here if needed
+if args.fastforward:
+    args.fastforward = convert_to_seconds(args.fastforward)
+if args.time:
+    args.time = convert_to_seconds(args.time)
+# generate the dictionary
 args_dict = vars(args)
+# #import args and args_dict directly if needed.:
+# from args import args,args_dict

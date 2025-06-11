@@ -205,7 +205,7 @@ class Engine:
                     if time_quanta_index < len(job.gpu_trace):
                         gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     else:
-                        gpu_util = get_utilization(job.gpu_trace, len(job.gpu_trace) - 1)
+                        gpu_util = get_utilization(job.gpu_trace, max(0,len(job.gpu_trace) - 1))
                 elif isinstance(job.gpu_trace,float) or isinstance(job.gpu_trace,int):
                     gpu_util = job.gpu_trace
                 else:

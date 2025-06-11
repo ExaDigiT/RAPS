@@ -145,7 +145,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         end_state = jobs_df.loc[jidx, 'job_state']
 
-
         priority = int(jobs_df.loc[jidx, 'priority'])
 
         if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution

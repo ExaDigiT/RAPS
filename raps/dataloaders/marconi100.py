@@ -177,8 +177,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             diff = submit_timestamp - telemetry_start_timestamp
             submit_time = int(diff.total_seconds())
 
-
-        trace_time = gpu_trace.size * config['TRACE_QUANTA'] # seconds
+        trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
         trace_start_time = 0
         trace_end_time = trace_time
         if wall_time > trace_time:
