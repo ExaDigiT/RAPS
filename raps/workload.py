@@ -745,7 +745,9 @@ if __name__ == "__main__":
         jobs = getattr(workload, args.workload)(args=args)
     plot_job_hist(jobs, config=config, dist_split=args.multimodal)
     if args.output:
-        filename = create_file_indexed('wl',create=False)
         timestep_start = min([x['submit_time'] for x in jobs])
         timestep_end = math.ceil(max([x['submit_time'] for x in jobs]) + max([x['wall_time'] for x in jobs]))
+        filename = create_file_indexed('wl',create=False,ending="npz").split(".npz")[0]
+        # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename,jobs=jobs,timestep_start=timestep_start, timestep_end=timestep_end, args=args)
+        print(filename + ".npz")  # To std-out to show which npz was created.
