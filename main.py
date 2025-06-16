@@ -91,7 +91,7 @@ if args.fastforward:
     timestep_start = args.fastforward
 
 if args.time:
-    timestep_end = convert_to_seconds(args.time)
+    timestep_end = timestep_start + convert_to_seconds(args.time)
 
 
 sc = Engine(

@@ -725,11 +725,13 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
 
-    args = parser.parse_args()
+    return parser
+
+
+def check_workload_args(args):
     if (args.jobsize_is_power_of is not None and args.jobsize_is_of_degree is not None):
         print("Choose either --jobsize-is-power-of or --jobsize-is-of-degree! Not both.")
         exit(1)
-    return parser
 
 
 if __name__ == "__main__":
