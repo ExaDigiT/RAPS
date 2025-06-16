@@ -91,8 +91,13 @@ else:
 timestep_start = fastforward
 timestep_end = timestep_start + timesteps
 
+if args.time_delta:
+    time_delta = convert_to_seconds(args.time_delta)
+else:
+    time_delta = config['TRACE_QUANTA']
+
 # Create generators for each layout manager
-generators = {name: lm.run_stepwise(jobs_by_partition[name], timestep_start=timestep_start, timestep_end=timestep_end)
+generators = {name: lm.run_stepwise(jobs_by_partition[name], timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
               for name, lm in layout_managers.items()}
 
 # Step through all generators in lockstep

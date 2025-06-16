@@ -400,7 +400,7 @@ class LayoutManager:
         self.progress.update(self.progress_task, description=f"{timestamp}",advance=timestamp,transient=True)
         self.layout["progress"].update(self.progress.get_renderable())
 
-    def update(self, data: TickData):
+    def update(self, data: TickData, time_delta=1):
         uncertainties = self.engine.power_manager.uncertainties
 
         if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
@@ -422,20 +422,20 @@ class LayoutManager:
             )
             if False:
                 self.render()
-        self.update_progress(1)
-
+        self.update_progress(time_delta)
 
     def render(self):
         if not self.debug:
             self.console.clear()
             self.console.print(self.layout)
 
-    def run(self, jobs, timestep_start, timestep_end):
+    def run(self, jobs, timestep_start, timestep_end, time_delta):
         """ Runs the UI, blocking until the simulation is complete """
         with Live(self.layout, refresh_per_second=5):
-            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end):
-                self.update(data)
+            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta):
+                if data:
+                    self.update(data,time_delta)
 
-    def run_stepwise(self, jobs, timestep_start, timestep_end):
+    def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
         """ Prepares the UI and returns a generator for the simulation """
-        return self.engine.run_simulation(jobs, timestep_start, timestep_end)
+        return self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)

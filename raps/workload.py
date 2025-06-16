@@ -695,7 +695,7 @@ def add_workload_to_parser(parser):
     parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
 
     parser.add_argument("--jobsize-is-of-degree", default=None, type=int,required=False,help="Draw jobsizes from distribution of degree N (squared,cubed).")
-    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2=2^x,3=3^x).")
+    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2->2^x,3->3^x).")
 
     # Walltime:
     parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
