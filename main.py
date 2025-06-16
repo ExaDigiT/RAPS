@@ -91,7 +91,7 @@ if args.fastforward:
     timestep_start = args.fastforward
 
 if args.time:
-    timestep_end = convert_to_seconds(args.time)
+    timestep_end = timestep_start + convert_to_seconds(args.time)
 
 
 sc = Engine(
@@ -126,9 +126,15 @@ if args.verbose:
     print(jobs)
 
 total_timesteps = timestep_end - timestep_start
+if args.time_delta:
+    time_delta = convert_to_seconds(args.time_delta)
+else:
+    time_delta = config['TRACE_QUANTA']
+print(time_delta)
+
 print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
-layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end)
+layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
 engine_stats = get_engine_stats(sc)
 job_stats = get_job_stats(sc)

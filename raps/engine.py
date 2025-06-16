@@ -151,8 +151,7 @@ class Engine:
 
         return completed_jobs, newly_downed_nodes
 
-
-    def tick(self):
+    def tick(self,time_delta=1):
         """Simulate a timestep."""
 
         # Update running time for all running jobs
@@ -192,7 +191,9 @@ class Engine:
                 # in the past and no trace if there, read index 0 until values
                 # are available.
                 if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
-                    if time_quanta_index < len(job.cpu_trace):
+                    if (isinstance(job.cpu_trace,list) and len(job.cpu_trace)) or (isinstance(job.cpu_trace,np.ndarray) and job.cpu_trace.size == 0):
+                        cpu_util = 0
+                    elif time_quanta_index < len(job.cpu_trace):
                         cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                     else:
                         cpu_util = get_utilization(job.cpu_trace, max(0,len(job.cpu_trace) - 1))
@@ -202,7 +203,9 @@ class Engine:
                     raise NotImplementedError()
 
                 if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
-                    if time_quanta_index < len(job.gpu_trace):
+                    if (isinstance(job.gpu_trace,list) and len(job.gpu_trace)) or (isinstance(job.gpu_trace,np.ndarray) and job.gpu_trace.size == 0):
+                        gpu_util = 0
+                    elif time_quanta_index < len(job.gpu_trace):
                         gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     else:
                         gpu_util = get_utilization(job.gpu_trace, max(0,len(job.gpu_trace) - 1))
@@ -302,7 +305,7 @@ class Engine:
             num_free_nodes=self.num_free_nodes,
         )
 
-        self.current_time += 1
+        self.current_time += time_delta
         return tick_data
 
     def prepare_system_state(self, all_jobs:List, timestep_start, timestep_end, replay:bool):
@@ -331,7 +334,7 @@ class Engine:
         self.scheduler.policy = target_policy
         self.scheduler.bfpolicy = target_bfpolicy
 
-    def run_simulation(self, jobs, timestep_start, timestep_end, autoshutdown=False):
+    def run_simulation(self, jobs, timestep_start, timestep_end, time_delta=1, autoshutdown=False):
         """Generator that yields after each simulation tick."""
         self.timesteps = timestep_end - timestep_start  # Where is this used?
 
@@ -346,8 +349,8 @@ class Engine:
         # Process jobs in batches for better performance of timestep loop
         all_jobs = jobs.copy()
         jobs = []
-        # Batch Jobs into 6h windows based on submit_time
-        batch_window = 60 * 60 * 6  # 6h
+        # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
+        batch_window = max(60 * 60 * 6, 2 * time_delta)  # 6h
 
         for timestep in range(timestep_start,timestep_end):
 
@@ -373,9 +376,12 @@ class Engine:
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
-            tick_data = self.tick()
-            tick_data.completed = completed_jobs
-            yield tick_data
+            if 0 == timestep % time_delta:
+                tick_data = self.tick(time_delta)
+                tick_data.completed = completed_jobs
+                yield tick_data
+            else:
+                yield None
 
     def get_job_history_dict(self):
         return self.job_history_dict

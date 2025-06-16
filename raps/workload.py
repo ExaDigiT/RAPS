@@ -695,7 +695,7 @@ def add_workload_to_parser(parser):
     parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
 
     parser.add_argument("--jobsize-is-of-degree", default=None, type=int,required=False,help="Draw jobsizes from distribution of degree N (squared,cubed).")
-    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2=2^x,3=3^x).")
+    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2->2^x,3->3^x).")
 
     # Walltime:
     parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
@@ -725,11 +725,13 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
 
-    args = parser.parse_args()
+    return parser
+
+
+def check_workload_args(args):
     if (args.jobsize_is_power_of is not None and args.jobsize_is_of_degree is not None):
         print("Choose either --jobsize-is-power-of or --jobsize-is-of-degree! Not both.")
         exit(1)
-    return parser
 
 
 if __name__ == "__main__":

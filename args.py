@@ -1,7 +1,7 @@
 import argparse
 from raps.schedulers.default import PolicyType, BackfillType
 
-from raps.workload import add_workload_to_parser
+from raps.workload import add_workload_to_parser, check_workload_args
 from raps.utils import convert_to_seconds
 
 parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulator (RAPS)')
@@ -14,6 +14,7 @@ parser.add_argument('-c', '--cooling', action='store_true', help='Include FMU co
 # Simulation runtime options
 parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
+parser.add_argument("--time-delta", type=str, default=None, help='Time delta for simulation steps, e.g. 15, 15s 1m, 1h, 3d. (Default unit in seconds. If not set "TRACE_QUANTA" is used.)')
 parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode and disable rich layout')
 parser.add_argument('-n', '--numjobs', type=int, default=1000, help='Number of jobs to schedule')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
@@ -69,14 +70,20 @@ parser.add_argument('--accounts', action='store_true', help='Flag indicating if 
 parser.add_argument('--accounts-json', type=str, help='Json of account stats generated in previous run. see raps/accounts.py')
 
 
+def post_process_args(args):
+    if args.fastforward:
+        args.fastforward = convert_to_seconds(args.fastforward)
+    if args.time:
+        args.time = convert_to_seconds(args.time)
+    return args
+
+
 # ### At the end get args and an args_dict. import this if needed.
 args = parser.parse_args()
-# Do conversions here if needed
-if args.fastforward:
-    args.fastforward = convert_to_seconds(args.fastforward)
-if args.time:
-    args.time = convert_to_seconds(args.time)
+# Do conversions and checks here if needed
+check_workload_args(args)
+args = post_process_args(args)
 # generate the dictionary
 args_dict = vars(args)
-# #import args and args_dict directly if needed.:
+# #Now import args and args_dict directly if needed.:
 # from args import args,args_dict
