@@ -64,7 +64,7 @@ def truncated_normalvariate_int(mu, sigma, lower, upper):
     while i < CUTOFF:
         number = random.normalvariate(mu, sigma)
         if lower < number < upper:
-            return int(number)
+            return round(number)
         i += 1
     raise Exception(f"mu:{mu} sigma:{sigma}, not a single hit in {CUTOFF} tries.")
 

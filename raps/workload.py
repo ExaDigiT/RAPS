@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict
-from raps.utils import create_file_indexed, create_dir_indexed, return_nearest_power_of
+from raps.utils import create_file_indexed, create_dir_indexed
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
              "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
@@ -63,16 +63,63 @@ class Workload:
         return next_arrival_byconfargs(config,args)
 
     def job_size_distribution_draw_uniform(self,args,config):
-        number = random.randint(1, config['MAX_NODES_PER_JOB'])
-        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
+        min_v = 1
+        max_v = config['MAX_NODES_PER_JOB']
+        if (args.jobsize_is_power_of is not None):
+            base = args.jobsize_is_power_of
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
+            selection = random.randint(0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection]
+        elif (args.jobsize_is_of_degree is not None):
+            exp = args.jobsize_is_of_degree
+            possible_jobsizes = [base ** exp for base in range(min_v, int(math.floor(pow(max_v, 1 / exp))))]
+            selection = random.randint(0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection]
+        else:
+            number = random.randint(1, config['MAX_NODES_PER_JOB'])
+        return number
 
     def job_size_distribution_draw_weibull(self,args,config):
-        number = truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
-        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
+        min_v = 1
+        max_v = config['MAX_NODES_PER_JOB']
+        if (args.jobsize_is_power_of is not None):
+            base = args.jobsize_is_power_of
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
+            scale = math.log(args.jobsize_weibull_scale,base)
+            shape = math.log(args.jobsize_weibull_shape,base)
+            selection = truncated_weibull(scale, shape, 0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection]
+        elif (args.jobsize_is_of_degree is not None):
+            exp = args.jobsize_is_of_degree
+            possible_jobsizes = [base ** exp for base in range(min_v, int(math.floor(pow(max_v, 1 / exp))))]
+            scale = math.pow(args.jobsize_weibull_scale, 1 / exp)
+            shape = math.pow(args.jobsize_weibull_shape, 1 / exp)
+            selection = truncated_weibull(scale, shape, 0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection]
+        else:
+            number = truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
+        return number
 
     def job_size_distribution_draw_normal(self,args,config):
-        number = truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
-        return return_nearest_power_of(number=number, base=args.jobsize_nearest_power_of)
+        min_v = 1
+        max_v = config['MAX_NODES_PER_JOB']
+        if (args.jobsize_is_power_of is not None):
+            base = args.jobsize_is_power_of
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
+            mean = math.log(args.jobsize_normal_mean,base)
+            stddev = math.log(args.jobsize_normal_stddev,base)  # (len(possible_jobsizes) / (max_v - min_v))
+            selection = truncated_normalvariate_int(mean, stddev, 0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection - 1]
+        elif (args.jobsize_is_of_degree is not None):
+            exp = args.jobsize_is_of_degree
+            possible_jobsizes = [base ** exp for base in range(min_v, int(math.floor(pow(max_v, 1 / exp))))]
+            mean = math.pow(args.jobsize_normal_mean, 1 / exp)
+            stddev = math.pow(args.jobsize_normal_stddev, 1 / exp)
+            selection = truncated_weibull(mean, stddev, 0, len(possible_jobsizes) - 1)
+            number = possible_jobsizes[selection]
+        else:
+            number = truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
+        return number
 
     def cpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['CPUS_PER_NODE'])
@@ -552,7 +599,6 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[0][0].hist(x2,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical',color='lightblue')
     axs[0][0].hist(x,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical')
     axs[1][0].sharex(axs[0][0])
-
     axs[1][1].hist(y,bins=max(1,min(100,(max(y) - min(y)))), orientation='horizontal')
     axs[1][0].sharey(axs[1][1])
 
@@ -648,7 +694,8 @@ def add_workload_to_parser(parser):
     parser.add_argument("--jobsize-weibull-shape", type=float, required=False, help="Jobsize shape of weibull")
     parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
 
-    parser.add_argument("--jobsize-nearest-power-of", default=1, type=int,required=False,help="Map random samples to the nearest power of N your choice. (Experimental: This changes the shape of the distribution, as density of powers change on the numberline!)")
+    parser.add_argument("--jobsize-is-of-degree", default=None, type=int,required=False,help="Draw jobsizes from distribution of degree N (squared,cubed).")
+    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2=2^x,3=3^x).")
 
     # Walltime:
     parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
@@ -678,6 +725,10 @@ def add_workload_to_parser(parser):
 
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
 
+    args = parser.parse_args()
+    if (args.jobsize_is_power_of is not None and args.jobsize_is_of_degree is not None):
+        print("Choose either --jobsize-is-power-of or --jobsize-is-of-degree! Not both.")
+        exit(1)
     return parser
 
 
@@ -694,7 +745,9 @@ if __name__ == "__main__":
         jobs = getattr(workload, args.workload)(args=args)
     plot_job_hist(jobs, config=config, dist_split=args.multimodal)
     if args.output:
-        filename = create_file_indexed('wl',create=False)
         timestep_start = min([x['submit_time'] for x in jobs])
         timestep_end = math.ceil(max([x['submit_time'] for x in jobs]) + max([x['wall_time'] for x in jobs]))
+        filename = create_file_indexed('wl',create=False,ending="npz").split(".npz")[0]
+        # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename,jobs=jobs,timestep_start=timestep_start, timestep_end=timestep_end, args=args)
+        print(filename + ".npz")  # To std-out to show which npz was created.
