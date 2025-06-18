@@ -291,8 +291,6 @@ def plot_nodes_gantt(*,ax=None,jobs):
     #nodes_required = [x['nodes_required'] for x in jobs]
     start_t = [x.start_time for x in jobs]
     nodeIDs = [x.scheduled_nodes for x in jobs]
-    print(nodeIDs[0])
-    print(type(nodeIDs[0]))
 
     colors = spaced_colors(len(jobs))
     for i in track(range(len(jobs)), description="Collecting information to plot"):
@@ -305,7 +303,7 @@ def plot_nodes_gantt(*,ax=None,jobs):
     ax.set_xlabel("time [hh:mm]")
     minx_s = 0
     maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
-    x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
+    x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
                             (x1,x2) in [(n // 60,n % 60) for
