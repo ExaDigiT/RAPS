@@ -98,6 +98,13 @@ class Job:
             pass
         else:
             raise ValueError(f"{self.nodes_required} {self.scheduled_nodes}")
+        if self.scheduled_nodes == [] or self.scheduled_nodes is None or \
+           (isinstance(self.scheduled_nodes,list) and isinstance(self.scheduled_nodes[0], int)) or \
+           (isinstance(self.scheduled_nodes,np.ndarray) and isinstance(self.scheduled_nodes[0], int)):
+            pass  # Type is ok
+        else:
+            # Type is not as expected!
+            raise ValueError(f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, with {type(self.scheduled_nodes[0])}")
 
     def __repr__(self):
         """Return a string representation of the job."""

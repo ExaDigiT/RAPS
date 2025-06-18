@@ -10,6 +10,8 @@ import re
 import sys
 import random
 import argparse
+import itertools
+import json
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Telemetry data validator')
@@ -18,9 +20,8 @@ if __name__ == "__main__":
                         help='Either: path/to/joblive path/to/jobprofile' + \
                              ' -or- filename.npz (overrides --workload option)')
     parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs','nodes'], help='Output plots')
-
+    parser.add_argument("--is-results-file", action='store_true', default=False, help='Output plots')
     parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)") # duplicate in workload!
-
     parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
     parser.add_argument('--system', type=str, default='frontier', help='System config to use')
     choices = ['prescribed', 'poisson']
@@ -75,6 +76,44 @@ class Telemetry:
                int(data['timestep_start']), \
                int(data['timestep_end']), \
                data['args'].tolist()
+
+    def load_csv_results(self, file):
+        jobs = []
+        time_start = 0
+        time_end = 0
+        args = None
+        for line in pd.read_csv(file,chunksize=1):
+            job_info = job_dict(nodes_required=line.get('num_nodes').item(),  # Named like this somewhere in the csv history dumper
+                                name=line.get('name').item(),
+                                account=line.get('account').item(),
+                                cpu_trace=None,
+                                gpu_trace=None,
+                                ntx_trace=None,
+                                nrx_trace=None,
+                                #end_state=line.get('end_state').item(),
+                                end_state=None,
+                                scheduled_nodes=json.loads(line.get('scheduled_nodes').item()),
+                                id=line.get('id').item(),
+                                #priority=line.get('priority').item(),
+                                priority=None,
+                                #partition=line.get('partition').item(),
+                                partition=None,
+                                submit_time=line.get('submit_time').item(),
+                                start_time=line.get('start_time').item(),
+                                end_time=line.get('end_time').item(),
+                                #wall_time=line.get('wall_time').item(),
+                                wall_time=line.get('end_time').item() - line.get('start_time').item(),
+                                #trace_time=line.get('trace_time').item(),
+                                trace_time=None,
+                                #trace_start_time=line.get('trace_start_time').item(),
+                                trace_start_time=None,
+                                #trace_end_time=line.get('trace_end_time').item(),
+                                trace_end_time=None,
+                                #trace_missing_values=line.get('trace_missing_values').item(),
+                                trace_missing_values=None
+                           )
+            jobs.append(Job(job_info))
+        return jobs, time_start, time_end, args
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -137,7 +176,11 @@ class Telemetry:
         jobs = []
         trigger_custom_dataloader = False
         for i,file in enumerate(files):
-            if file.endswith(".npz"):  # Replay .npz file
+            if hasattr(args,'is_results_file') and args.is_results_file:
+                if file.endswith(".csv"):
+                    jobs, timestep_start, timestep, _ = self.load_csv_results(file)
+
+            elif file.endswith(".npz"):  # Replay .npz file
                 print(f"Loading {file}...")
                 jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(file)
                 if not hasattr(args_from_file,'fastforward') or args_from_file.fastforward is None:
@@ -149,7 +192,7 @@ class Telemetry:
                       f"All Args:\n{args_from_file}" +\
                       "To use these set them from the commandline!"
                       )
-                jobs.extend(jobs_from_file)
+                jobs.extend(Job(jobs_from_file))
                 timestep_start = min(timestep_start,timestep_start_from_file)
                 timestep_end = max(timestep_end, timestep_end_from_file)
 
@@ -194,18 +237,19 @@ class Telemetry:
         if args.time:
             timestep_end = timestep_start + convert_to_seconds(args.time)
         elif not timestep_end:
-            timestep_end = int(max(job['wall_time'] + job['start_time'] for job in jobs)) + 1
+            timestep_end = int(max(job.wall_time + job.start_time for job in jobs)) + 1
 
         return jobs, timestep_start, timestep_end, args
 
 
 def plot_jobs_gantt(*,ax=None,jobs):
+    jobs.sort(key=lambda x:x.submit_time)
     if ax is None:
         ax = plt.figure(figsize=(10,4))
     # Submit_time and Wall_time
-    submit_t = [x['submit_time'] for x in jobs]
-    duration = [x['wall_time'] for x in jobs]
-    nodes_required = [x['nodes_required'] for x in jobs]
+    submit_t = [x.submit_time for x in jobs]
+    duration = [x.wall_time for x in jobs]
+    nodes_required = [x.nodes_required for x in jobs]
 
     colors = spaced_colors(len(jobs))
     offset = 0
@@ -221,8 +265,8 @@ def plot_jobs_gantt(*,ax=None,jobs):
     ##ax_b labels:
     ax.set_xlabel("time [hh:mm]")
     minx_s = 0
-    maxx_s = np.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
-    x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
+    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
+    x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
                             (x1,x2) in [(n // 60,n % 60) for
@@ -237,10 +281,12 @@ def plot_nodes_gantt(*,ax=None,jobs):
     if ax is None:
         ax = plt.figure(figsize=(10,4))
     # Submit_time and Wall_time
-    duration = [x['wall_time'] for x in jobs]
+    duration = [x.wall_time for x in jobs]
     #nodes_required = [x['nodes_required'] for x in jobs]
-    start_t = [x['start_time'] for x in jobs]
-    nodeIDs = [x['scheduled_nodes'] for x in jobs]
+    start_t = [x.start_time for x in jobs]
+    nodeIDs = [x.scheduled_nodes for x in jobs]
+    print(nodeIDs[0])
+    print(type(nodeIDs[0]))
 
     colors = spaced_colors(len(jobs))
     for i in track(range(len(jobs)), description="Collecting information to plot"):
@@ -252,7 +298,7 @@ def plot_nodes_gantt(*,ax=None,jobs):
     ##ax_b labels:
     ax.set_xlabel("time [hh:mm]")
     minx_s = 0
-    maxx_s = np.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
+    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
@@ -260,6 +306,7 @@ def plot_nodes_gantt(*,ax=None,jobs):
                                         n in x_label_mins[0::60]]]
 
     ax.set_xticks(x_label_ticks,x_label_str)
+    ax.set_ylim(1,max(list(itertools.chain.from_iterable(nodeIDs))))
     #ax.yaxis.set_inverted(True)
     return ax
 
@@ -268,12 +315,10 @@ if __name__ == "__main__":
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
-    if args.replay is None:
-        parser.print_help()
-    if args.replay[0].endswith(".csv"):
-        jobs, timestep_start, timestep_end, _ = td.load_data_from_csv(args.replay[0])
-    else:
+    if args.replay:
         jobs, timestep_start, timestep_end, _ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
+    else:
+        parser.print_help()
 
     timesteps = timestep_end - timestep_start
 
@@ -283,8 +328,7 @@ if __name__ == "__main__":
     submit_times = []
     end_times = []
     last = 0
-    for job_vector in jobs:
-        job = Job(job_vector)
+    for job in jobs:
         wt_list.append(job.wall_time)
         nr_list.append(job.nodes_required)
         submit_times.append(job.submit_time)
