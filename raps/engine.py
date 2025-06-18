@@ -418,10 +418,10 @@ class Engine:
         avg_net  = sum(net_utils)   / n
 
         n = len(slowdown_factors) or 1
-        avg_slowdown_per_job = sum(slowdown_factors) / n
-        self.avg_slowdown_history.append(avg_slowdown_per_job)
-        max_slowdown_per_job = max(slowdown_factors)
-        self.max_slowdown_history.append(max_slowdown_per_job)
+        #avg_slowdown_per_job = sum(slowdown_factors) / n
+        #self.avg_slowdown_history.append(avg_slowdown_per_job)
+        #max_slowdown_per_job = max(slowdown_factors)
+        #self.max_slowdown_history.append(max_slowdown_per_job)
 
         # Save network history
         self.avg_net_tx.append(avg_tx)
@@ -445,7 +445,7 @@ class Engine:
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
-            slowdown_per_job=avg_slowdown_per_job
+            slowdown_per_job=0
         )
 
         self.current_time += 1
@@ -495,7 +495,8 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time
         batch_window = 60 * 60 * 6  # 6h
 
-        for timestep in range(timestep_start,timestep_end):
+        print(timestep_start, timestep_end)
+        for timestep in range(timestep_start, timestep_end):
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
