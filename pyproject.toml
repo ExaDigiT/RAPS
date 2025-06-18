@@ -15,6 +15,8 @@ dependencies = [
     "numpy==1.23.5",
     "rich==13.6.0",
     "fmpy==0.3.19",
+    "fsspec==2025.5.1",
+    "gcsfs==2025.5.1",
     "pandas==2.0.3",
     "scipy==1.10.1",
     "pyarrow==15.0.1",

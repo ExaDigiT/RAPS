@@ -44,6 +44,11 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
     # Adastra MI250
     python main.py --system adastraMI250 -f AdastaJobsMI250_15days.parquet 
 
+For Google cluster trace v2
+
+    # gcloudv2
+    python main.py --system gcloudv2 -f ~/data/gcloud/v2
+
 ## Perform Network Simulation
 
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
