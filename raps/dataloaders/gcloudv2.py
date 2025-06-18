@@ -7,6 +7,12 @@ import pandas as pd
 
 from raps.job import job_dict  # ensure RAPS is in PYTHONPATH
 
+"""
+Official instructions are here:
+
+https://drive.google.com/file/d/0B5g07T_gRDg9Z0lsSTEtTWtpOW8/view?resourcekey=0-cozD56gA4fUDdrkHnLJSrQ
+"""
+
 # Define expected column names for each supported event type
 V2_COLUMN_NAMES = {
     "job_events": [

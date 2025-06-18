@@ -1,5 +1,9 @@
 # **Google Cluster Trace V2 (2011) Dataset Overview**
 
+Some of this info may be incorrect. Look here for the official documentation:
+
+https://drive.google.com/file/d/0B5g07T_gRDg9Z0lsSTEtTWtpOW8/view?resourcekey=0-cozD56gA4fUDdrkHnLJSrQ
+
 This document provides a summary of the Google Cluster Trace V2 dataset, released in 2011\. This dataset offers insights into the operation of a large-scale production data center and its workload. It's crucial for research in areas like cluster scheduling, resource management, and workload characterization.
 
 ## **1\. Dataset Overview**
