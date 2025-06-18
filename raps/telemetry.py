@@ -17,7 +17,10 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--replay', nargs='+', type=str,
                         help='Either: path/to/joblive path/to/jobprofile' + \
                              ' -or- filename.npz (overrides --workload option)')
-    parser.add_argument('-p', '--plot', action='store_true', help='Output plots')
+    parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs','nodes'], help='Output plots')
+
+    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)") # duplicate in workload!
+
     parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
     parser.add_argument('--system', type=str, default='frontier', help='System config to use')
     choices = ['prescribed', 'poisson']
@@ -28,12 +31,15 @@ if __name__ == "__main__":
 
 import importlib
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
+from rich.progress import track
 
 from raps.config import ConfigManager
-from raps.job import Job
+from raps.job import Job, job_dict
 #from raps.account import Accounts
-from raps.plotting import plot_submit_times, plot_nodes_histogram, plot_job_gantt
+import matplotlib.pyplot as plt
+from raps.plotting import Plotter, plot_submit_times, plot_nodes_histogram, plot_job_gantt, spaced_colors
 from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seconds
 
 
@@ -78,6 +84,38 @@ class Telemetry:
         """Load telemetry data using custom data loaders."""
         return self.dataloader.load_data_from_df(*args, **kwargs)
 
+    def load_data_from_csv(self, file, *args, **kwargs):
+        jobs = []
+        df = pd.read_csv(file,chunksize=1, header='infer')
+        for d in df:
+            #print(d['name'].astype(str))
+            job_info = job_dict(nodes_required=None,
+                                name=d['name'].astype(str).item(),
+                                account=d['account'].astype(str).item(),
+                                cpu_trace=None,
+                                gpu_trace=None,
+                                ntx_trace=None,
+                                nrx_trace=None,
+                                end_state=d['state'].astype(str).item(),
+                                scheduled_nodes=d['scheduled_nodes'].item(),
+                                id=d['id'].astype(int).item(),
+                                priority=None,
+                                partition=None,
+                                submit_time=d['submit_time'].astype(int).item(),
+                                time_limit=None,
+                                start_time=d['start_time'].astype(int).item(),
+                                end_time=d['end_time'].astype(int).item(),
+                                wall_time=d['end_time'].astype(int).item() - d['start_time'].astype(int).item(),
+                                trace_time=None,
+                                trace_start_time=None,
+                                trace_end_time=None,
+                                trace_missing_values=None
+                                )
+            jobs.append(job_info)
+        minstarttime = min([x['start_time'] for x in jobs])
+        maxendtime = max([x['end_time'] for x in jobs])
+        return jobs, minstarttime, maxendtime, None
+
     def node_index_to_name(self, index: int):
         """ Convert node index into a name"""
         return self.dataloader.node_index_to_name(index, config=self.config)
@@ -118,13 +156,16 @@ class Telemetry:
                 if hasattr(args,'scale') and args.scale:
                     for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
                         job['nodes_required'] = random.randint(1, args.scale)
-                        job['requested_nodes'] = None  # Setting to None triggers scheduler to assign nodes
+                        job['scheduled_nodes'] = None  # Setting to None triggers scheduler to assign nodes
 
                 if hasattr(args,'policy') and args.policy == 'poisson':
                     print("available nodes:", config['AVAILABLE_NODES'])
                     for job in tqdm(jobs, desc="Rescheduling jobs"):
-                        job['requested_nodes'] = None
+                        job['scheduled_nodes'] = None
                         job['submit_time'] = next_arrival_byconfargs(config,args)
+            #elif file.endswith(".csv"):
+            #    jobs_from_file = td.load_data
+            #    jobs.extend(jobs_from_file)
             elif i == 0:
                 trigger_custom_dataloader = True
                 break
@@ -158,11 +199,81 @@ class Telemetry:
         return jobs, timestep_start, timestep_end, args
 
 
+def plot_jobs_gantt(*,ax=None,jobs):
+    if ax is None:
+        ax = plt.figure(figsize=(10,4))
+    # Submit_time and Wall_time
+    submit_t = [x['submit_time'] for x in jobs]
+    duration = [x['wall_time'] for x in jobs]
+    nodes_required = [x['nodes_required'] for x in jobs]
+
+    colors = spaced_colors(len(jobs))
+    offset = 0
+    for i in track(range(len(jobs)), description="Collecting information to plot"):
+        if args.gantt_nodes:
+            ax.barh(offset + nodes_required[i] / 2,duration[i], height=nodes_required[i], left=submit_t[i])
+            offset += nodes_required[i]
+        else:
+            ax.barh(i, duration[i], height=1.0, left=submit_t[i], color=colors[i])
+    print("Plotting")
+
+    ax.set_ylabel("Job ID")
+    ##ax_b labels:
+    ax.set_xlabel("time [hh:mm]")
+    minx_s = 0
+    maxx_s = np.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
+    x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
+    x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
+    x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
+                            (x1,x2) in [(n // 60,n % 60) for
+                                        n in x_label_mins[0::60]]]
+
+    ax.set_xticks(x_label_ticks,x_label_str)
+    #ax.yaxis.set_inverted(True)
+    return ax
+
+
+def plot_nodes_gantt(*,ax=None,jobs):
+    if ax is None:
+        ax = plt.figure(figsize=(10,4))
+    # Submit_time and Wall_time
+    duration = [x['wall_time'] for x in jobs]
+    #nodes_required = [x['nodes_required'] for x in jobs]
+    start_t = [x['start_time'] for x in jobs]
+    nodeIDs = [x['scheduled_nodes'] for x in jobs]
+
+    colors = spaced_colors(len(jobs))
+    for i in track(range(len(jobs)), description="Collecting information to plot"):
+        for nodeID in nodeIDs[i]:
+            ax.barh(nodeID, duration[i], height=1.0, left=start_t[i], color=colors[i])
+    print("Plotting")
+
+    ax.set_ylabel("Node ID")
+    ##ax_b labels:
+    ax.set_xlabel("time [hh:mm]")
+    minx_s = 0
+    maxx_s = np.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
+    x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
+    x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
+    x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
+                            (x1,x2) in [(n // 60,n % 60) for
+                                        n in x_label_mins[0::60]]]
+
+    ax.set_xticks(x_label_ticks,x_label_str)
+    #ax.yaxis.set_inverted(True)
+    return ax
+
+
 if __name__ == "__main__":
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
-    jobs, timestep_start, timestep_end, _ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
+    if args.replay is None:
+        parser.print_help()
+    if args.replay[0].endswith(".csv"):
+        jobs, timestep_start, timestep_end, _ = td.load_data_from_csv(args.replay[0])
+    else:
+        jobs, timestep_start, timestep_end, _ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
 
     timesteps = timestep_end - timestep_start
 
@@ -184,15 +295,24 @@ if __name__ == "__main__":
             last = job.submit_time
         if args.verbose:
             print(job)
-
+    dt_list = [item for item in dt_list if item is not None]
+    nr_list = [item for item in nr_list if item is not None]
+    wt_list = [item for item in wt_list if item is not None]
     print(f'Simulation will run for {timesteps} seconds')
-    print(f'Average job arrival time is: {np.mean(dt_list):.2f}s')
-    print(f'Average wall time is: {np.mean(wt_list):.2f}s')
-    print(f'Nodes required (avg): {np.mean(nr_list):.2f}')
-    print(f'Nodes required (max): {np.max(nr_list)}')
-    print(f'Nodes required (std): {np.std(nr_list):.2f}')
+    if dt_list:
+        print(f'Average job arrival time is: {np.mean(dt_list):.2f}s')
+    if wt_list:
+        print(f'Average wall time is: {np.mean(wt_list):.2f}s')
+    if nr_list:
+        print(f'Nodes required (avg): {np.mean(nr_list):.2f}')
+        print(f'Nodes required (max): {np.max(nr_list)}')
+        print(f'Nodes required (std): {np.std(nr_list):.2f}')
 
     if args.plot:
-        #plot_nodes_histogram(nr_list)
-        #plot_submit_times(submit_times, nr_list)
-        plot_job_gantt(submit_times, end_times, nr_list)
+        fig,ax = plt.subplots()
+    if args.plot == "jobs":
+        plot_jobs_gantt(ax=ax,jobs=jobs)
+        ax.invert_yaxis()
+    if args.plot == "nodes":
+        plot_nodes_gantt(ax=ax,jobs=jobs)
+    plt.show()
