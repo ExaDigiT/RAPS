@@ -250,7 +250,7 @@ def plot_job_gantt(start_times, end_times, node_counts):
 
     # We'll plot each job in a different row on the Y-axis
     y_positions = range(len(start_times))  # 0, 1, 2, ...
-    
+
     for s, e, n in zip(start_times, end_times, node_counts):
         # Bar placed at y = n
         plt.barh(
@@ -258,8 +258,8 @@ def plot_job_gantt(start_times, end_times, node_counts):
             width=e - s,        # job duration on the x-axis
             left=s,             # start time
             height=0.8,         # thickness of the bar
-            color='yellow', 
-            edgecolor='black', 
+            color='yellow',
+            edgecolor='black',
             alpha=0.8
         )
 
@@ -281,6 +281,18 @@ def plot_job_gantt(start_times, end_times, node_counts):
     plt.tight_layout()
     plt.savefig('job_gantt.png', dpi=300)
     plt.show()
+
+
+def spaced_colors(n, cmap_name='nipy_spectral'):
+    cmap = plt.get_cmap(cmap_name)
+    # Get n points spaced in [0,1]
+    base = np.linspace(0, 1, n, endpoint=False)
+    # Shuffle them to maximize distance between consecutive colors
+    # e.g. take every k-th, wrap around
+    step = int(np.ceil(np.sqrt(n)))
+    indices = (step * np.arange(n)) % n
+    values = base[indices]
+    return [cmap(v) for v in values]
 
 
 if __name__ == "__main__":
