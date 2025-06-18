@@ -35,17 +35,19 @@ class Scheduler:
                 continue
 
             nodes_available = False
-            if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-                if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
-                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
+            if job.nodes_required <= len(self.resource_manager.available_nodes):
+                if self.policy == PolicyType.REPLAY and job.scheduled_nodes:  # Check if we need exact set
+                    # is exact set available:
+                    nodes_available = set(job.scheduled_nodes).issubset(set(self.resource_manager.available_nodes))
                 else:
-                    continue   # continue instead of break, as later job with specific nodes may still be placed!
-            else:  # synthetic
-                if job.nodes_required:
-                    pass
-                else:
-                    raise ValueError("No number of nodes specified.")
-
+                    # we dont need the exact set:
+                    nodes_available = True  # Checked above
+                    if job.nodes_required == 0:
+                        raise ValueError(f"Job Requested zero nodes: {job}")
+                    #clear scheduled nodes
+                    job.scheduled_nodes = []
+            else:
+                pass  # not enough nodes available
 
             if nodes_available:
                 self.resource_manager.assign_nodes_to_job(job, current_time)
@@ -53,4 +55,4 @@ class Scheduler:
                 queue.remove(job)
             else:
                 # This is a replay so this should not happen
-                raise ValueError(f"Nodes not available!\nRequested:{job.requested_nodes}\nAvailable:{self.resource_manager.available_nodes}\n{job.__dict__}")
+                raise ValueError(f"Nodes not available!\nRequested:{job.scheduled_nodes}\nAvailable:{self.resource_manager.available_nodes}\n{job.__dict__}; Policy: {self.policy}")

@@ -57,7 +57,6 @@ class Scheduler:
 
                 # After backfill dedice continue processing the queue or wait, continuing may result in fairness issues.
                 if self.policy in [PolicyType.REPLAY]:
-                    # print(f"Nodes available {nodes_available} - Req:{len(job.requested_nodes)} N-avail:{len(self.resource_manager.available_nodes)}")
                     continue  # Regardless if the job at the front of the queue doenst fit, try placing all of them.
                 elif self.policy in [PolicyType.FCFS, PolicyType.PRIORITY,
                                      PolicyType.LJF, PolicyType.SJF]:
@@ -96,31 +95,28 @@ class Scheduler:
             return jobs_to_submit
 
     def place_job_and_manage_queues(self, job, queue,running, current_time):
-        self.resource_manager.assign_nodes_to_job(job, current_time)
+        self.resource_manager.assign_nodes_to_job(job, current_time, self.policy)
         running.append(job)
         queue.remove(job)
         if self.debug:
             scheduled_nodes = summarize_ranges(job.scheduled_nodes)
             print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
 
-    def check_available_nodes(self,job):
+    def check_available_nodes(self, job):
         nodes_available = False
-        if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-            if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
-                if self.policy == PolicyType.REPLAY:  # Check if exact set is available:
-                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
-                else:
-                    # Sufficiently large number of nodes available
-                    # but no exact set is required!
-                    nodes_available = True
-                    # remove the request for specific nodes and ask for n nodes
-                    job.nodes_required = len(job.requested_nodes)
-                    job.requested_nodes = []
+        if job.nodes_required <= len(self.resource_manager.available_nodes):
+            if self.policy == PolicyType.REPLAY and job.scheduled_nodes:  # Check if we need exact set
+                # is exact set available:
+                nodes_available = set(job.scheduled_nodes).issubset(set(self.resource_manager.available_nodes))
             else:
-                pass
-        else:  # Exact nodes not specified (e.g. synthetic jobs dont have nodes assigned)
-            nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
-
+                # we dont need the exact set:
+                nodes_available = True  # Checked above
+                if job.nodes_required == 0:
+                    raise ValueError(f"Job Requested zero nodes: {job}")
+                #clear scheduled nodes
+                job.scheduled_nodes = []
+        else:
+            pass  # not enough nodes available
         return nodes_available
 
     def backfill(self,queue:List, running:List, current_time):
@@ -144,8 +140,8 @@ class Scheduler:
         # Identify when the nex job in the queue could run as a time limit:
         first_job = queue[0]
         nodes_required = 0
-        if first_job.requested_nodes:
-            nodes_required = len(first_job.requested_nodes)
+        if self.policy == PolicyType.REPLAY and first_job.scheduled_nodes:  # This needs to be done propper!
+            nodes_required = len(first_job.scheduled_nodes)
         else:
             nodes_required = first_job.nodes_required
 

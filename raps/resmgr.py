@@ -1,5 +1,6 @@
 import numpy as np
-from .job import JobState
+from raps.job import JobState
+from raps.policy import PolicyType
 from scipy.stats import weibull_min
 
 
@@ -13,13 +14,11 @@ class ResourceManager:
         # You can track system utilization history here
         self.sys_util_history = []  # list of (time, utilization) tuples
 
-    def assign_nodes_to_job(self, job, current_time):
+    def assign_nodes_to_job(self, job, current_time, policy):
         """Assigns nodes to a job and updates the available nodes."""
         if len(self.available_nodes) < job.nodes_required:
             raise ValueError(f"Not enough available nodes to schedule job {job.id}")
-
-        if job.requested_nodes:  # Telemetry replay case
-            job.scheduled_nodes = job.requested_nodes
+        if policy == PolicyType.REPLAY and job.scheduled_nodes:
             self.available_nodes = [n for n in self.available_nodes if n not in job.scheduled_nodes]
         else:  # Synthetic or case using modified/poisson arrival times
             job.scheduled_nodes = self.available_nodes[:job.nodes_required]

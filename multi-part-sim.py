@@ -47,13 +47,11 @@ if args.replay:
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
             job['nodes_required'] = random.randint(1, args.scale)
-            job['requested_nodes'] = None # Setting to None triggers scheduler to assign nodes
 
     if args.arrival == 'poisson':
-        for job in tqdm(jobs, desc="Rescheduling jobs"):
+        for job in tqdm(jobs, desc="Adjusting job submission time"):
             partition = job['partition']
             partition_config = configs[partition_names.index(partition)]
-            job['requested_nodes'] = None
             job['submit_time'] = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
 
     elif args.arrival == 'prescribed':

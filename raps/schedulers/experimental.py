@@ -107,22 +107,19 @@ class Scheduler:
 
     def check_available_nodes(self,job):
         nodes_available = False
-        if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-            if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
-                if self.policy == PolicyType.REPLAY:  # Check if exact set is available:
-                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
-                else:
-                    # Sufficiently large number of nodes available
-                    # but no exact set is required!
-                    nodes_available = True
-                    # remove the request for specific nodes and ask for n nodes
-                    job.nodes_required = len(job.requested_nodes)
-                    job.requested_nodes = []
+        if job.nodes_required <= len(self.resource_manager.available_nodes):
+            if self.policy == PolicyType.REPLAY and job.scheduled_nodes:  # Check if we need exact set
+                # is exact set available:
+                nodes_available = set(job.scheduled_nodes).issubset(set(self.resource_manager.available_nodes))
             else:
-                pass
-        else:  # Exact nodes not specified (e.g. synthetic jobs dont have nodes assigned)
-            nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
-
+                # we dont need the exact set:
+                nodes_available = True  # Checked above
+                if job.nodes_required == 0:
+                    raise ValueError(f"Job Requested zero nodes: {job}")
+                #clear scheduled nodes
+                job.scheduled_nodes = []
+        else:
+            pass  # not enough nodes available
         return nodes_available
 
     def backfill(self,queue:List, running:List, current_time):
@@ -146,8 +143,8 @@ class Scheduler:
         # Identify when the nex job in the queue could run as a time limit:
         first_job = queue[0]
         nodes_required = 0
-        if first_job.requested_nodes:
-            nodes_required = len(first_job.requested_nodes)
+        if self.policy == PolicyType.REPLAY and first_job.scheduled_nodes:
+            nodes_required = len(first_job.scheduled_nodes)
         else:
             nodes_required = first_job.nodes_required
 

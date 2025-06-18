@@ -13,7 +13,8 @@ Implementing such using something like:
 
 def job_dict(*,nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
-             end_state, scheduled_nodes=None, id, priority=0, partition=0,
+             end_state, scheduled_nodes=None,
+             id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
              wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0, trace_missing_values=False):
     """ Return job info dictionary """
@@ -26,7 +27,7 @@ def job_dict(*,nodes_required, name, account, \
         'ntx_trace': ntx_trace,
         'nrx_trace': nrx_trace,
         'end_state': end_state,
-        'requested_nodes': scheduled_nodes,
+        'scheduled_nodes': scheduled_nodes,
         'id': id,
         'priority': priority,
         'partition': partition,
@@ -91,15 +92,19 @@ class Job:
         if self.id is None:  # This is wrong
             self.id = Job._get_next_id()
 
-        if self.scheduled_nodes and self.nodes_required == 0:
+        if self.nodes_required == 0 and self.scheduled_nodes != []:
             self.nodes_required = len(self.scheduled_nodes)
+        elif self.nodes_required != 0:
+            pass
+        else:
+            raise ValueError(f"{self.nodes_required} {self.scheduled_nodes}")
 
     def __repr__(self):
         """Return a string representation of the job."""
         return (f"Job(id={self.id}, name={self.name}, account={self.account}, "
-                f"nodes_required={self.nodes_required}, "
+                f"nodes_required={self.nodes_required}, scheduled_nodes={self.scheduled_nodes},  "
                 f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
-                f"end_state={self.end_state}, requested_nodes={self.requested_nodes}, "
+                f"end_state={self.end_state}, "
                 f"submit_time={self.submit_time}, time_limit={self.time_limit}, "
                 f"start_time={self.start_time}, end_time={self.end_time}, "
                 f"wall_time={self.wall_time}, "
@@ -107,7 +112,7 @@ class Job:
                 f"trace_start_time={self.trace_start_time}, "
                 f"trace_end_time={self.trace_end_time}, "
                 f"running_time={self.running_time}, state={self._state}, "
-                f"scheduled_nodes={self.scheduled_nodes}, power={self.power}, "
+                f"power={self.power}, "
                 f"power_history={self.power_history})")
 
     @property
@@ -155,6 +160,7 @@ class JobStatistics:
         self.name = job.name
         self.account = job.account
         self.num_nodes = len(job.scheduled_nodes)
+        self.scheduled_nodes = job.scheduled_nodes
         self.run_time = job.running_time
         self.submit_time = job.submit_time
         self.start_time = job.start_time
