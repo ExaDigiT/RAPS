@@ -72,7 +72,13 @@ class Telemetry:
             - args, which were used to generate the loaded snapshot
         """
         data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        return data['jobs'].tolist(), \
+        job_data = data['jobs'].tolist()
+        jobs = []
+        for job_info in job_data:
+            job = Job(job_info)
+            jobs.append(job)
+
+        return jobs, \
                int(data['timestep_start']), \
                int(data['timestep_end']), \
                data['args'].tolist()
@@ -192,7 +198,7 @@ class Telemetry:
                       f"All Args:\n{args_from_file}" +\
                       "To use these set them from the commandline!"
                       )
-                jobs.extend(Job(jobs_from_file))
+                jobs.extend(jobs_from_file)
                 timestep_start = min(timestep_start,timestep_start_from_file)
                 timestep_end = max(timestep_end, timestep_end_from_file)
 
