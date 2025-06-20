@@ -37,7 +37,7 @@ import pandas as pd
 from tqdm import tqdm
 from datetime import timedelta
 
-from ..job import job_dict
+from ..job import job_dict, Job
 from ..utils import power_to_utilization, next_arrival_byconfkwargs, convert_to_seconds
 
 
@@ -176,7 +176,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else []
 
         #net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
-        net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        net_tx, net_rx = None,None  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
 
         # no priorities defined!
         priority = row.get('priority', 0)
@@ -228,7 +228,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                                 trace_start_time=trace_start_time,
                                 trace_end_time=trace_end_time,
                                 trace_missing_values=trace_missing_values)
-            job_list.append(job_info)
+            job = Job(job_info)
+            job_list.append(job)
 
     return job_list, telemetry_start_time, telemetry_end_time
 

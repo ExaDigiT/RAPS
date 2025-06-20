@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from ..job import job_dict
+from ..job import job_dict, Job
 from ..utils import power_to_utilization, next_arrival_byconfkwargs
 
 
@@ -198,7 +198,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
                                 trace_end_time=trace_end_time,
                                 trace_missing_values=True
                                 )
-            jobs.append(job_info)
+            job = Job(job_info)
+            jobs.append(job)
         else:
             count_jobs_notOK += 1
 

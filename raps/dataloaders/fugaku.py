@@ -16,7 +16,7 @@
 """
 import pandas as pd
 from tqdm import tqdm
-from ..job import job_dict
+from ..job import job_dict, Job
 from ..utils import next_arrival
 
 
@@ -155,7 +155,8 @@ def load_data_from_df(df, **kwargs):
             trace_start_time=trace_start_time,
             trace_end_time=trace_end_time,
             trace_missing_values=trace_missing_values)
-        job_list.append(job_info)
+        job = Job(job_info)
+        job_list.append(job)
 
     return job_list, telemetry_start, telemetry_end
 

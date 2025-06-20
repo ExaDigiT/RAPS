@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from ..job import job_dict
+from ..job import job_dict, Job
 from ..utils import power_to_utilization, next_arrival_byconfkwargs
 
 
@@ -220,9 +220,10 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
                                 wall_time=wall_time, trace_time=trace_time,
                                 trace_start_time=trace_start_time,
                                 trace_end_time=trace_end_time,
+                                trace_quanta=config["TRACE_QUANTA"],
                                 trace_missing_values=trace_missing_values)
-
-            jobs.append(job_info)
+            job = Job(job_info)
+            jobs.append(job)
 
     return jobs, telemetry_start, telemetry_end
 
