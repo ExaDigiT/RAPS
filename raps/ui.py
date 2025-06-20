@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.live import Live
 from rich.progress import Progress,TextColumn,BarColumn,TaskProgressColumn,TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
 
-from .utils import summarize_ranges, convert_seconds
+from .utils import summarize_ranges, convert_seconds_to_hhmmss, convert_seconds_to_hhmm
 from .constants import ELLIPSES
 from .engine import TickData, Engine
 
@@ -125,13 +125,13 @@ class LayoutManager:
 
             row = [
                 str(job.id).zfill(5),
-                convert_seconds(job.wall_time),
+                convert_seconds_to_hhmm(job.wall_time),
                 str(job.name),
                 str(job.account),
                 job.state.value,
                 str(job.nodes_required),
                 nodes_display,
-                convert_seconds(job.running_time)
+                convert_seconds_to_hhmm(job.running_time)
             ]
             # Add the row with the 'white' style applied to the whole row
             table.add_row(*row, style="white")
@@ -166,7 +166,7 @@ class LayoutManager:
 
         # Add data row with white values
         row = [
-            convert_seconds(time),
+            convert_seconds_to_hhmmss(time),
             str(nrun),
             str(nqueue),
             str(active_nodes),

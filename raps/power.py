@@ -54,7 +54,7 @@ def compute_node_power(cpu_util, gpu_util, net_util, config):
     power_gpu = gpu_util * config['POWER_GPU_MAX'] + \
                 (config['GPUS_PER_NODE'] - gpu_util) * config['POWER_GPU_IDLE']
 
-    try: 
+    try:
         power_nic = config['POWER_NIC_IDLE'] + \
                     (config['POWER_NIC_MAX'] - config['POWER_NIC_IDLE']) * net_util
     except:
@@ -279,7 +279,7 @@ class PowerManager:
         self.power_state[node_indices] = power_value
         self.sivoc_loss[node_indices] = sivoc_loss
         return power_value[np.cumsum(job_lengths) - 1]
-    
+
 
     def calculate_rectifiers_needed(self, power_state_summed):
         """
@@ -386,7 +386,7 @@ class PowerManager:
             Array containing SIVOC losses for each CDU.
         """
         # Aggregate SIVOC losses
-        summed_sivoc_losses = np.sum(self.sivoc_loss/1000, axis=2)  # kW
+        summed_sivoc_losses = np.sum(self.sivoc_loss / 1000, axis=2)  # kW
         rows = self.sc_shape[0]
 
         # Add CDU numbers to table
@@ -398,7 +398,7 @@ class PowerManager:
         sivoc_loss_with_rows = np.hstack((sivoc_loss_with_rows, rack_sivoc_loss_sum))
 
         return sivoc_loss_with_rows
-    
+
     def get_power_df(self, rack_power, rack_loss):
         # Initialize the columns for power_df
         power_columns = self.config['POWER_DF_HEADER']
