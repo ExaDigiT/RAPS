@@ -86,15 +86,12 @@ class Engine:
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
         # Build a list of jobs whose start_time is <= current_time.
-        eligible = [job for job in jobs_to_submit if job['start_time'] < self.current_time]
+        eligible_jobs = []
+        eligible_jobs[:] = [job for job in jobs_to_submit if job.start_time < self.current_time]
         # Remove those jobs from jobs_to_submit:
-        jobs_to_submit[:] = [job for job in jobs_to_submit if job['start_time'] >= self.current_time]
+        jobs_to_submit[:] = [job for job in jobs_to_submit if job.start_time >= self.current_time]
         # Convert them to Job instances and build list of eligible jobs.
-        eligible_jobs_list = []
-        for job_data in eligible:
-            job_instance = Job(job_data)
-            eligible_jobs_list.append(job_instance)
-        self.queue += eligible_jobs_list
+        self.queue += eligible_jobs
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -103,23 +100,30 @@ class Engine:
 
         Adds eligible jobs to the queueu, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
+        returns
+        - true if new jobs are present
+        - false if no new jobs are present
         """
         # Build a list of jobs whose submit_time is <= current_time.
-        eligible = [job for job in jobs_to_submit if job['submit_time'] <= self.current_time]
+
+        eligible_jobs = []
+        eligible_jobs[:] = [job for job in jobs_to_submit if job.submit_time <= self.current_time]
         # Remove those jobs from jobs_to_submit:
-        jobs_to_submit[:] = [job for job in jobs_to_submit if job['submit_time'] > self.current_time]
+        jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_time]
         # Convert them to Job instances and build list of eligible jobs.
-        eligible_jobs_list = []
-        for job_data in eligible:
-            job_instance = Job(job_data)
-            eligible_jobs_list.append(job_instance)
-        self.queue += eligible_jobs_list
-        if eligible_jobs_list != []:
+        self.queue += eligible_jobs
+        if eligible_jobs != []:
             return True
         else:
             return False
 
     def prepare_timestep(self, replay:bool = True):
+
+        #update Running time
+        for job in self.running:
+            if job.state == JobState.RUNNING:
+                job.running_time = self.current_time - job.start_time
+
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
 
         for job in completed_jobs:
@@ -160,22 +164,24 @@ class Engine:
         gpu_utils = []
         net_utils = []
         if self.debug:
-                print(f"Current Time: {self.current_time}")
+            print(f"Current Time: {self.current_time}")
 
         for job in self.running:
 
             if self.debug:
                 print(f"JobID: {job.id}")
             if job.state == JobState.RUNNING:
-                job.running_time = self.current_time - job.start_time
 
                 if job.running_time > job.wall_time:
                     raise Exception(f"Job should have ended already!\n\
-                                       {job.running_time} > {job.wall_time}\n\
-                                       {len(job.cpu_trace)} vs. {job.running_time // self.config['TRACE_QUANTA']}\
+                                       {job.running_time} > {job.wall_time}\
                                     ")
 
-                time_quanta_index = int((job.running_time - job.trace_start_time) // self.config['TRACE_QUANTA'])
+                if job.trace_quanta:
+                    time_quanta_index = int((job.running_time - job.trace_start_time) // job.trace_quanta)
+                    if time_quanta_index < 0:
+                        time_quanta_index = 0
+
                 # If the running time is past the last time step in the
                 # trace, use the last value in the trace. This can
                 # happen if the last valid timesteps is e.g. 17%15,
@@ -185,52 +191,62 @@ class Engine:
                 # For every other error condition trace_start_ and
                 # _end_time are used!
                 # #print(type(job.cpu_trace))
-                if time_quanta_index < 0:
-                    time_quanta_index = 0
                 # Similar with the first time_quanta index: If the job started
                 # in the past and no trace if there, read index 0 until values
                 # are available.
-                if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
-                    if (isinstance(job.cpu_trace,list) and len(job.cpu_trace)) or (isinstance(job.cpu_trace,np.ndarray) and job.cpu_trace.size == 0):
-                        cpu_util = 0
-                    elif time_quanta_index < len(job.cpu_trace):
+
+                if (isinstance(job.cpu_trace,list) and job.cpu_trace != []) or \
+                   (isinstance(job.cpu_trace,np.ndarray) and job.cpu_trace.size != 0):
+                    if time_quanta_index < len(job.cpu_trace):
                         cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
                     else:
                         cpu_util = get_utilization(job.cpu_trace, max(0,len(job.cpu_trace) - 1))
                 elif isinstance(job.cpu_trace,float) or isinstance(job.cpu_trace,int):
                     cpu_util = job.cpu_trace
                 else:
-                    raise NotImplementedError()
+                    cpu_util = 0
 
-                if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
-                    if (isinstance(job.gpu_trace,list) and len(job.gpu_trace)) or (isinstance(job.gpu_trace,np.ndarray) and job.gpu_trace.size == 0):
-                        gpu_util = 0
-                    elif time_quanta_index < len(job.gpu_trace):
+                if (isinstance(job.gpu_trace,list) and job.gpu_trace != []) or \
+                   (isinstance(job.gpu_trace,np.ndarray) and job.gpu_trace.size != 0):
+                    if time_quanta_index < len(job.gpu_trace):
                         gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
                     else:
                         gpu_util = get_utilization(job.gpu_trace, max(0,len(job.gpu_trace) - 1))
                 elif isinstance(job.gpu_trace,float) or isinstance(job.gpu_trace,int):
                     gpu_util = job.gpu_trace
                 else:
-                    raise NotImplementedError()
+                    gpu_util = 0
 
-                net_util = 0
-
-                if (isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray)) and len(job.ntx_trace) and (isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,list)) and len(job.nrx_trace):
-                    net_tx = get_utilization(job.ntx_trace, time_quanta_index)
-                    net_rx = get_utilization(job.nrx_trace, time_quanta_index)
+                if (((isinstance(job.ntx_trace,list) and job.ntx_trace != []) or \
+                     (isinstance(job.ntx_trace,np.ndarray) and job.ntx_trace.size != 0)) \
+                    and \
+                    ((isinstance(job.nrx_trace,list) and job.nrx_trace != []) or \
+                     (isinstance(job.nrx_trace,np.ndarray) and job.nrx_trace.size != 0))):
+                    if time_quanta_index < len(job.ntx_trace):
+                        net_tx = get_utilization(job.ntx_trace, time_quanta_index)
+                    else:
+                        net_tx = get_utilization(job.ntx_trace, max(0,len(job.ntx_trace) - 1))
+                    if time_quanta_index < len(job.nrx_trace):
+                        net_rx = get_utilization(job.nrx_trace, time_quanta_index)
+                    else:
+                        net_rx = get_utilization(job.nrx_trace, max(0,len(job.nrx_trace) - 1))
                     net_util = network_utilization(net_tx, net_rx)
-                    net_utils.append(net_util)
+                elif (isinstance(job.ntx_trace,float) or isinstance(job.ntx_trace,int)) and \
+                     (isinstance(job.nrx_trace,float) or isinstance(job.nrx_trace,int)):
+                    net_tx = job.ntx_trace
+                    net_rx = job.nrx_trace
+                    net_util = network_utilization(net_tx, net_rx)
                 else:
-                    net_utils.append(0)
+                    net_util = 0
 
                 scheduled_nodes.append(job.scheduled_nodes)  # ?
                 cpu_utils.append(cpu_util)
                 gpu_utils.append(gpu_util)
+                net_utils.append(net_util)
             else:
                 raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
 
-        if len(scheduled_nodes) > 0:
+        if len(scheduled_nodes) > 0:  # When can this not happen?
             self.flops_manager.update_flop_state(scheduled_nodes, cpu_utils, gpu_utils)
             jobs_power = self.power_manager.update_power_state(scheduled_nodes, cpu_utils, gpu_utils, net_utils)
 
@@ -313,9 +329,9 @@ class Engine:
         self.current_time = timestep_start
 
         # Keep only jobs that have not yet ended and that have a chance to start
-        all_jobs[:] = [job for job in all_jobs if job['end_time'] >= timestep_start and job['submit_time'] < timestep_end]
+        all_jobs[:] = [job for job in all_jobs if job.end_time >= timestep_start and job.submit_time < timestep_end]
 
-        all_jobs.sort(key=lambda j: j['submit_time'])
+        all_jobs.sort(key=lambda j: j.submit_time)
 
         self.add_running_jobs_to_queue(all_jobs)
         # Set policy to replay and no backfill to get the original prefilled placement.
@@ -350,14 +366,14 @@ class Engine:
         all_jobs = jobs.copy()
         jobs = []
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
-        batch_window = max(60 * 60 * 6, 2 * time_delta)  # 6h
+        batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
 
-        for timestep in range(timestep_start,timestep_end):
+        for timestep in range(timestep_start,timestep_end):  # Runs every seconds!
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
-                jobs += [job for job in all_jobs if job['submit_time'] <= timestep + batch_window]
-                all_jobs[:] = [job for job in all_jobs if job['submit_time'] > timestep + batch_window]
+                jobs += [job for job in all_jobs if job.submit_time <= timestep + batch_window]
+                all_jobs[:] = [job for job in all_jobs if job.submit_time > timestep + batch_window]
 
             # Start Siulation loop:
             # 1. Cleanup old jobs
@@ -366,7 +382,8 @@ class Engine:
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
             # 3. Schedule jobs that are now in the queue.
-            self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
+            if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions:
+                self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
 
             # Stop the simulation if no more jobs are running or in the queue or in the job list.
             if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:
@@ -376,7 +393,7 @@ class Engine:
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
-            if 0 == timestep % time_delta:
+            if 0 == (timestep % time_delta):
                 tick_data = self.tick(time_delta)
                 tick_data.completed = completed_jobs
                 yield tick_data

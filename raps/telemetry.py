@@ -76,16 +76,15 @@ class Telemetry:
             - args, which were used to generate the loaded snapshot
         """
         data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        job_data = data['jobs'].tolist()
-        jobs = []
-        for job_info in job_data:
-            job = Job(job_info)
-            jobs.append(job)
+        jobs = data['jobs'].tolist()
+        timestep_start = int(data['timestep_start'])
+        timestep_end = int(data['timestep_end'])
+        args_from_file = data['args'].tolist()
 
         return jobs, \
-               int(data['timestep_start']), \
-               int(data['timestep_end']), \
-               data['args'].tolist()
+               timestep_start, \
+               timestep_end, \
+               args_from_file
 
     def load_csv_results(self, file):
         jobs = []
@@ -233,7 +232,10 @@ class Telemetry:
                 self.dirname = create_casename()
 
             print(*args.replay)
-            jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
+            try:
+                jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
+            except AssertionError:
+                raise ValueError("Forgot --is-results-file ?")
             timestep_start = min(timestep_start, timestep_start_from_data)
             timestep_end = max(timestep_end, timestep_end_from_data)
             self.save_snapshot(jobs=jobs,
