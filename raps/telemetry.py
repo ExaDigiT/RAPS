@@ -60,10 +60,10 @@ class Telemetry:
 
     def save_snapshot(self,*, jobs: list, timestep_start, timestep_end, args, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
-        array_of_job_dicts = []
+        list_of_job_dicts = []
         for job in jobs:
-            array_of_job_dicts.append(job.__dict__)
-        np.savez_compressed(filename, jobs=array_of_job_dicts, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
+            list_of_job_dicts.append(job.__dict__)
+        np.savez_compressed(filename, jobs=list_of_job_dicts, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
 
     def load_snapshot(self, snapshot: str) -> list:
         """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
@@ -76,7 +76,10 @@ class Telemetry:
             - args, which were used to generate the loaded snapshot
         """
         data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        jobs = data['jobs'].tolist()
+        jobs = []
+        list_of_job_dicts = data['jobs'].tolist()
+        for job_info in list_of_job_dicts:
+            jobs.append(Job(job_info))
         timestep_start = int(data['timestep_start'])
         timestep_end = int(data['timestep_end'])
         args_from_file = data['args'].tolist()

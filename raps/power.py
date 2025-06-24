@@ -164,6 +164,7 @@ class PowerManager:
     - down_nodes: Nodes that are currently down.
     - down_rack: Rack number of down nodes.
     """
+
     def __init__(self, power_func=compute_node_power, **config):
         """
         Initialize the PowerManager object.
@@ -189,7 +190,8 @@ class PowerManager:
         if power_func in [compute_node_power_uncertainties, \
                           compute_node_power_validate_uncertainties]:
             self.uncertainties = True
-        if self.down_nodes: self.apply_down_nodes()
+        if self.down_nodes:
+            self.apply_down_nodes()
 
     def get_peak_power(self):
         """Estimate peak power of system for setting max value of gauges in dashboard"""
@@ -197,7 +199,7 @@ class PowerManager:
         blades_per_rectifier = self.config['BLADES_PER_CHASSIS'] / self.config['RECTIFIERS_PER_CHASSIS']
         rectifier_load = blades_per_rectifier * self.config['NODES_PER_BLADE'] * node_power
         rectifier_power = compute_loss(rectifier_load, self.config['RECTIFIER_LOSS_CONSTANT'], \
-                                       self.config['RECTIFIER_EFFICIENCY']) # with AC-DC conversion losses
+                                       self.config['RECTIFIER_EFFICIENCY'])  # with AC-DC conversion losses
         chassis_power = self.config['BLADES_PER_CHASSIS'] * rectifier_power / blades_per_rectifier \
                       + self.config['SWITCHES_PER_CHASSIS'] * self.config['POWER_SWITCH']
         rack_power = chassis_power * self.config['CHASSIS_PER_RACK']
@@ -335,8 +337,8 @@ class PowerManager:
                         power_per_rectifier = chassis_power[i, j, k] / num_rectifiers
                         rectifier_power[i, j, k, :num_rectifiers] = power_per_rectifier
                         power_with_losses[i, j, k, :num_rectifiers] = compute_loss(power_per_rectifier, \
-                                                                      self.config['RECTIFIER_LOSS_CONSTANT'], \
-                                                                      self.config['RECTIFIER_EFFICIENCY'])
+                                                                                   self.config['RECTIFIER_LOSS_CONSTANT'], \
+                                                                                   self.config['RECTIFIER_EFFICIENCY'])
 
             rectifier_power = np.nan_to_num(rectifier_power)
             power_with_losses = np.nan_to_num(power_with_losses)
