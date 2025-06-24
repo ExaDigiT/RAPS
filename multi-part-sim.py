@@ -42,17 +42,17 @@ if args.replay:
 
     # Randomly assign partition
     for job in jobs:
-        job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
+        job.partition = random.choices(partition_names, weights=available_nodes, k=1)[0]
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-            job['nodes_required'] = random.randint(1, args.scale)
+            job.nodes_required = random.randint(1, args.scale)
 
     if args.arrival == 'poisson':
         for job in tqdm(jobs, desc="Adjusting job submission time"):
-            partition = job['partition']
+            partition = job.partition
             partition_config = configs[partition_names.index(partition)]
-            job['submit_time'] = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
+            job.submit_time = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
 
     elif args.arrival == 'prescribed':
         raise NotImplementedError
@@ -66,7 +66,7 @@ else:  # Synthetic workload
 # Group jobs by partition
 jobs_by_partition = {partition: [] for partition in partition_names}
 for job in jobs:
-    jobs_by_partition[job['partition']].append(job)
+    jobs_by_partition[job.partition].append(job)
 
 # Initialize layout managers for each partition
 layout_managers = {}

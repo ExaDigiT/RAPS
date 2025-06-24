@@ -6,6 +6,7 @@ import random
 import pandas as pd
 import os
 import time
+import math
 
 from raps.helpers import check_python_version
 check_python_version()
@@ -79,7 +80,7 @@ else:  # Synthetic jobs
 
     timestep_start = 0
     if hasattr(jobs[0],'end_time'):
-        timestep_end = max([job.end_time for job in jobs])
+        timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
     else:
         timestep_end = 88200  # 24 hours
 
@@ -130,9 +131,9 @@ if args.time_delta:
     time_delta = convert_to_seconds(args.time_delta)
 else:
     time_delta = config['TRACE_QUANTA']
-print(time_delta)
 
 print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
+print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].trace_quanta}s.')
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 

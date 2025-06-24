@@ -8,8 +8,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
 from rich.progress import Progress,TextColumn,BarColumn,TaskProgressColumn,TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
+from contextlib import nullcontext
 
-from .utils import summarize_ranges, convert_seconds
+from .utils import summarize_ranges, convert_seconds_to_hhmmss, convert_seconds_to_hhmm
 from .constants import ELLIPSES
 from .engine import TickData, Engine
 
@@ -40,19 +41,20 @@ class LayoutManager:
         self.progress_task = self.progress.add_task("Progress",total=total_timesteps, name="Progress")
 
     def setup_layout(self, layout_type):
-        self.layout.split_column(Layout(name="main"),Layout(name="progress",size=1))
-        if layout_type == "layout2":
-            self.layout["main"].split_row(Layout(name="left", ratio=3), Layout(name="right", ratio=2))
-            self.layout["main"]["left"].split_column(
-                Layout(name="pressflow", ratio=6),
-                Layout(name="powertemp", ratio=11),
-                Layout(name="totpower", ratio=3),
-            )
-            self.layout["main"]["right"].split(Layout(name="scheduled", ratio=17), Layout(name="status", ratio=3))
-        else:
-            self.layout["main"].split_row(Layout(name="left", ratio=1), Layout(name="right", ratio=1))
-            self.layout["main"]["left"].split_column(Layout(name="upper", ratio=8), Layout(name="lower", ratio=2))
-            self.layout["main"]["right"].split_column(Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
+        if not self.debug:
+            self.layout.split_column(Layout(name="main"),Layout(name="progress",size=1))
+            if layout_type == "layout2":
+                self.layout["main"].split_row(Layout(name="left", ratio=3), Layout(name="right", ratio=2))
+                self.layout["main"]["left"].split_column(
+                    Layout(name="pressflow", ratio=6),
+                    Layout(name="powertemp", ratio=11),
+                    Layout(name="totpower", ratio=3),
+                )
+                self.layout["main"]["right"].split(Layout(name="scheduled", ratio=17), Layout(name="status", ratio=3))
+            else:
+                self.layout["main"].split_row(Layout(name="left", ratio=1), Layout(name="right", ratio=1))
+                self.layout["main"]["left"].split_column(Layout(name="upper", ratio=8), Layout(name="lower", ratio=2))
+                self.layout["main"]["right"].split_column(Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
 
     def create_table(self, title, columns, header_style="bold green"):
         """
@@ -125,13 +127,13 @@ class LayoutManager:
 
             row = [
                 str(job.id).zfill(5),
-                convert_seconds(job.wall_time),
+                convert_seconds_to_hhmm(job.wall_time),
                 str(job.name),
                 str(job.account),
                 job.state.value,
                 str(job.nodes_required),
                 nodes_display,
-                convert_seconds(job.running_time)
+                convert_seconds_to_hhmm(job.running_time)
             ]
             # Add the row with the 'white' style applied to the whole row
             table.add_row(*row, style="white")
@@ -166,7 +168,7 @@ class LayoutManager:
 
         # Add data row with white values
         row = [
-            convert_seconds(time),
+            convert_seconds_to_hhmmss(time),
             str(nrun),
             str(nqueue),
             str(active_nodes),
@@ -401,6 +403,8 @@ class LayoutManager:
         self.layout["progress"].update(self.progress.get_renderable())
 
     def update(self, data: TickData, time_delta=1):
+        if self.debug:
+            return
         uncertainties = self.engine.power_manager.uncertainties
 
         if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
@@ -431,8 +435,12 @@ class LayoutManager:
 
     def run(self, jobs, timestep_start, timestep_end, time_delta):
         """ Runs the UI, blocking until the simulation is complete """
-        with Live(self.layout, refresh_per_second=5):
-            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta):
+        if not self.debug:
+            context = Live(self.layout, refresh_per_second=5)
+        else:
+            context = nullcontext()
+        with context:
+            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True):
                 if data:
                     self.update(data,time_delta)
 

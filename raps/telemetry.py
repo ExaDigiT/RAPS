@@ -12,6 +12,7 @@ import random
 import argparse
 import itertools
 import json
+import os.path
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Telemetry data validator')
@@ -59,7 +60,10 @@ class Telemetry:
 
     def save_snapshot(self,*, jobs: list, timestep_start, timestep_end, args, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
-        np.savez_compressed(filename, jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
+        list_of_job_dicts = []
+        for job in jobs:
+            list_of_job_dicts.append(job.__dict__)
+        np.savez_compressed(filename, jobs=list_of_job_dicts, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
 
     def load_snapshot(self, snapshot: str) -> list:
         """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
@@ -72,16 +76,18 @@ class Telemetry:
             - args, which were used to generate the loaded snapshot
         """
         data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        job_data = data['jobs'].tolist()
         jobs = []
-        for job_info in job_data:
-            job = Job(job_info)
-            jobs.append(job)
+        list_of_job_dicts = data['jobs'].tolist()
+        for job_info in list_of_job_dicts:
+            jobs.append(Job(job_info))
+        timestep_start = int(data['timestep_start'])
+        timestep_end = int(data['timestep_end'])
+        args_from_file = data['args'].tolist()
 
         return jobs, \
-               int(data['timestep_start']), \
-               int(data['timestep_end']), \
-               data['args'].tolist()
+               timestep_start, \
+               timestep_end, \
+               args_from_file
 
     def load_csv_results(self, file):
         jobs = []
@@ -117,8 +123,9 @@ class Telemetry:
                                 trace_end_time=None,
                                 #trace_missing_values=line.get('trace_missing_values').item(),
                                 trace_missing_values=None
-                           )
-            jobs.append(Job(job_info))
+                                )
+            job = Job(job_info)
+            jobs.append(job)
         return jobs, time_start, time_end, args
 
     def load_data(self, files):
@@ -182,6 +189,7 @@ class Telemetry:
         jobs = []
         trigger_custom_dataloader = False
         for i,file in enumerate(files):
+            file = os.path.normpath(file.lstrip('"').rstrip('"'))
             if hasattr(args,'is_results_file') and args.is_results_file:
                 if file.endswith(".csv"):
                     jobs, timestep_start, timestep, _ = self.load_csv_results(file)
@@ -212,14 +220,8 @@ class Telemetry:
                     for job in tqdm(jobs, desc="Rescheduling jobs"):
                         job['scheduled_nodes'] = None
                         job['submit_time'] = next_arrival_byconfargs(config,args)
-            #elif file.endswith(".csv"):
-            #    jobs_from_file = td.load_data
-            #    jobs.extend(jobs_from_file)
-            elif i == 0:
-                trigger_custom_dataloader = True
-                break
             else:
-                print("Multiple files given as input.")
+                trigger_custom_dataloader = True
                 break
 
         if trigger_custom_dataloader:  # custom data loader
@@ -233,7 +235,10 @@ class Telemetry:
                 self.dirname = create_casename()
 
             print(*args.replay)
-            jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
+            try:
+                jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
+            except AssertionError:
+                raise ValueError("Forgot --is-results-file ?")
             timestep_start = min(timestep_start, timestep_start_from_data)
             timestep_end = max(timestep_end, timestep_end_from_data)
             self.save_snapshot(jobs=jobs,

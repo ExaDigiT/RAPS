@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from ..job import job_dict
+from ..job import job_dict, Job
 from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt
 
 
@@ -117,10 +117,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     - trace_time (lenght of each trace in seconds)
     - trace_start_time (time offset in seconds after which the trace starts)
     - trace_end_time (time offset in seconds after which the trace ends)
+    - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta)
     has to be set for use within the simulation
 
     The values trace_start_time are similar to the telemetry_start and
-    telemetry_stop but job specific.
+    telemetry_stop but may different due to missing data, for each job.
 
     The returned values are these three:
         - The list of parsed jobs. (as a job_dict)
@@ -231,14 +232,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if np.isnan(wall_time):
             wall_time = 0
 
-        trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
-
-
+        trace_quanta = config['TRACE_QUANTA']
+        trace_time = gpu_trace.size * trace_quanta  # seconds
 
         trace_start_time = 0
         trace_end_time = trace_time
         if wall_time > trace_time:
             missing_trace_time = int(wall_time - trace_time)
+            trace_missing_values = True
             if start_time < 0:
                 trace_start_time = missing_trace_time
                 trace_end_time = wall_time
@@ -247,6 +248,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 trace_end_time = trace_time
             else:
                 print(f"Job: {job_id} {end_state} {start_time} - {end_time},Trace: {trace_start_time} - {trace_end_time} Missing: {missing_trace_time}!")
+        else:
+            trace_missing_values = False
 
         xnames = jobs_df.loc[jidx, 'xnames']
         # Don't replay any job with an empty set of xnames
@@ -288,8 +291,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 account=account,
                 cpu_trace=cpu_trace,
                 gpu_trace=gpu_trace,
-                nrx_trace=[],
-                ntx_trace=[],
+                nrx_trace=None,
+                ntx_trace=None,
                 end_state=end_state,
                 scheduled_nodes=scheduled_nodes,
                 id=job_id,
@@ -297,9 +300,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 submit_time=submit_time, time_limit=time_limit,
                 start_time=start_time, end_time=end_time,
                 wall_time=wall_time, trace_time=trace_time,
-                trace_start_time=trace_start_time, trace_end_time=trace_end_time)
-            jobs.append(job_info)
+                trace_start_time=trace_start_time, trace_end_time=trace_end_time,
+                trace_quanta=trace_quanta, trace_missing_values=trace_missing_values)
 
+            job = Job(job_info)
+            jobs.append(job)
     return jobs, telemetry_start, telemetry_end
 
 

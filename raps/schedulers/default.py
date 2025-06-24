@@ -52,7 +52,7 @@ class Scheduler:
             if nodes_available:
                 self.place_job_and_manage_queues(job, queue, running, current_time)
             else:  # In case the job was not placed, see how we should continue:
-                if self.bfpolicy is not None:
+                if self.bfpolicy is not None or self.bfpolicy is not BackfillType.NONE:
                     self.backfill(queue, running, current_time)
 
                 # After backfill dedice continue processing the queue or wait, continuing may result in fairness issues.

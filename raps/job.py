@@ -15,8 +15,9 @@ def job_dict(*,nodes_required, name, account, \
              cpu_trace, gpu_trace, ntx_trace, nrx_trace, \
              end_state, scheduled_nodes=None,
              id, priority=0, partition=0,
-             submit_time=0, time_limit=0, start_time=0, end_time=0,
-             wall_time=0, trace_time=0, trace_start_time=0,trace_end_time=0, trace_missing_values=False):
+             submit_time=0, time_limit=0, start_time=0, end_time=0, wall_time=0,
+             trace_time=0, trace_start_time=0, trace_end_time=0, trace_quanta=None,
+             trace_missing_values=False):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -40,8 +41,8 @@ def job_dict(*,nodes_required, name, account, \
         'trace_time': trace_time,
         'trace_start_time': trace_start_time,
         'trace_end_time': trace_end_time,
+        'trace_quanta': trace_quanta,
         'trace_missing_values': trace_missing_values
-
     }
 
 
@@ -83,6 +84,7 @@ class Job:
         self.trace_time = None    # Time period for which traces are available
         self.trace_start_time = None  # Relative start time of the trace (to running time)
         self.trace_end_time = None    # Relative end time of the trace
+        self.trace_quanta = None  # Trace quanta associated with the job # None means single value!
         self.running_time = 0     # Current running time updated when simulating
 
         # If a job dict was given, override the values from the job_dict:
@@ -118,6 +120,7 @@ class Job:
                 f"trace_time={self.trace_time}, "
                 f"trace_start_time={self.trace_start_time}, "
                 f"trace_end_time={self.trace_end_time}, "
+                f"trace_quanta={self.trace_quanta}, "
                 f"running_time={self.running_time}, state={self._state}, "
                 f"power={self.power}, "
                 f"power_history={self.power_history})")
@@ -200,6 +203,8 @@ class JobStatistics:
                 self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
         elif isinstance(job.ntx_trace,int) or isinstance(job.ntx_trace,float):
             self.avg_ntx_usage = job.ntx_trace
+        else:
+            self.avg_ntx_usage = 0
 
         if isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,np.ndarray):
             if len(job.nrx_trace) == 0:
@@ -208,6 +213,8 @@ class JobStatistics:
                 self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
         elif isinstance(job.nrx_trace,int) or isinstance(job.nrx_trace,float):
             self.avg_nrx_usage = job.nrx_trace
+        else:
+            self.avg_nrx_usage = 0
 
         if len(job.power_history) == 0:
             self.avg_node_power = 0

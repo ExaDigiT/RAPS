@@ -29,7 +29,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
-from raps.job import job_dict
+from raps.job import job_dict, Job
 from raps.utils import create_file_indexed, create_dir_indexed
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
@@ -174,19 +174,23 @@ class Workload:
             cpu_trace = cpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             gpu_trace = gpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
-            net_tx, net_rx = [], []
-            jobs.append(job_dict(nodes_required=nodes_required, name=name,
-                                 account=account, cpu_trace=cpu_trace,
-                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
-                                 nrx_trace=net_rx, end_state=end_state,
-                                 id=job_index, priority=priority,
-                                 partition=partition,
-                                 submit_time=submit_time,
-                                 time_limit=time_limit,
-                                 start_time=start_time,
-                                 end_time=end_time,
-                                 wall_time=wall_time, trace_time=wall_time,
-                                 trace_start_time=0, trace_end_time=wall_time))
+            net_tx, net_rx = None, None
+            job_info = job_dict(nodes_required=nodes_required, name=name,
+                                account=account, cpu_trace=cpu_trace,
+                                gpu_trace=gpu_trace, ntx_trace=net_tx,
+                                nrx_trace=net_rx, end_state=end_state,
+                                id=job_index, priority=priority,
+                                partition=partition,
+                                submit_time=submit_time,
+                                time_limit=time_limit,
+                                start_time=start_time,
+                                end_time=end_time,
+                                wall_time=wall_time, trace_time=wall_time,
+                                trace_start_time=0, trace_end_time=wall_time,
+                                trace_quanta=config['TRACE_QUANTA']
+                                )
+            job = Job(job_info)
+            jobs.append(job)
         return jobs
 
     def synthetic(self, **kwargs):
@@ -291,12 +295,12 @@ class Workload:
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
-            net_tx, net_rx = [], []
+            net_tx, net_rx = None, None
 
             # Jobs arrive according to Poisson process
             time_to_next_job = next_arrival_byconfargs(config,args)
 
-            jobs.append(job_dict(nodes_required=nodes_required, name=name,
+            job_info = job_dict(nodes_required=nodes_required, name=name,
                                  account=account, cpu_trace=cpu_trace,
                                  gpu_trace=gpu_trace, ntx_trace=net_tx,
                                  nrx_trace=net_rx, end_state=end_state,
@@ -307,7 +311,11 @@ class Workload:
                                  start_time=time_to_next_job,
                                  end_time=time_to_next_job + wall_time,
                                  wall_time=wall_time, trace_time=wall_time,
-                                 trace_start_time=0, trace_end_time=wall_time))
+                                 trace_start_time=0, trace_end_time=wall_time,
+                                 trace_quanta=config['TRACE_QUANTA']
+                                )
+            job = Job(job_info)
+            jobs.append(job)
         return jobs
 
     def random(self, **kwargs):
@@ -328,31 +336,33 @@ class Workload:
             cpu_util = config['CPUS_PER_NODE']
             gpu_util = config['GPUS_PER_NODE']
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
-            net_tx, net_rx = [], []
+            net_tx, net_rx = None, None
 
             job_time = len(gpu_trace) * config['TRACE_QUANTA']
             # Create job info for this partition
-            job_info = job_dict(
-                nodes_required=config['AVAILABLE_NODES'],
-                scheduled_nodes=[],  # Down nodes, therefore doesnt work list(range(config['AVAILABLE_NODES'])),
-                name=f"Max Test {partition}",
-                account=ACCT_NAMES[0],
-                cpu_trace=cpu_trace,
-                gpu_trace=gpu_trace,
-                ntx_trace=net_tx,
-                nrx_trace=net_rx,
-                end_state='COMPLETED',
-                id=None,
-                priority=100,
-                partition=partition,
-                time_limit=job_time + 1,
-                start_time=0,
-                end_time=job_time,
-                wall_time=job_time,
-                trace_time=job_time,
-                trace_start_time=0,
-                trace_end_time=job_time)
-            jobs.append(job_info)  # Add job to the list
+            job_info = job_dict(nodes_required=config['AVAILABLE_NODES'],
+                                scheduled_nodes=[],  # Down nodes, therefore doesnt work list(range(config['AVAILABLE_NODES'])),
+                                name=f"Max Test {partition}",
+                                account=ACCT_NAMES[0],
+                                cpu_trace=cpu_trace,
+                                gpu_trace=gpu_trace,
+                                ntx_trace=net_tx,
+                                nrx_trace=net_rx,
+                                end_state='COMPLETED',
+                                id=None,
+                                priority=100,
+                                partition=partition,
+                                time_limit=job_time + 1,
+                                start_time=0,
+                                end_time=job_time,
+                                wall_time=job_time,
+                                trace_time=job_time,
+                                trace_start_time=0,
+                                trace_end_time=job_time,
+                                trace_quanta=config['TRACE_QUANTA']
+                                )
+            job = Job(job_info)
+            jobs.append(job)  # Add job to the list
 
         return jobs
 
@@ -366,7 +376,7 @@ class Workload:
             # Generate traces based on partition-specific configuration
             cpu_util, gpu_util = 0, 0
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 10800, config['TRACE_QUANTA'])
-            net_tx, net_rx = [], []
+            net_tx, net_rx = None, None
 
             job_time = len(gpu_trace) * config['TRACE_QUANTA']
             # Create job info for this partition
@@ -390,8 +400,10 @@ class Workload:
                 wall_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
-                trace_end_time=job_time)
-            jobs.append(job_info)  # Add job to the list
+                trace_end_time=job_time,
+                trace_quanta=config['TRACE_QUANTA'])
+            job = Job(job_info)
+            jobs.append(job)  # Add job to the list
 
         return jobs
 
@@ -405,7 +417,7 @@ class Workload:
         for partition in self.partitions:
             # Fetch partition-specific configuration
             config = self.config_map[partition]
-            net_tx, net_rx = [], []
+            net_tx, net_rx = None, None
 
             # Max test
             cpu_util, gpu_util = 1, 4
@@ -434,8 +446,10 @@ class Workload:
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
-                trace_missing_values=False)
-            jobs.append(job_info)
+                trace_missing_values=False,
+                trace_quanta=config['TRACE_QUANTA'])
+            job = Job(job_info)
+            jobs.append(job)
 
             # OpenMxP run
             cpu_util, gpu_util = 0, 4
@@ -463,8 +477,10 @@ class Workload:
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
-                trace_missing_values=False)
-            jobs.append(job_info)
+                trace_missing_values=False,
+                trace_quanta=config['TRACE_QUANTA'])
+            job = Job(job_info)
+            jobs.append(job)
 
             # HPL run
             cpu_util, gpu_util = 0.33, 0.79 * 4  # based on 24-01-18 run
@@ -491,8 +507,10 @@ class Workload:
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
-                trace_missing_values=False)
-            jobs.append(job_info)
+                trace_missing_values=False,
+                trace_quanta=config['TRACE_QUANTA'])
+            job = Job(job_info)
+            jobs.append(job)
 
             # Idle test
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, 3600, config['TRACE_QUANTA'])
@@ -518,8 +536,10 @@ class Workload:
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
-                trace_missing_values=False)
-            jobs.append(job_info)
+                trace_missing_values=False,
+                trace_quanta=config['TRACE_QUANTA'])
+            job = Job(job_info)
+            jobs.append(job)
 
         return jobs
 
@@ -532,9 +552,9 @@ def plot_job_hist(jobs,config=None,dist_split=None):
         num_dist = len(dist_split)
         split = dist_split
 
-    y = [y['nodes_required'] for y in jobs]
-    x = [x['wall_time'] for x in jobs]
-    x2 = [x['time_limit'] for x in jobs]
+    y = [y.nodes_required for y in jobs]
+    x = [x.wall_time for x in jobs]
+    x2 = [x.time_limit for x in jobs]
     fig_m = plt.figure()
     gs = fig_m.add_gridspec(30, 1)
     gs0 = gs[0:20].subgridspec(500,500,hspace=0,wspace=0)
@@ -571,10 +591,10 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][0].scatter(x2, y,marker='.',c='lightblue',zorder=2)
     axs[1][0].scatter(x, y,zorder=3)
 
-    cpu_util = [x['cpu_trace'] for x in jobs]
+    cpu_util = [x.cpu_trace for x in jobs]
     if isinstance(cpu_util[0],np.ndarray):
         cpu_util = np.concatenate(cpu_util).ravel()
-    gpu_util = [x['gpu_trace'] for x in jobs]
+    gpu_util = [x.gpu_trace for x in jobs]
     if isinstance(gpu_util[0],np.ndarray):
         gpu_util = np.concatenate(gpu_util).ravel()
     if not all([x == 0 for x in gpu_util]):
@@ -628,9 +648,9 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][1].tick_params(axis="y", labelleft=False)
 
     # Submit_time and Wall_time
-    duration = [x['wall_time'] for x in jobs]
-    nodes_required = [x['nodes_required'] for x in jobs]
-    submit_t = [x['submit_time'] for x in jobs]
+    duration = [x.wall_time for x in jobs]
+    nodes_required = [x.nodes_required for x in jobs]
+    submit_t = [x.submit_time for x in jobs]
 
     offset = 0
     split_index = 0
@@ -665,7 +685,7 @@ def plot_job_hist(jobs,config=None,dist_split=None):
         #ax_b labels:
     ax_b.set_xlabel("time [hh:mm]")
     minx_s = 0
-    maxx_s = math.ceil(max([x['wall_time'] for x in jobs]) + max([x['submit_time'] for x in jobs]))
+    maxx_s = math.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
@@ -747,8 +767,8 @@ if __name__ == "__main__":
         jobs = getattr(workload, args.workload)(args=args)
     plot_job_hist(jobs, config=config, dist_split=args.multimodal)
     if args.output:
-        timestep_start = min([x['submit_time'] for x in jobs])
-        timestep_end = math.ceil(max([x['submit_time'] for x in jobs]) + max([x['wall_time'] for x in jobs]))
+        timestep_start = min([x.submit_time for x in jobs])
+        timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.wall_time for x in jobs]))
         filename = create_file_indexed('wl',create=False,ending="npz").split(".npz")[0]
         # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename,jobs=jobs,timestep_start=timestep_start, timestep_end=timestep_end, args=args)

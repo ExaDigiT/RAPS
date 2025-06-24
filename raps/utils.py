@@ -32,7 +32,14 @@ def max_value(values):
     return max(x[1] for x in values) if values else 0
 
 
-def convert_seconds(seconds):
+def convert_seconds_to_hhmmss(seconds):
+    """Convert seconds to time format: 3661s -> 01:01"""
+    td = timedelta(seconds=seconds)
+    h, m, s = str(td).split(':')
+    return f"{h}:{m}:{s}"
+
+
+def convert_seconds_to_hhmm(seconds):
     """Convert seconds to time format: 3661s -> 01:01"""
     td = timedelta(seconds=seconds)
     h, m, _ = str(td).split(':')
@@ -435,23 +442,33 @@ def next_arrival(lambda_rate,reset=False, start_time=0):
 
 
 def convert_to_seconds(time_str):
-    if isinstance(time_str, int):
+    if isinstance(time_str, (int,float)):
         return time_str  # this happens....
     # Define the conversion factors
     time_factors = {
         'd': 86400,  # 1 day = 86400 seconds
         'h': 3600,   # 1 hour = 3600 seconds
         'm': 60,     # 1 minute = 60 seconds
-        's': 1       # 1 second = 1 second
+        's': 1,      # 1 second = 1 second
+        '': 1        # empty string = 1 second
     }
 
     # Check if the input string ends with a unit or is purely numeric
+    # and extract the numeric part and the time unit
     if time_str[-1].isdigit():
-        return int(time_str)  # Directly return the number if it's purely numeric
+        unit = ''
+        num_str = time_str[:]
+    else:
+        unit = time_str[-1]
+        num_str = time_str[:-1]
 
-    # Extract the numeric part and the time unit
-    num = int(time_str[:-1])
-    unit = time_str[-1]
+    index = num_str.find(".")  # convert int or float string
+    if index != -1:
+        num = float(num_str)
+        raise ValueError(f"Float not supported at this time: {num}{unit}")
+
+    else:
+        num = int(num_str)
 
     # Convert to seconds using the conversion factors
     if unit in time_factors:
