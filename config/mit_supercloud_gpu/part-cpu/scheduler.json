@@ -1,0 +1,18 @@
+{
+    "SEED": 42,
+    "JOB_ARRIVAL_TIME": 900,
+    "MTBF": 11,
+    "MAX_TIME": 88200,
+    "TRACE_QUANTA": 20,
+    "MIN_WALL_TIME": 3600,
+    "MAX_WALL_TIME": 43200,
+    "UI_UPDATE_FREQ": 900,
+    "MAX_NODES_PER_JOB": 3000,
+    "JOB_END_PROBS": {
+        "COMPLETED": 0.63,
+        "FAILED": 0.13,
+        "CANCELLED": 0.12,
+        "TIMEOUT": 0.11,
+        "NODE_FAIL": 0.01
+    }
+}
