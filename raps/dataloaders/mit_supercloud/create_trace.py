@@ -9,23 +9,27 @@ Created on Fri Sep 20 10:14:23 2024
 # Given a start and end date identify those jobs that occur in this range and then download them 
 # from S3 into data/trace as a pcikle file (all traces will be in the same file)
 
+# Standard library
+import argparse
+import gzip
+import math
+import os
+import pickle
+import shutil
+import sys
+from datetime import datetime
+from io import StringIO
+from types import SimpleNamespace
+
+# Third-party
 import boto3
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from botocore import UNSIGNED
 from botocore.client import Config
-import os
-import pandas as pd
-import numpy as np 
-from io import StringIO
-import pickle
-from datetime import datetime
-import shutil
-import gzip
 from scipy.sparse import csr_matrix as csr
-import matplotlib.pyplot as plt
-import argparse
 from tqdm import tqdm
-import sys
-from types import SimpleNamespace
 
 # Add the raps project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
@@ -155,11 +159,11 @@ def main(local_dataset_path, start_date, end_date):
     cnt = 0 
     data_dict = {}
     for s in dfiles:
-        if cnt%100==0:
+        if cnt%100 == 0:
             print('processing file ' + str(cnt) + ' of ' + str(L))
-        cnt = cnt+1
+        cnt += 1
         fyle = os.path.join(mit_dir +'/data/trace/', s.split('/')[-1])
-        dfi = pd.read_csv(fyle) 
+        dfi = pd.read_csv(fyle, dtype={0: str})
         
         jobid = int(s.split('-')[0])
         if jobid not in data_dict.keys():
@@ -186,7 +190,6 @@ def main(local_dataset_path, start_date, end_date):
             node = s.split('-')[2].split('.csv')[0]
             cpu_df = data_dict[jobid]['cpu'] 
             
-            
             if 'gpu' not in data_dict[jobid].keys():
                 data_dict[jobid]['gpu'] = {}
                 data_dict[jobid]['gpu_cnt']=0 
@@ -209,32 +212,84 @@ def main(local_dataset_path, start_date, end_date):
                     pass # crashhere was here, but we'll let it continue for now
                 data_dict[jobid]['gpu'] = df_merged
             data_dict[jobid]['gpu_cnt']= gpu_cnt
+
     # Create a list of job dictionaries
     jobs_list = []
+    min_overall_utime = float('inf')
+    max_overall_utime = 0
+
+    print("determining start time...")
+
     for jobid, data in data_dict.items():
-        cpu_trace = data.get('cpu', {}).get('cpu_utilisation', [])
+        # Determine job-specific start and end times from CPU trace
+        job_start_time = data.get('cpu', {}).get('utime', pd.Series()).min()
+        job_end_time = data.get('cpu', {}).get('utime', pd.Series()).max()
+
+        # Update overall min/max utime
+        if not pd.isna(job_start_time) and job_start_time < min_overall_utime:
+            min_overall_utime = job_start_time
+        if not pd.isna(job_end_time) and job_end_time > max_overall_utime:
+            max_overall_utime = job_end_time
+
+    print("min_overall_utime:", min_overall_utime)
+    print("max_overall_utime:", max_overall_utime)
+    total_sim_time = max_overall_utime - min_overall_utime
+    print("total_sim_time:", total_sim_time)
+
+    for jobid, data in data_dict.items():
+        cpu_trace_data = data.get('cpu', {}).get('cpu_utilisation', [])
+        if isinstance(cpu_trace_data, pd.Series):
+            cpu_trace = cpu_trace_data.tolist()
+        elif isinstance(cpu_trace_data, np.ndarray):
+            cpu_trace = cpu_trace_data.tolist()
+        else:
+            cpu_trace = cpu_trace_data
+
+        trace_time = len(cpu_trace) * 10. # seconds
+
         gpu_trace = data.get('gpu', {})
         if not isinstance(gpu_trace, pd.DataFrame) or gpu_trace.empty:
-            gpu_trace_list = []
+            #gpu_trace_list = []
+            gpu_trace_list = 0
         else:
             # Assuming gpu_trace is a DataFrame that needs to be converted to a list of lists or similar
             gpu_trace_list = gpu_trace.values.tolist()
 
+        # Determine job-specific start and end times from CPU trace
+        job_start_time = data.get('cpu', {}).get('utime', pd.Series()).min() - min_overall_utime
+        job_end_time = data.get('cpu', {}).get('utime', pd.Series()).max() - min_overall_utime
+
+        # Calculate wall_time, ensuring it's not negative
+        wall_time = max(0, job_end_time - job_start_time)
+
+        # Infer nodes_required based on max cpu_trace and CPUS_PER_NODE (assuming 2 CPUs per node)
+        if cpu_trace and max(cpu_trace) > 0:
+            nodes_required = math.ceil(max(cpu_trace) / 2.0)
+        else:
+            nodes_required = 1
+
+        # If nodes_required > 1, divide cpu_trace by nodes_required to get per-node utilization
+        if nodes_required > 1 and cpu_trace:
+            cpu_trace = [x / nodes_required for x in cpu_trace]
+
         job = job_dict(
-            nodes_required=data.get('n_nodes', 1),
+            nodes_required=nodes_required,
             name=data.get('name_job', 'unknown'),
             account=data.get('name_account', 'unknown'),
-            cpu_trace=cpu_trace.tolist() if isinstance(cpu_trace, np.ndarray) else cpu_trace,
+            cpu_trace=cpu_trace,
             gpu_trace=gpu_trace_list,
             ntx_trace=[],
             nrx_trace=[],
             end_state=data.get('state_end', 'UNKNOWN'),
             id=jobid,
-            submit_time=data.get('time_submit', 0),
+            submit_time=job_start_time,
             time_limit=data.get('time_limit', 0),
-            start_time=data.get('time_start', 0),
-            end_time=data.get('time_end', 0),
-            wall_time=data.get('time_end', 0) - data.get('time_start', 0)
+            start_time=job_start_time,
+            end_time=job_end_time,
+            wall_time=wall_time,
+            trace_time=trace_time,
+            trace_start_time=0,
+            trace_end_time=trace_time
         )
         jobs_list.append(job)
 
@@ -252,12 +307,13 @@ def main(local_dataset_path, start_date, end_date):
     #np.savez(fyle_path, jobs=np.array(jobs_list))
     # Also include start_timestep, end_timestep, and a placeholder for args                                          
     np.savez(fyle_path, jobs=np.array(jobs_list), \
-             start_timestep=st_date, end_timestep=en_date, \
-             args=SimpleNamespace(fastforward=None, system='mit_supercloud', time=en_date))
+             start_timestep=0, end_timestep=total_sim_time, \
+             args=SimpleNamespace(fastforward=None, system='mit_supercloud', time=total_sim_time))
     
     print(f"Saved {len(jobs_list)} jobs to {fyle_path}")
     
     return 
+
 
 def proc_gpu_series(cpu_df,dfi,gpu_cnt):
     # Process GPU series by interpolating it to the same times as the cpu series. 
@@ -284,7 +340,6 @@ def proc_gpu_series(cpu_df,dfi,gpu_cnt):
     ugpus = dfi.gpu_index.unique()
     gpu_df= pd.DataFrame({'utime':  cpu_df['utime'].values})
     
-    
     for u in ugpus: 
         dfg = dfi[dfi.gpu_index==u].copy()
         
@@ -292,8 +347,6 @@ def proc_gpu_series(cpu_df,dfi,gpu_cnt):
         fylds = ['gpu_index', 'utilization_gpu_pct',
                'utilization_memory_pct', 'memory_free_MiB', 'memory_used_MiB',
                'temperature_gpu', 'temperature_memory', 'power_draw_W']
-        
-        
         
         for ff in fylds: 
             x1 = dfg['t_fixed'].values
@@ -313,7 +366,8 @@ def proc_gpu_series(cpu_df,dfi,gpu_cnt):
         gpu_df.rename(columns=ren, inplace=True)
         gpu_cnt = gpu_cnt + 1
     
-    return gpu_df,gpu_cnt
+    return gpu_df, gpu_cnt
+
 
 def proc_cpu_series(dfi): 
     # This is the code that processes cpu data and performs the following steps: 
@@ -363,20 +417,26 @@ def proc_cpu_series(dfi):
     dfi['sid']= sid
     
 
+    # 2. Outliers and Normalization.
+    # Convert to percentage
+    dfi['CPUUtilization'] = dfi['CPUUtilization'] / 100.0
+    # Fill NaN values with 0
+    dfi['CPUUtilization'] = dfi['CPUUtilization'].fillna(0)
+    #print(f"Max CPUUtilization after normalization: {dfi['CPUUtilization'].max()}")
     
-    # 2. Outliers. 
-    sift = (dfi.CPUUtilization > 500) & (dfi.CPUUtilization < 600)
-        # Clip these back to 500
-    if sift.sum()>0: 
-        #asd
-        print('clipping ' + str(sift.sum()) + ' values' )
-        dfi.loc[sift, 'CPUUtilization'] = 500
-        
-    # select rows with >600 as outliers.
-    sift = dfi.CPUUtilization > 600
-    if sum(sift)>0: 
-        # Set to the nearest value less than 600. 
-        dfi.loc[sift, 'CPUUtilization'] = dfi['CPUUtilization'].where(~sift).ffill().combine_first(dfi['CPUUtilization']).where(dfi['CPUUtilization'] <= 600)   
+    ## 2. Outliers. 
+    #sift = (dfi.CPUUtilization > 500) & (dfi.CPUUtilization < 600)
+    #    # Clip these back to 500
+    #if sift.sum()>0: 
+    #    #asd
+    #    print('clipping ' + str(sift.sum()) + ' values' )
+    #    dfi.loc[sift, 'CPUUtilization'] = 500
+    #    
+    ## select rows with >600 as outliers.
+    #sift = dfi.CPUUtilization > 600
+    #if sum(sift)>0: 
+    #    # Set to the nearest value less than 600. 
+    #    dfi.loc[sift, 'CPUUtilization'] = dfi['CPUUtilization'].where(~sift).ffill().combine_first(dfi['CPUUtilization']).where(dfi['CPUUtilization'] <= 600)   
     
     # 3. There are multiple series so we want to get the maximum (as only one series at a time is active)
     useries = dfi.Series.unique()
@@ -389,7 +449,7 @@ def proc_cpu_series(dfi):
     Xreadmb = np.zeros((len(useries),inds.shape[0]))
     Xwritemb = np.zeros((len(useries),inds.shape[0]))
 
-    cnt=0
+    cnt = 0
     for i in useries: 
         sift = dfi.Series == i 
         M = len(inds)
@@ -424,8 +484,7 @@ def proc_cpu_series(dfi):
         df['writemb_' + str(i)] = mm 
         Xwritemb[cnt,:] = mm 
 
-        
-        cnt=cnt+1
+        cnt += 1
         
     df['cpu_utilisation'] = Xm.mean(axis=0)
     df['rss'] = Xrss.sum(axis=0)
@@ -433,10 +492,11 @@ def proc_cpu_series(dfi):
     df['readmb'] = Xreadmb.sum(axis=0)
     df['writemb'] = Xwritemb.sum(axis=0)
     
-    
     df['timestamp'] = start_time + pd.to_timedelta(df.t * 10, unit='s')
     df['utime'] = df['timestamp'].astype('int64') // 10**9
+
     return df 
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process MIT Supercloud data to create job traces.")
@@ -449,4 +509,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     main(args.local_dataset_path, args.start_date, args.end_date)
-    
