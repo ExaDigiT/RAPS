@@ -106,7 +106,7 @@ def load_data(local_dataset_path, **kwargs):
           gpu/...-timeseries.csv
           slurm-log.csv
     Returns:
-      jobs_list, min_utime, max_utime
+      jobs_list, sim_start_time, sim_end_time
     """
     # 1) Unpack list if necessary
     if isinstance(local_dataset_path, list):
@@ -126,6 +126,7 @@ def load_data(local_dataset_path, **kwargs):
 
     start_ts = int(datetime.strptime(start_date_str, "%d%m%Y").timestamp())
     end_ts   = int(datetime.strptime(end_date_str,   "%d%m%Y").timestamp())
+    requested_duration = end_ts - start_ts
 
     # 4) Select jobs in time window
     selected_df = job_index_df[
@@ -198,10 +199,6 @@ def load_data(local_dataset_path, **kwargs):
 
     # 10) Compute overall time bounds
     cpu_utimes = [d["cpu"]["utime"] for d in data_dict.values() if "cpu" in d]
-    #if not cpu_utimes:
-    #    return [], 0, 0
-    min_utime = min(series.min() for series in cpu_utimes)
-    max_utime = max(series.max() for series in cpu_utimes)
 
     # 11) Build the final list of job_dicts
     jobs_list = []
@@ -211,9 +208,9 @@ def load_data(local_dataset_path, **kwargs):
         gpu_df = data.get("gpu")
         gpu_trace_list = gpu_df.values.tolist() if isinstance(gpu_df, pd.DataFrame) else 0
 
-        submit_time = data.get("time_submit") - min_utime
-        job_start = data["cpu"]["utime"].min() - min_utime
-        job_end   = data["cpu"]["utime"].max() - min_utime
+        submit_time = data.get("time_submit") - start_ts
+        job_start = data["cpu"]["utime"].min() - start_ts
+        job_end   = data["cpu"]["utime"].max() - start_ts
         wall_time = max(0, job_end - job_start)
         nodes_req = data.get("nodes_alloc")
         if nodes_req > 1 and cpu_trace:
@@ -240,5 +237,4 @@ def load_data(local_dataset_path, **kwargs):
             trace_end_time=len(cpu_trace) * 10.0
         ))
 
-    duration = max_utime - min_utime
-    return jobs_list, 0, duration
+    return jobs_list, 0, requested_duration
