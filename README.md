@@ -49,6 +49,10 @@ For Google cluster trace v2
     # gcloudv2
     python -m raps.telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample
 
+For MIT Supercloud
+
+    python main.py -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
+
 ## Perform Network Simulation
 
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
