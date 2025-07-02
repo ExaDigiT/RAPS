@@ -1,8 +1,8 @@
 {
     "POWER_GPU_IDLE": 88,
     "POWER_GPU_MAX": 560,
-    "POWER_CPU_IDLE": 90,
-    "POWER_CPU_MAX": 280,
+    "POWER_CPU_IDLE": 1,
+    "POWER_CPU_MAX": 6,
     "POWER_MEM": 74.26,
     "POWER_NVME": 30,
     "POWER_NIC": 20,

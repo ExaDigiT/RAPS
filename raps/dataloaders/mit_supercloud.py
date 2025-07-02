@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from raps.job import job_dict
 
+
 def proc_cpu_series(dfi):
     dfi = dfi[~dfi.Step.isin([-1, -4, '-1', '-4'])].copy()
     dfi['CPUUtilization'] = dfi['CPUUtilization'].fillna(0) / 100.0
@@ -197,8 +198,8 @@ def load_data(local_dataset_path, **kwargs):
 
     # 10) Compute overall time bounds
     cpu_utimes = [d["cpu"]["utime"] for d in data_dict.values() if "cpu" in d]
-    if not cpu_utimes:
-        return [], 0, 0
+    #if not cpu_utimes:
+    #    return [], 0, 0
     min_utime = min(series.min() for series in cpu_utimes)
     max_utime = max(series.max() for series in cpu_utimes)
 
@@ -210,10 +211,11 @@ def load_data(local_dataset_path, **kwargs):
         gpu_df = data.get("gpu")
         gpu_trace_list = gpu_df.values.tolist() if isinstance(gpu_df, pd.DataFrame) else 0
 
+        submit_time = data.get("time_submit") - min_utime
         job_start = data["cpu"]["utime"].min() - min_utime
         job_end   = data["cpu"]["utime"].max() - min_utime
         wall_time = max(0, job_end - job_start)
-        nodes_req = max(1, int(np.ceil(max(cpu_trace) / 2.0))) if cpu_trace else 1
+        nodes_req = data.get("nodes_alloc")
         if nodes_req > 1 and cpu_trace:
             cpu_trace = [x / nodes_req for x in cpu_trace]
 
@@ -228,7 +230,7 @@ def load_data(local_dataset_path, **kwargs):
             end_state=data.get("state_end", "UNKNOWN"),
             id=jobid,
             priority=data.get("priority", 0),
-            submit_time=job_start,
+            submit_time=submit_time,
             time_limit=data.get("time_limit", 0),
             start_time=job_start,
             end_time=job_end,
