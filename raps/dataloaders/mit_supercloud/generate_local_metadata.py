@@ -1,11 +1,14 @@
+import csv
 import os
 import pandas as pd
-import csv
+import sys
 from tqdm import tqdm
+
+source_dir = 'source_data'
 
 def generate_local_metadata(local_dataset_root_path):
     mit_dir = os.path.dirname(os.path.abspath(__file__))
-    source_data_dir = os.path.join(mit_dir, 'source_data')
+    source_data_dir = os.path.join(mit_dir, source_dir)
     os.makedirs(source_data_dir, exist_ok=True)
 
     print(f"Generating metadata in: {source_data_dir}")
@@ -110,5 +113,14 @@ if __name__ == "__main__":
     parser.add_argument("local_dataset_path", type=str, 
                         help="The root path to your locally downloaded MIT Supercloud dataset.")
     args = parser.parse_args()
+
+    if os.path.isdir(source_dir):
+        response = input(f"If you continue, files in '{source_dir}' will be overwritten.\nDo you want to continue? (y or n): ")
+        if response.lower() != 'y':
+            print("Operation cancelled.")
+            sys.exit(1)
+
+    # Continue with the rest of your code here
+    print("Continuing with the operation...")
     
     generate_local_metadata(args.local_dataset_path)
