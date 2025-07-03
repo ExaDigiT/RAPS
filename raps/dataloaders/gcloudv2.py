@@ -1,5 +1,6 @@
 import os
 import re
+from tqdm import tqdm
 from typing import List, Optional, Generator, Tuple, Any, Union
 
 import numpy as np
@@ -137,16 +138,26 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
         if col not in df.columns:
             raise ValueError(f"Missing column {col}")
     df = df[df["event_type"]==0]
-    df["timestamp"] = df["timestamp"].astype(float)
-    t0, t1 = df["timestamp"].min(), df["timestamp"].max()
+    df["timestamp"] = df["timestamp"].astype(float) / 1e6 # convert from microseconds → seconds
+    t0 = df["timestamp"].min()
+    t1 = df["timestamp"] - t0
 
     # Load task usage
     usage_loader = GoogleClusterV2DataLoader(base_path, event_type="task_usage", concatenate=True)
     usage_df = next(iter(usage_loader))
+
+    # Convert microseconds → seconds for task usage
+    usage_df["start_time"] = usage_df["start_time"].astype(float) / 1e6
+    usage_df["end_time"]   = usage_df["end_time"  ].astype(float) / 1e6
+
+    # Build per-job start and end times (seconds since trace-start)
+    usage_map_start = usage_df.groupby("job_ID")["start_time"].min().to_dict()
+    usage_map_end   = usage_df.groupby("job_ID")["end_time"  ].max().to_dict()
+
     # rename to avg
     if "CPU_usage_rate" in usage_df.columns:
         usage_df.rename(columns={"CPU_usage_rate":"CPU_usage_avg"}, inplace=True)
-    usage_df["job_ID"] = usage_df["job_ID"].astype(int)
+    usage_df["job_ID"]       = usage_df["job_ID"].astype(int)
     usage_df["CPU_usage_avg"] = usage_df["CPU_usage_avg"].astype(float)
     usage_map = usage_df.groupby("job_ID")["CPU_usage_avg"].apply(lambda s: s.to_numpy()).to_dict()
 
@@ -155,8 +166,13 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
 
     jobs: List[Any] = []
     jid_f = kwargs.get('jid','*')
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Loading jobs"):
+
         jid = int(row["job_ID"])
+        start = usage_map_start[jid] - t0
+        end   = usage_map_end  [jid] - t0
+        wall  = end - start
+
         if jid_f!='*' and str(jid)!=str(jid_f): continue
         trace = usage_map[jid]
         # ensure gpu_trace is same length
@@ -166,13 +182,18 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             name=f"job_{jid}",
             account=f"user_{row.get('user_name','unknown')}",
             cpu_trace=trace,
-            gpu_trace=gpu_trace,
+            #gpu_trace=gpu_trace,
+            gpu_trace=0,
             nrx_trace=[], ntx_trace=[],
             end_state="UNKNOWN", scheduled_nodes=[],
             id=jid, priority=int(row.get('scheduling_class',0)),
             submit_time=row["timestamp"], time_limit=0,
-            start_time=row["timestamp"], end_time=row["timestamp"]+1.0,
-            wall_time=1.0, trace_time=row["timestamp"],
-            trace_start_time=float(t0), trace_end_time=float(t1)
+            start_time=start, end_time=end,
+            wall_time=wall, trace_time=row["timestamp"],
+            trace_start_time=start, trace_end_time=end
         ))
-    return jobs, 0, 10000
+
+    # Compute simulation span: start at t=0, end at the latest job finish
+    simulation_start = 0
+    simulation_end   = int(max(usage_map_end.values()) - t0)
+    return jobs, simulation_start, simulation_end

@@ -108,7 +108,8 @@ class LayoutManager:
         show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
 
         # Build the column headers
-        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
+        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
+        #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
         if show_slowdown:
             columns.append("SLOW DOWN")
         else:
@@ -116,7 +117,7 @@ class LayoutManager:
 
         if show_nodes:
             columns.append("NODELIST")
-        columns.append("TIME")
+        #columns.append("TIME")
 
         # Create table with bold magenta headers
         table = Table(title="Job Queue", header_style="bold magenta", expand=True)
@@ -162,8 +163,8 @@ class LayoutManager:
                 str(job.name),
                 str(job.account),
                 job.state.value,
-                n_nodes,
-                col_slow,
+                #n_nodes,
+                #col_slow,
             ]
 
             if show_nodes:

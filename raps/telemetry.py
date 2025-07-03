@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 job['requested_nodes'] = None
                 job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
     else:
-        jobs, _, _, _ = td.load_data(args.replay)
+        jobs, _, _ = td.load_data(args.replay)
 
     timesteps = int(max(job['wall_time'] + job['submit_time'] for job in jobs))
 
@@ -126,6 +126,7 @@ if __name__ == "__main__":
         if args.verbose:
             print(job)
 
+    print(f'Number of jobs: {len(jobs)}')
     print(f'Simulation will run for {timesteps} seconds')
     print(f'Average job arrival time is: {np.mean(dt_list):.2f}s')
     print(f'Average wall time is: {np.mean(wt_list):.2f}s')
