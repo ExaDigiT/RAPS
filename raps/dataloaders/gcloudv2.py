@@ -187,7 +187,8 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             nrx_trace=[], ntx_trace=[],
             end_state="UNKNOWN", scheduled_nodes=[],
             id=jid, priority=int(row.get('scheduling_class',0)),
-            submit_time=row["timestamp"], time_limit=0,
+            #submit_time=row["timestamp"], time_limit=0,
+            submit_time=start, time_limit=0,
             start_time=start, end_time=end,
             wall_time=wall, trace_time=row["timestamp"],
             trace_start_time=start, trace_end_time=end

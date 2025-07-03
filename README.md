@@ -46,7 +46,7 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
 
 For Google cluster trace v2
 
-    python math.py --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample
+    python math.py --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -ff 600
 
     # analyze dataset
     python -m raps.telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
