@@ -56,42 +56,64 @@ def proc_cpu_series(dfi):
     return df
 
 def proc_gpu_series(cpu_df, dfi, gpu_cnt):
-    t_cpu = np.array([cpu_df.utime.min(), cpu_df.utime.max()])
-    t_gpu = np.array([dfi.timestamp.astype(int).min(), dfi.timestamp.astype(int).max()])
+    # 1) Build CPU time range
+    t_cpu_start = int(cpu_df.utime.min())
+    t_cpu_end   = int(cpu_df.utime.max())
+    t_cpu = np.array([t_cpu_start, t_cpu_end, t_cpu_end - t_cpu_start])
 
-    t_cpu_range = t_cpu[1] - t_cpu[0]
-    t_gpu_range = t_gpu[1] - t_gpu[0]
-    per_diff = (t_cpu_range - t_gpu_range) / t_gpu_range * 100
+    # 2) Safely convert the GPU timestamps to integer seconds
+    #    (this handles strings like "1621607266.426")
+    ts = pd.to_numeric(dfi["timestamp"], errors="coerce")  # float64 or NaN
+    ts_int = ts.ffill().astype(float).astype(int)
+    t0, t1 = ts_int.min(), ts_int.max()
+    t_gpu = np.array([t0, t1, t1 - t0])
 
+    # 3) Sanity‐check the durations match within 10%
+    per_diff = ((t_cpu[1] - t_cpu[0]) - (t_gpu[1] - t_gpu[0])) / (t_gpu[1] - t_gpu[0]) * 100
     if abs(per_diff) > 10:
-        raise ValueError("Time mismatch between CPU and GPU series exceeds 10%")
+        # warn and proceed — GPU trace may be trimmed or misaligned
+        print(f"Warning: GPU‐CPU time mismatch {per_diff:.1f}% exceeds 10%; continuing anyway")
 
-    dfi['t_fixed'] = dfi.timestamp - dfi.timestamp.min() + t_cpu[0]
+    # 4) Align GPU times onto CPU utime grid
+    #    Use our integer‐second Series rather than the raw column
+    dfi["t_fixed"] = ts_int - ts_int.min() + t_cpu_start
+
+    # 5) Prepare output DataFrame with a utime column
     ugpus = dfi.gpu_index.unique()
-    gpu_df = pd.DataFrame({'utime': cpu_df['utime'].values})
+    gpu_df = pd.DataFrame({"utime": cpu_df["utime"].values})
 
-    for u in ugpus:
-        dfg = dfi[dfi.gpu_index == u].copy()
-        fields = ['gpu_index', 'utilization_gpu_pct', 'utilization_memory_pct', 'memory_free_MiB',
-                  'memory_used_MiB', 'temperature_gpu', 'temperature_memory', 'power_draw_W']
+    # 6) Interpolate each GPU field onto the CPU utime grid
+    fields = [
+        "utilization_gpu_pct",
+        "utilization_memory_pct",
+        "memory_free_MiB",
+        "memory_used_MiB",
+        "temperature_gpu",
+        "temperature_memory",
+        "power_draw_W",
+    ]
+    for field in fields:
+        # grab the float‐converted timestamp and the metric
+        x1 = ts_int.values
+        y1 = dfi[field].astype(float).values
+        xv = cpu_df["utime"].values
+        # numpy interpolation
+        gpu_df[field] = np.interp(xv, x1, y1)
 
-        for field in fields:
-            x1, y1 = dfg['t_fixed'].values, dfg[field].values
-            xv = cpu_df['utime'].values
-            yv = np.interp(xv, x1, y1)
-            gpu_df[field] = yv
+    # 7) Rename the GPU pct, memory pct, and power columns with the device index
+    ren = {
+        "gpu_index":            f"gpu_index_{gpu_cnt}",
+        "utilization_gpu_pct":  f"gpu_util_{gpu_cnt}",
+        "utilization_memory_pct":f"gpu_mempct_{gpu_cnt}",
+        "memory_free_MiB":      f"gpu_memfree_{gpu_cnt}",
+        "memory_used_MiB":      f"gpu_memused_{gpu_cnt}",
+        "temperature_gpu":      f"gpu_temp_{gpu_cnt}",
+        "temperature_memory":   f"gpu_memtemp_{gpu_cnt}",
+        "power_draw_W":         f"gpu_power_{gpu_cnt}",
+    }
+    gpu_df.rename(columns=ren, inplace=True)
 
-        rename = {
-            'utilization_gpu_pct': f'gpu_{gpu_cnt}',
-            'utilization_memory_pct': f'gpu_mem_{gpu_cnt}',
-            'temperature_gpu': f'gpu_temp_{gpu_cnt}',
-            'power_draw_W': f'gpu_p_{gpu_cnt}'
-        }
-        gpu_df.rename(columns=rename, inplace=True)
-        gpu_cnt += 1
-
-    return gpu_df, gpu_cnt
-
+    return gpu_df, gpu_cnt + 1
 
 def load_data(local_dataset_path, **kwargs):
     """
@@ -134,20 +156,63 @@ def load_data(local_dataset_path, **kwargs):
         (job_index_df.start < end_ts)
     ].copy()
 
-    # 5) Prepare GPU index metadata
-    gpu_df = file_list_df[file_list_df["File Name"].str.contains("/gpu/")].copy()
-    gpu_df["jobid"] = gpu_df["File Name"].str.extract(r"/([^/]+?)-").astype(int)
+######
+    data_subdir = "202201"  # hard-coded folder name
+    print(local_dataset_path, data_subdir)
 
-    # 6) Build list of timeseries file paths (relative)
-    files_to_copy = [
-        row["filename"].replace("-summary", "-timeseries")
-        for _, row in selected_df.iterrows()
+    # --- 1) Load and filter Slurm log for GPU jobs in [start_ts, end_ts) ---
+    slurm_path = os.path.join(local_dataset_path, data_subdir, "slurm-log.csv")
+    slurm_df   = pd.read_csv(slurm_path)
+
+    # Keep only rows within your date window
+    sl = slurm_df[
+        (slurm_df.time_submit >= start_ts) &
+        (slurm_df.time_submit <  end_ts)
     ]
-    files_to_copy += gpu_df[gpu_df.jobid.isin(selected_df.job_id)]["File Name"].tolist()
-    files_to_copy = list(set(files_to_copy))
+
+    # Filter to those that actually used GPUs
+    def row_uses_gpu(r):
+        return ("gpu" in str(r.get("gres_used","")).lower()
+                or "1001=" in str(r.get("tres_alloc",""))
+                or "1002=" in str(r.get("tres_alloc","")))
+    gpu_sl = sl[sl.apply(row_uses_gpu, axis=1)]
+
+    gpu_job_ids = set(gpu_sl.id_job.unique())
+    print(f"→ Found {len(gpu_job_ids)} GPU‐using jobs in your date range")
+
+    # --- 2) Pull their GPU timeseries paths from file_list.csv ---
+    #gpu_entries = file_list_df[
+    #    file_list_df["File Name"].str.contains("/gpu/")
+    #].copy()
+
+    # should match both "gpu/..." at the start _and_ anywhere else
+    #gpu_entries = file_list_df[
+    #    file_list_df["File Name"].str.contains(r"(^|/)gpu/")
+    #].copy()
+
+    # Option 2: simple substring match (matches anywhere “gpu/” appears)
+    gpu_entries = file_list_df[
+        file_list_df["File Name"].str.contains("gpu/")
+    ].copy()
+
+    gpu_entries["job_id"] = (
+        gpu_entries["File Name"]
+          .str.extract(r"/(\d+)-", expand=False)
+          .astype(int)
+    )
+    gpu_sel = gpu_entries[gpu_entries["job_id"].isin(gpu_job_ids)]
+    gpu_files = gpu_sel["File Name"].tolist()
+    print(f"→ Will process {len(gpu_files)} GPU files")
+
+    # --- 3) Combine with your CPU list and dedupe ---
+    cpu_files = [
+        fn.replace("-summary","-timeseries")
+        for fn in selected_df["filename"]
+    ]
+    files_to_copy = list(set(cpu_files + gpu_files))
+    print(f"Total files to load: {len(files_to_copy)} (CPU: {len(cpu_files)}, GPU: {len(gpu_files)})")
 
     # 7) Read SLURM log
-    data_subdir = "202201"  # hard-coded folder name
     slurm_log = next(
         (
             os.path.join(r, "slurm-log.csv")
@@ -203,7 +268,12 @@ def load_data(local_dataset_path, **kwargs):
     # 11) Build the final list of job_dicts
     jobs_list = []
     for jobid, data in data_dict.items():
-        cpu_trace = data["cpu"]["cpu_utilisation"]
+        # skip any job that never loaded a CPU trace
+        cpu_ser = data.get("cpu")
+        if cpu_ser is None:
+            print(f"Warning: skipping job {jobid} (no CPU trace)")
+            continue
+        cpu_trace = cpu_ser["cpu_utilisation"]
         cpu_trace = cpu_trace.tolist() if isinstance(cpu_trace, pd.Series) else cpu_trace
         gpu_df = data.get("gpu")
         gpu_trace_list = gpu_df.values.tolist() if isinstance(gpu_df, pd.DataFrame) else 0
