@@ -31,6 +31,8 @@ from raps.utils import convert_numpy_to_builtin
 
 from args import args, args_dict
 
+if args.verbose or args.debug:
+    print(args)
 
 config = ConfigManager(system_name=args.system).get_config()
 
@@ -130,7 +132,7 @@ total_timesteps = timestep_end - timestep_start
 if args.time_delta:
     time_delta = convert_to_seconds(args.time_delta)
 else:
-    time_delta = config['TRACE_QUANTA']
+    time_delta = 1  # config['TRACE_QUANTA']
 
 print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
 print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].trace_quanta}s.')

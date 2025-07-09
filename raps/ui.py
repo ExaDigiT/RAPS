@@ -398,35 +398,35 @@ class LayoutManager:
 
             self.layout["lower"].update(Panel(Align(total_table, align="center"), title="Power and Performance"))
 
-    def update_progress(self, timestamp):
+    def update_progress_bar(self, timestamp):
         self.progress.update(self.progress_task, description=f"{timestamp}",advance=timestamp,transient=True)
         self.layout["progress"].update(self.progress.get_renderable())
 
-    def update(self, data: TickData, time_delta=1):
+    def update_full_layout(self, data: TickData, time_delta=1):
         if self.debug:
             return
         uncertainties = self.engine.power_manager.uncertainties
 
-        if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
-            if self.engine.cooling_model:
-                self.update_powertemp_array(
-                    data.power_df, data.fmu_outputs, data.p_flops, data.g_flops_w, data.system_util,
-                    uncertainties=uncertainties,
-                )
-                self.update_pressflow_array(data.fmu_outputs)
+        #if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
+        if self.engine.cooling_model:
+            self.update_powertemp_array(
+                data.power_df, data.fmu_outputs, data.p_flops, data.g_flops_w, data.system_util,
+                uncertainties=uncertainties,
+            )
+            self.update_pressflow_array(data.fmu_outputs)
 
-            self.update_scheduled_jobs(data.running + data.queue)
-            self.update_status(
-                data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
-                data.num_free_nodes, data.down_nodes,
-            )
-            self.update_power_array(
-                data.power_df, data.p_flops, data.g_flops_w,
-                data.system_util, uncertainties=uncertainties,
-            )
-            if False:
-                self.render()
-        self.update_progress(time_delta)
+        self.update_scheduled_jobs(data.running + data.queue)
+        self.update_status(
+            data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
+            data.num_free_nodes, data.down_nodes,
+        )
+        self.update_power_array(
+            data.power_df, data.p_flops, data.g_flops_w,
+            data.system_util, uncertainties=uncertainties,
+        )
+        if False:
+            self.render()
+
 
     def render(self):
         if not self.debug:
@@ -442,7 +442,8 @@ class LayoutManager:
         with context:
             for data in self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True):
                 if data:
-                    self.update(data,time_delta)
+                    self.update_full_layout(data,time_delta)
+                self.update_progress_bar(1)
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
         """ Prepares the UI and returns a generator for the simulation """
