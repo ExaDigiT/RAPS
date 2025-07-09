@@ -59,7 +59,6 @@ if args.replay:
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():
         print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
-    exit()
 
     # now flatten into a single job list (or keep separate for your engine)
     jobs = []
