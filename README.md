@@ -55,6 +55,8 @@ For MIT Supercloud
 
     python main.py -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
 
+    python multi-part-sim.py -x 'mit_supercloud/*' -f ~/data/mit --system mit_supercloud --arrival poisson
+
 ## Perform Network Simulation
 
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 

@@ -27,22 +27,46 @@ if '*' in args.partitions[0]:
     partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
 
 configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
-args_dicts = [{**vars(args), 'config': config} for config in configs]
+#args_dicts = [{**vars(args), 'config': config} for config in configs]
+args_dicts = [
+       {**vars(args), 'config': config, 'partition': partition_names[i]}
+       for i, config in enumerate(configs)
+   ]
 
 # Initialize Workload
 if args.replay:
 
     # Currently this assumes that an .npz file has already been created
     # e.g., python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet
-    td = Telemetry(**args_dicts[0])
-    print(f"Loading {args.replay[0]}...")
-    jobs = td.load_snapshot(args.replay[0])
-    available_nodes = [config['AVAILABLE_NODES'] for config in configs]
-    print("available nodes:", available_nodes)
 
+    #td = Telemetry(**args_dicts[0])
+    #print(f"Loading {args.replay[0]}...")
+    #jobs = td.load_snapshot(args.replay[0])
+    #available_nodes = [config['AVAILABLE_NODES'] for config in configs]
+    #print("available nodes:", available_nodes)
     # Randomly assign partition
-    for job in jobs:
-        job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
+    #for job in jobs:
+    #    job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
+
+    jobs_by_partition = {}
+    for ad in args_dicts:
+        part = ad['partition']
+        td = Telemetry(**ad)
+        print(f"[{part}] loading traces from {args.replay[0]} …")
+        jobs_part, t0, t1 = td.load_data(args.replay)
+        jobs_by_partition[part] = jobs_part
+
+    # --- report how many jobs per partition ---
+    for part, jl in jobs_by_partition.items():
+        print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
+    exit()
+
+    # now flatten into a single job list (or keep separate for your engine)
+    jobs = []
+    for part in partition_names:
+        for job in jobs_by_partition[part]:
+            job['partition'] = part
+            jobs.append(job)
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):

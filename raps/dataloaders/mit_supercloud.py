@@ -145,6 +145,10 @@ def load_data(local_dataset_path, **kwargs):
     start_date_str = kwargs.get("start_date", "21052021")
     end_date_str   = kwargs.get("end_date",   "22052021")
     jid            = kwargs.get("jid",          "*")
+    # determine whether this is the CPU or GPU partition
+    part = kwargs.get("partition", "").lower()
+    cpu_only = ("cpu" in part) and ("gpu" not in part)
+    gpu_only = ("gpu" in part) and ("cpu" not in part)
 
     start_ts = int(datetime.strptime(start_date_str, "%d%m%Y").timestamp())
     end_ts   = int(datetime.strptime(end_date_str,   "%d%m%Y").timestamp())
@@ -209,8 +213,17 @@ def load_data(local_dataset_path, **kwargs):
         fn.replace("-summary","-timeseries")
         for fn in selected_df["filename"]
     ]
-    files_to_copy = list(set(cpu_files + gpu_files))
-    print(f"Total files to load: {len(files_to_copy)} (CPU: {len(cpu_files)}, GPU: {len(gpu_files)})")
+    trace_files = list(set(cpu_files + gpu_files))
+
+    # filter by partition
+    if cpu_only:
+        trace_files = cpu_files
+    elif gpu_only:
+        trace_files = gpu_files
+    # else leave both
+    trace_files = list(set(trace_files))
+
+    print(f"Total files to load: {len(trace_files)} (CPU: {len(cpu_files)}, GPU: {len(gpu_files)})")
 
     # 7) Read SLURM log
     slurm_log = next(
@@ -227,7 +240,7 @@ def load_data(local_dataset_path, **kwargs):
 
     # 8) Process each file, populating data_dict
     data_dict = {}
-    for rel_path in tqdm(files_to_copy, desc="Processing trace files"):
+    for rel_path in tqdm(trace_files, desc="Processing trace files"):
         fpath = os.path.join(local_dataset_path, data_subdir, rel_path)
         if not os.path.exists(fpath):
             print(f"Warning: missing {fpath}")
