@@ -68,8 +68,6 @@ def main():
                     p_cfg  = configs[partition_names.index(p_name)]
                     job['requested_nodes'] = None
                     job['submit_time'] = next_arrival(1 / p_cfg['JOB_ARRIVAL_TIME'])
-            elif args.arrival == 'prescribed':
-                raise NotImplementedError("‘prescribed’ arrival not implemented yet")
 
         # --- b) “SYNTHETIC WORKLOAD” branch:
         else:

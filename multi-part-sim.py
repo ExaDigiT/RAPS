@@ -27,7 +27,6 @@ if '*' in args.partitions[0]:
     partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
 
 configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
-#args_dicts = [{**vars(args), 'config': config} for config in configs]
 args_dicts = [
        {**vars(args), 'config': config, 'partition': partition_names[i]}
        for i, config in enumerate(configs)
@@ -35,27 +34,6 @@ args_dicts = [
 
 # Initialize Workload
 if args.replay:
-
-    # Currently this assumes that an .npz file has already been created
-    # e.g., python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet
-
-    #td = Telemetry(**args_dicts[0])
-    #print(f"Loading {args.replay[0]}...")
-    #jobs = td.load_snapshot(args.replay[0])
-    #available_nodes = [config['AVAILABLE_NODES'] for config in configs]
-    #print("available nodes:", available_nodes)
-    # Randomly assign partition
-    #for job in jobs:
-    #    job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
-
-    #jobs_by_partition = {}
-    #for ad in args_dicts:
-    #    part = ad['partition']
-    #    td = Telemetry(**ad)
-    #    print(f"[{part}] loading traces from {args.replay[0]} …")
-    #    jobs_part, t0, t1 = td.load_data(args.replay)
-    #    jobs_by_partition[part] = jobs_part
-    #    td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
 
     jobs_by_partition = {}
     t0_by_partition = {}
@@ -158,4 +136,3 @@ for timestep in range(timesteps):
         print(f"system power: {sys_power:.1f}kW")
 
 print("Simulation complete.")
-
