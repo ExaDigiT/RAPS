@@ -123,7 +123,8 @@ class LayoutManager:
 
         if show_nodes:
             columns.append("NODELIST")
-        #columns.append("TIME")
+
+        columns.append("TIME")
 
         # Create table with bold magenta headers
         table = Table(title="Job Queue", header_style="bold magenta", expand=True)
@@ -229,7 +230,6 @@ class LayoutManager:
             str(free_nodes),
             str(len(down_nodes))
         ]
-        print(f"self.simulate_network: {self.simulate_network}")
         if self.simulate_network:
             row.append(f"{avg_net_util * 100:.0f}%")
             row.append(f"{slowdown:.1f}x")

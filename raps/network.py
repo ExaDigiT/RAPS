@@ -32,8 +32,8 @@ class NetworkModel:
     def simulate_network_utilization(self, *, job, debug=False):
         net_util = 0
         net_cong = 0
-        ntx_util = 0
-        nrx_util = 0
+        net_tx = 0
+        net_rx = 0
         max_throughput = self.max_link_bw * job.trace_quanta  # self.config.get('TRACE_QUANTA')  # Why? What should this be?
 
         if job.nodes_required <= 1:

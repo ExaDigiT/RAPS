@@ -322,11 +322,11 @@ class Engine:
                                                                    net_rx_list=net_rx_list,
                                                                    slowdown_factors=slowdown_factors
                                                                    )
+            self.record_network_stats(avg_tx=avg_tx,
+                                      avg_rx=avg_rx,
+                                      avg_net=avg_net)
         else:
             avg_tx, avg_rx, avg_net = None,None,None
-        self.record_network_stats(avg_tx=avg_tx,
-                                  avg_rx=avg_rx,
-                                  avg_net=avg_net)
 
         # Continue with System Simulation
         tick_data = TickData(

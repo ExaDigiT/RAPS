@@ -204,6 +204,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         time_limit = row['time_limit']
 
+        trace_quanta = config['TRACE_QUANTA']
         trace_time = wall_time
         trace_start_time = start_time
         trace_end_time = end_time
@@ -236,6 +237,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                                 trace_time=trace_time,
                                 trace_start_time=trace_start_time,
                                 trace_end_time=trace_end_time,
+                                trace_quanta=trace_quanta,
                                 trace_missing_values=trace_missing_values)
             job = Job(job_info)
             job_list.append(job)

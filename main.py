@@ -141,19 +141,22 @@ layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_en
 engine_stats = get_engine_stats(sc)
 job_stats = get_job_stats(sc)
 scheduler_stats = get_scheduler_stats(sc)
-network_stats = get_network_stats(sc)
+if args.simulate_network:
+    network_stats = get_network_stats(sc)
 # Following b/c we get the following error when we use PM100 telemetry dataset
 # TypeError: Object of type int64 is not JSON serializable
 try:
     print(json.dumps(engine_stats, indent=4))
     print(json.dumps(job_stats, indent=4))
     print(json.dumps(scheduler_stats, indent=4))
-    print(json.dumps(network_stats, indent=4))
+    if args.simulate_network:
+        print(json.dumps(network_stats, indent=4))
 except:
     print(engine_stats)
     print(job_stats)
     print(scheduler_stats)
-    print(network_stats)
+    if args.simulate_network:
+        print(network_stats)
 
 
 if args.plot:

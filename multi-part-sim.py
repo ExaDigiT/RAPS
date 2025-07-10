@@ -97,11 +97,11 @@ for job in jobs:
 
 # Initialize layout managers for each partition
 layout_managers = {}
-for i, config in enumerate(configs):
+for i, (config,ad) in enumerate(zip(configs,args_dicts)):
     pm = PowerManager(compute_node_power, **configs[i])
     fm = FLOPSManager(**args_dicts[i])
     sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, **args_dicts[i])
-    layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
+    layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, args_dict=ad, **config)
 
 # Set simulation timesteps
 if args.fastforward:
