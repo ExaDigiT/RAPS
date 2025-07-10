@@ -15,7 +15,7 @@ from raps.flops import FLOPSManager
 from raps.power import PowerManager, compute_node_power
 from raps.telemetry import Telemetry
 from raps.workload import Workload
-from raps.utils import convert_to_seconds, next_arrival
+from raps.utils import create_casename, convert_to_seconds, next_arrival
 from tqdm import tqdm
 
 # Load configurations for each partition
@@ -27,22 +27,52 @@ if '*' in args.partitions[0]:
     partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
 
 configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
-args_dicts = [{**vars(args), 'config': config} for config in configs]
+args_dicts = [
+       {**vars(args), 'config': config, 'partition': partition_names[i]}
+       for i, config in enumerate(configs)
+   ]
 
 # Initialize Workload
 if args.replay:
 
-    # Currently this assumes that an .npz file has already been created
-    # e.g., python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet
-    td = Telemetry(**args_dicts[0])
-    print(f"Loading {args.replay[0]}...")
-    jobs = td.load_snapshot(args.replay[0])
-    available_nodes = [config['AVAILABLE_NODES'] for config in configs]
-    print("available nodes:", available_nodes)
+    jobs_by_partition = {}
+    t0_by_partition = {}
+    t1_by_partition = {}
 
-    # Randomly assign partition
-    for job in jobs:
-        job.partition = random.choices(partition_names, weights=available_nodes, k=1)[0]
+
+    if args.replay[0].endswith('.npz'):
+        # snapshot mode: pick the right .npz for each partition
+        snap_map = { os.path.basename(p): p for p in args.replay }
+        for ad in args_dicts:
+            part = ad['partition']                        # e.g. 'mit_supercloud/part-cpu'
+            short = part.split('/')[-1]                   # 'part-cpu'
+            snap_file = f"{short}.npz"
+            if snap_file not in snap_map:
+                raise RuntimeError(f"Snapshot '{snap_file}' not in {args.replay}")
+            td = Telemetry(**ad)
+            print(f"[{part}] loading snapshot {snap_file} …")
+            jobs_part, t0, t1, args_from_file = td.load_snapshot(snap_map[snap_file])
+            jobs_by_partition[part] = jobs_part
+    else:
+        # raw load_data mode
+        for ad in args_dicts:
+            part = ad['partition']
+            td = Telemetry(**ad)
+            print(f"[{part}] loading traces from {args.replay[0]} …")
+            jobs_part, t0, t1 = td.load_data(args.replay)
+            jobs_by_partition[part] = jobs_part
+            td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
+
+    # --- report how many jobs per partition ---
+    for part, jl in jobs_by_partition.items():
+        print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
+
+    # now flatten into a single job list (or keep separate for your engine)
+    jobs = []
+    for part in partition_names:
+        for job in jobs_by_partition[part]:
+            job.partition = part
+            jobs.append(job)
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -53,9 +83,6 @@ if args.replay:
             partition = job.partition
             partition_config = configs[partition_names.index(partition)]
             job.submit_time = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
-
-    elif args.arrival == 'prescribed':
-        raise NotImplementedError
 
 else:  # Synthetic workload
     wl = Workload(*configs)
@@ -113,4 +140,3 @@ for timestep in range(timesteps):
         print(f"system power: {sys_power:.1f}kW")
 
 print("Simulation complete.")
-

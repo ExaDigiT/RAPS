@@ -13,8 +13,8 @@ Usage Instructions:
     git clone https://github.com/LLNL/LAST/ && cd LAST
     git lfs pull
 
-    # to analyze dataset
-    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -v
+    # to analyze dataset and plot histograms
+    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --plot
 
     # to simulate the dataset as submitted
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
@@ -45,7 +45,7 @@ def load_data(path, **kwargs):
     """
     Loads data from the given file paths and returns job info.
     """
-    nrows = None
+    nrows = 1E5  # None
     alloc_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
     node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
     step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
@@ -90,8 +90,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta
 
     # As these are >1.4M jobs, filtered to the simulated timestamps before creating the job structs.
-    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
-    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
+    #allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
+    #allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
 
     job_list = []
 
@@ -149,7 +149,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # The multiplication by GPUS_PER_NODE fixes this but is patch-work! TODO Refactor and fix
             gpu_util = power_to_utilization(gpu_power,gpu_min_power,gpu_max_power)
             # gpu_util should to be between 0 an 4 (4 GPUs), where 4 is all GPUs full utilization.
-            gpu_trace = gpu_util * config['GPUS_PER_NODE']
+            gpu_util_scalar = gpu_util * config['GPUS_PER_NODE']
 
             # Compute CPU power from CPU usage time
             # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
@@ -166,17 +166,26 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
             # cpu_util should be between 0 an 2 (2 CPUs)
 
-            cpu_trace = cpu_util
+            cpu_util_scalar = cpu_util
             # TODO use total energy for validation
             # Only Node Energy and GPU Energy is reported!
             # total_energy = node_data['energy'].sum() # Joules
 
-        # Network utilization - since values are given in octets / quarter of a byte, multiply by 4 to get bytes
-        ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else []
-        ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else []
+            # Expand into lists of length=samples
+            cpu_trace = [cpu_util_scalar] * samples
+            gpu_trace = [gpu_util_scalar] * samples
 
-        #net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
-        net_tx, net_rx = None,None  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        # Network utilization - since values are given in octets / quarter of a byte, multiply by 4 to get bytes
+        total_ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else 0
+        total_ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else 0
+
+        n = nodes_required
+        ib_tx_per_node = total_ib_tx / n  # average bytes per node
+        ib_rx_per_node = total_ib_rx / n  # average bytes per node
+
+        # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        net_tx, net_rx = throughput_traces(ib_tx_per_node, ib_rx_per_node, samples)
 
         # no priorities defined!
         priority = row.get('priority', 0)
@@ -185,8 +194,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         if arrival == 'poisson':  # Modify the submit times according to Poisson process
             scheduled_nodes = None
             submit_time = next_arrival_byconfkwargs(config,kwargs)
-            start_time = None  # Scheduler will determine start time
-            end_time = None  # Scheduler will determine end time
+            start_time = submit_time  # Pretend Job could start immediately # Alternative: None
+            end_time = submit_time + wall_time  # Alternative: None
         else:  # Prescribed replay
             scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
             submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
@@ -201,7 +210,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         trace_missing_values = False
 
         if verbose:
-            print('ib_tx, ib_rx, samples:', ib_tx, ib_rx, samples)
+            print('ib_tx, ib_rx, samples:', net_tx, net_rx, samples)
             print('tx:', net_tx)
             print('rx:', net_rx)
             print('scheduled_nodes:', nodes_required, scheduled_nodes)
@@ -294,6 +303,17 @@ def generate_network_sequences(total_tx, total_rx, intervals, lambda_poisson):
     return tx_bursts, rx_bursts
 
 
+def throughput_traces(total_tx, total_rx, intervals):
+
+    if not total_tx or not total_rx:
+        return None, None
+
+    tx_bursts = [total_tx // intervals] * intervals
+    rx_bursts = [total_rx // intervals] * intervals
+
+    return tx_bursts, rx_bursts
+
+
 def node_index_to_name(index: int, config: dict):
     """ Converts an index value back to an name string based on system configuration. """
     return f"node{index:04d}"
@@ -305,7 +325,7 @@ def cdu_index_to_name(index: int, config: dict):
 
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
-    return (0, index) # TODO
+    return (0, index)  # TODO
 
 
 if __name__ == "__main__":

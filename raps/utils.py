@@ -42,6 +42,9 @@ def convert_seconds_to_hhmmss(seconds):
 
 def convert_seconds_to_hhmm(seconds):
     """Convert seconds to time format: 3661s -> 01:01"""
+    # if it's a NumPy scalar, extract the Python value
+    if hasattr(seconds, "item"):
+        seconds = seconds.item()
     td = timedelta(seconds=seconds)
     h, m, _ = str(td).split(':')
     return f"{h}:{m}"

@@ -7,18 +7,24 @@ from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
-from rich.progress import Progress,TextColumn,BarColumn,TaskProgressColumn,TimeRemainingColumn, track, TimeElapsedColumn, MofNCompleteColumn
+from rich.progress import (
+    Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn,
+    track, TimeElapsedColumn, MofNCompleteColumn
+)
+
 from contextlib import nullcontext
 
-from .utils import summarize_ranges, convert_seconds_to_hhmmss, convert_seconds_to_hhmm
-from .constants import ELLIPSES
-from .engine import TickData, Engine
+from raps.utils import summarize_ranges, convert_seconds_to_hhmmss, convert_seconds_to_hhmm
+from raps.constants import ELLIPSES
+from raps.engine import TickData, Engine
 
 
 class LayoutManager:
-    def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, **config):
+    def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, args_dict=None, **config):
         self.engine = engine
         self.config = config
+        self.topology = self.engine.config.get("TOPOLOGY", "none")
+        self.simulate_network = args_dict.get("simulate_network")
         self.console = Console()
         self.layout = Layout()
         self.hascooling = layout_type == "layout2"
@@ -103,28 +109,60 @@ class LayoutManager:
         show_nodes : bool, optional
             Flag indicating whether to display node information (default is False).
         """
-        # Define columns with header styles
-        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES", "NODE SEGMENTS"]
+
+        # Decide whether to show "SLOWDOWN" (if real topology) or "NODE SEGMENTS" (if capacity/none)
+        show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
+
+        # Build the column headers
+        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
+        #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
+        if show_slowdown:
+            columns.append("SLOW DOWN")
+        else:
+            columns.append("NODE SEGMENTS")
+
         if show_nodes:
             columns.append("NODELIST")
-        columns.append("TIME")
+        #columns.append("TIME")
 
         # Create table with bold magenta headers
         table = Table(title="Job Queue", header_style="bold magenta", expand=True)
         for col in columns:
             table.add_column(col, justify="center")
 
-        # Add data rows with white values
+        # Add data rows
         for job in jobs:
-            node_segments = summarize_ranges(job.scheduled_nodes)
-            if show_nodes:
+            # Number of requested nodes as a string
+            n_nodes = str(job.nodes_required)
+
+            if show_slowdown:
+                # Each Job should have job.net_congestion set in Engine.tick()
+                slow = getattr(job, "slowdown_factor", 0.0)
+                # Format as "1.23×" (if ≤1.00 you will see "1.00×")
+                slowdown_str = f"{slow:.2f}×"
+                col_slow = slowdown_str
+            else:
+                # Fallback to original NODE SEGMENTS logic
+                node_segments = summarize_ranges(job.scheduled_nodes)
+                if show_nodes:
+                    if len(node_segments) > 4:
+                        nodes_display = ", ".join(node_segments[:2] + [ELLIPSES] + node_segments[-2:])
+                    else:
+                        nodes_display = ", ".join(node_segments)
+                    col_slow = nodes_display  # reused variable name for simplicity
+                else:
+                    col_slow = str(len(node_segments))
+
+            # If show_nodes is True, we need to append NODELIST as well
+            if show_nodes and not show_slowdown:
+                # use the same node_segments variable to build the list of nodes
                 if len(node_segments) > 4:
                     nodes_display = ", ".join(node_segments[:2] + [ELLIPSES] + node_segments[-2:])
                 else:
                     nodes_display = ", ".join(node_segments)
-            else:
-                nodes_display = str(len(node_segments))
+                col_nodelist = nodes_display
 
+            # Build the row
             row = [
                 str(job.id).zfill(5),
                 convert_seconds_to_hhmm(job.wall_time),
@@ -132,16 +170,28 @@ class LayoutManager:
                 str(job.account),
                 job.state.value,
                 str(job.nodes_required),
-                nodes_display,
-                convert_seconds_to_hhmm(job.running_time)
             ]
-            # Add the row with the 'white' style applied to the whole row
+            #if self.simulate_network:
+            #    row.append(nodes_display)
+            #    row.append(convert_seconds_to_hhmm(job.running_time))
+
+            if show_nodes:
+                # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
+                row.append(col_nodelist)
+
+            # Finally, append the running‐time column
+            row.append(convert_seconds_to_hhmm(job.running_time))
+
+            # If the job has been flagged as “dilated”, show its row in yellow
+            if getattr(job, "dilated", False):
+                row = [f"[yellow]{x}[/yellow]" for x in row]
+
             table.add_row(*row, style="white")
 
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
-    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes):
+    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util, slowdown):
         """
         Updates the status information table with the provided system status data.
 
@@ -161,7 +211,11 @@ class LayoutManager:
             List of nodes that are down.
         """
         # Define columns with header styles
-        columns = ["Time", "Jobs Running", "Jobs Queued", "Active Nodes", "Free Nodes", "Down Nodes"]
+        columns = [
+            "Time", "Jobs Running", "Jobs Queued",
+            "Active Nodes", "Free Nodes", "Down Nodes"]
+        if self.simulate_network:
+            columns.extend(("Net Util (%)", "Slowdown per job"))
         table = Table(header_style="bold magenta", expand=True)
         for col in columns:
             table.add_column(col, justify="center")
@@ -175,6 +229,10 @@ class LayoutManager:
             str(free_nodes),
             str(len(down_nodes))
         ]
+        print(f"self.simulate_network: {self.simulate_network}")
+        if self.simulate_network:
+            row.append(f"{avg_net_util * 100:.0f}%")
+            row.append(f"{slowdown:.1f}x")
         # Add the row with the 'white' style applied to the whole row
         table.add_row(*row, style="white")
 
@@ -383,9 +441,9 @@ class LayoutManager:
             total_table.add_row(
                 f"{system_util:.1f}%",
                 total_power_str,
-                str(f"{pflops:.2f}"),
-                str(f"{gflop_per_watt:.1f}"),
-                total_loss_str + " (" + percent_loss_str+ ")",
+                str(f"{pflops:.2f}" if pflops is not None else "None"),
+                str(f"{gflop_per_watt:.1f}" if gflop_per_watt is not None else "None"),
+                total_loss_str + " (" + percent_loss_str + ")",
                 style="white"  # Apply 'white' style to the entire row
             )
 
@@ -416,22 +474,29 @@ class LayoutManager:
             self.update_pressflow_array(data.fmu_outputs)
 
         self.update_scheduled_jobs(data.running + data.queue)
+
         self.update_status(
             data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
-            data.num_free_nodes, data.down_nodes,
+            data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job
         )
+
+        self.update_scheduled_jobs(data.running + data.queue)
+
+        self.update_status(
+            data.current_time,
+            len(data.running),
+            len(data.queue),
+            data.num_active_nodes,
+            data.num_free_nodes,
+            data.down_nodes,
+            data.avg_net_util,
+            data.slowdown_per_job
+        )
+
         self.update_power_array(
             data.power_df, data.p_flops, data.g_flops_w,
             data.system_util, uncertainties=uncertainties,
         )
-        if False:
-            self.render()
-
-
-    def render(self):
-        if not self.debug:
-            self.console.clear()
-            self.console.print(self.layout)
 
     def run(self, jobs, timestep_start, timestep_end, time_delta):
         """ Runs the UI, blocking until the simulation is complete """
@@ -444,6 +509,7 @@ class LayoutManager:
                 if data:
                     self.update_full_layout(data,time_delta)
                 self.update_progress_bar(1)
+
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
         """ Prepares the UI and returns a generator for the simulation """

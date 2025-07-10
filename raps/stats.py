@@ -70,6 +70,31 @@ def get_scheduler_stats(engine: Engine):
     return stats
 
 
+def get_network_stats(engine: Engine):
+    stats = {}
+
+    if engine.net_util_history:
+        mean_net_util = sum(engine.net_util_history) / len(engine.net_util_history)
+    else:
+        mean_net_util = 0.0
+
+    stats["avg network util"] = f"{mean_net_util * 100:.2f}%"
+
+    if engine.avg_slowdown_history:
+        avg_job_slow = sum(engine.avg_slowdown_history) / len(engine.avg_slowdown_history)
+    else:
+        avg_job_slow = 1.0
+    stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
+
+    if engine.max_slowdown_history:
+        max_job_slow = max(engine.max_slowdown_history)
+    else:
+        max_job_slow = 1.0
+    stats["max per-job slowdown"] = f"{max_job_slow:.2f}x"
+
+    return stats
+
+
 def get_job_stats(engine: Engine):
     """ Return job statistics processed over the engine execution"""
     # Information on Job-Mix

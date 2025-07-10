@@ -25,9 +25,8 @@ from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.account import Accounts
 from raps.weather import Weather
-from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival_byconfargs
-from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats
-from raps.utils import convert_numpy_to_builtin
+from raps.utils import convert_to_seconds, write_dict_to_file
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
 from args import args, args_dict
 
@@ -136,22 +135,25 @@ else:
 
 print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
 print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].trace_quanta}s.')
-layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
+layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, args_dict=args_dict, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
 engine_stats = get_engine_stats(sc)
 job_stats = get_job_stats(sc)
 scheduler_stats = get_scheduler_stats(sc)
+network_stats = get_network_stats(sc)
 # Following b/c we get the following error when we use PM100 telemetry dataset
 # TypeError: Object of type int64 is not JSON serializable
 try:
     print(json.dumps(engine_stats, indent=4))
     print(json.dumps(job_stats, indent=4))
     print(json.dumps(scheduler_stats, indent=4))
+    print(json.dumps(network_stats, indent=4))
 except:
     print(engine_stats)
     print(job_stats)
     print(scheduler_stats)
+    print(network_stats)
 
 
 if args.plot:
