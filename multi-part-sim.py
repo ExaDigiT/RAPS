@@ -15,7 +15,7 @@ from raps.flops import FLOPSManager
 from raps.power import PowerManager, compute_node_power
 from raps.telemetry import Telemetry
 from raps.workload import Workload
-from raps.utils import convert_to_seconds, next_arrival
+from raps.utils import create_casename, convert_to_seconds, next_arrival
 from tqdm import tqdm
 
 # Load configurations for each partition
@@ -55,6 +55,7 @@ if args.replay:
         print(f"[{part}] loading traces from {args.replay[0]} …")
         jobs_part, t0, t1 = td.load_data(args.replay)
         jobs_by_partition[part] = jobs_part
+        td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
 
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():
