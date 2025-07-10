@@ -55,7 +55,9 @@ For MIT Supercloud
 
     python main.py -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
 
-    python multi-part-sim.py -x 'mit_supercloud/*' -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud --arrival poisson
+    python multi-part-sim.py -x 'mit_supercloud/*' -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
+
+    python multi-part-sim.py -x mit_supercloud/* -f part-*.npz --system mit_supercloud
 
 ## Perform Network Simulation
 

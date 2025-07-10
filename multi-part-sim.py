@@ -48,14 +48,41 @@ if args.replay:
     #for job in jobs:
     #    job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
 
+    #jobs_by_partition = {}
+    #for ad in args_dicts:
+    #    part = ad['partition']
+    #    td = Telemetry(**ad)
+    #    print(f"[{part}] loading traces from {args.replay[0]} …")
+    #    jobs_part, t0, t1 = td.load_data(args.replay)
+    #    jobs_by_partition[part] = jobs_part
+    #    td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
+
     jobs_by_partition = {}
-    for ad in args_dicts:
-        part = ad['partition']
-        td = Telemetry(**ad)
-        print(f"[{part}] loading traces from {args.replay[0]} …")
-        jobs_part, t0, t1 = td.load_data(args.replay)
-        jobs_by_partition[part] = jobs_part
-        td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
+    t0_by_partition = {}
+    t1_by_partition = {}
+
+    if args.replay[0].endswith('.npz'):
+        # snapshot mode: pick the right .npz for each partition
+        snap_map = { os.path.basename(p): p for p in args.replay }
+        for ad in args_dicts:
+            part = ad['partition']                        # e.g. 'mit_supercloud/part-cpu'
+            short = part.split('/')[-1]                   # 'part-cpu'
+            snap_file = f"{short}.npz"
+            if snap_file not in snap_map:
+                raise RuntimeError(f"Snapshot '{snap_file}' not in {args.replay}")
+            td = Telemetry(**ad)
+            print(f"[{part}] loading snapshot {snap_file} …")
+            jobs_part, t0, t1, args_from_file = td.load_snapshot(snap_map[snap_file])
+            jobs_by_partition[part] = jobs_part
+    else:
+        # raw load_data mode
+        for ad in args_dicts:
+            part = ad['partition']
+            td = Telemetry(**ad)
+            print(f"[{part}] loading traces from {args.replay[0]} …")
+            jobs_part, t0, t1 = td.load_data(args.replay)
+            jobs_by_partition[part] = jobs_part
+            td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
 
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():
@@ -79,9 +106,6 @@ if args.replay:
             partition_config = configs[partition_names.index(partition)]
             job['requested_nodes'] = None
             job['submit_time'] = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
-
-    elif args.arrival == 'prescribed':
-        raise NotImplementedError
 
 else:  # Synthetic workload
     wl = Workload(*configs)
