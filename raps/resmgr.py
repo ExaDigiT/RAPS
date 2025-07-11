@@ -27,6 +27,7 @@ class ResourceManager:
         # Available nodes are now tracked by their available resources
         self.available_nodes = [node['id'] for node in self.nodes if not node['is_down']]
         self.sys_util_history = []
+        self.allocated_cpu_cores = 0
 
     def assign_nodes_to_job(self, job, current_time, node_id):
         """Assigns resources (cores, GPUs) to a job and updates the available resources."""
@@ -79,16 +80,22 @@ class ResourceManager:
         total_cpu_cores = sum(node['total_cpu_cores'] for node in self.nodes)
         total_gpu_units = sum(node['total_gpu_units'] for node in self.nodes)
 
-        allocated_cpu_cores = sum(job.allocated_cpu_cores for job in running_jobs)
+        self.allocated_cpu_cores = sum(job.allocated_cpu_cores for job in running_jobs)
         allocated_gpu_units = sum(job.allocated_gpu_units for job in running_jobs)
 
-        cpu_utilization = (allocated_cpu_cores / total_cpu_cores) * 100 if total_cpu_cores else 0
+        cpu_utilization = (self.allocated_cpu_cores / total_cpu_cores) * 100 if total_cpu_cores else 0
         gpu_utilization = (allocated_gpu_units / total_gpu_units) * 100 if total_gpu_units else 0
 
-        # For now, we'll just use CPU utilization as the primary system utilization metric
-        # You might want to combine these or choose a different primary metric
-        self.sys_util_history.append((current_time, cpu_utilization))
-        return cpu_utilization
+        # Determine utilization based on partition type (has GPUs or not)
+        if self.config.get('GPUS_PER_NODE', 0) > 0:
+            # This is a GPU partition, use GPU utilization
+            utilization = gpu_utilization
+        else:
+            # This is a CPU-only partition, use CPU utilization
+            utilization = cpu_utilization
+
+        self.sys_util_history.append((current_time, utilization))
+        return utilization
 
     def node_failure(self, mtbf):
         """Simulate node failure using Weibull distribution."""

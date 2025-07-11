@@ -134,8 +134,9 @@ for timestep in range(timesteps):
     if timestep % configs[0]['UI_UPDATE_FREQ'] == 0:  # Assuming same frequency for all partitions
         sys_power = 0
         for name, lm in layout_managers.items():
-            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else 0.0
-            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} - Utilization: {sys_util[1]:.2f}% - Power: {lm.engine.sys_power:.1f}kW")
+            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else (0, 0.0)
+            allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
+            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} - Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - Power: {lm.engine.sys_power:.1f}kW")
             sys_power += lm.engine.sys_power
         print(f"system power: {sys_power:.1f}kW")
 
