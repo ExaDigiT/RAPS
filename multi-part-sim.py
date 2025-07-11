@@ -16,6 +16,7 @@ from raps.power import PowerManager, compute_node_power
 from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.utils import create_casename, convert_to_seconds, next_arrival
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 from tqdm import tqdm
 
 # Load configurations for each partition
@@ -67,11 +68,14 @@ if args.replay:
         print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
 
     # now flatten into a single job list (or keep separate for your engine)
-    jobs = []
+    all_jobs_flat = []
     for part in partition_names:
         for job in jobs_by_partition[part]:
             job['partition'] = part
-            jobs.append(job)
+            all_jobs_flat.append(job)
+
+    total_initial_jobs = len(all_jobs_flat)
+    jobs = all_jobs_flat
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -101,7 +105,7 @@ layout_managers = {}
 for i, config in enumerate(configs):
     pm = PowerManager(compute_node_power, **configs[i])
     fm = FLOPSManager(**args_dicts[i])
-    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, **args_dicts[i])
+    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, jobs=jobs_by_partition[config['system_name']], total_initial_jobs=total_initial_jobs, **args_dicts[i])
     layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
 
 # Set simulation timesteps
@@ -136,3 +140,11 @@ for timestep in range(timesteps):
         print(f"system power: {sys_power:.1f}kW")
 
 print("Simulation complete.")
+
+# Print statistics for each partition
+for name, lm in layout_managers.items():
+    print(f"\n--- Simulation Report for Partition: {name} ---")
+    simulation_stats = lm.engine.get_stats()
+    for key, value in simulation_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("--------------------------------------------------")

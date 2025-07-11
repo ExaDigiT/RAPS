@@ -9,8 +9,7 @@ class ResourceManager:
         self.config = config
         self.down_nodes = set(down_nodes)
         self.nodes = []
-        node_id_counter = 0
-
+        # Initialize nodes based on config parameters
         total_cpu_cores_per_node = self.config['CPUS_PER_NODE'] * self.config['CORES_PER_CPU']
         total_gpu_units_per_node = self.config['GPUS_PER_NODE']
 
@@ -24,7 +23,6 @@ class ResourceManager:
                 'available_gpu_units': 0 if is_down else total_gpu_units_per_node,
                 'is_down': is_down
             })
-            node_id_counter += 1
 
         # Available nodes are now tracked by their available resources
         self.available_nodes = [node['id'] for node in self.nodes if not node['is_down']]

@@ -41,12 +41,13 @@ class TickData:
     avg_net_rx: float
     avg_net_util: float
     slowdown_per_job: float
+    node_occupancy: dict[int, int]
 
 
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, jobs=None, **kwargs):
+    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, jobs=None, total_initial_jobs=0, **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
@@ -60,6 +61,7 @@ class Engine:
         self.accounts = None
         self.job_history_dict = []
         self.jobs_completed = 0
+        self.total_initial_jobs = total_initial_jobs
         self.current_time = 0
         self.cooling_model = cooling_model
         self.sys_power = 0
@@ -76,6 +78,7 @@ class Engine:
         self.net_util_history = []
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
+        self.node_occupancy_history = []
 
         # Get scheduler type from command-line args or default
         scheduler_type = kwargs.get('scheduler', 'default')
@@ -455,6 +458,15 @@ class Engine:
         self.avg_net_rx.append(avg_rx)
         self.net_util_history.append(avg_net)
 
+        # Calculate node occupancy
+        node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes} # Initialize even if no running jobs
+        for job in self.running:
+            if job.scheduled_nodes:
+                node_id = job.scheduled_nodes[0] # Assuming one node per job for multitenancy
+                node_occupancy[node_id] += 1
+
+        self.node_occupancy_history.append(node_occupancy)
+
         tick_data = TickData(
             current_time=self.current_time,
             completed=None,
@@ -464,7 +476,7 @@ class Engine:
             power_df=power_df,
             p_flops=pflops,
             g_flops_w=gflop_per_watt,
-            system_util=self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100,
+            system_util=system_util,
             fmu_inputs=cooling_inputs,
             fmu_outputs=cooling_outputs,
             num_active_nodes=self.num_active_nodes,
@@ -472,7 +484,8 @@ class Engine:
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
-            slowdown_per_job=0
+            slowdown_per_job=0,
+            node_occupancy=node_occupancy
         )
 
         self.current_time += 1
@@ -594,8 +607,37 @@ class Engine:
             'total cost': f'${total_cost:.2f}'
         }
 
-        network_stats = get_network_stats()
-        stats.update(network_stats)
+        # Multitenancy Stats
+        total_jobs_loaded = self.total_initial_jobs # Assuming this is passed to __init__
+        stats['total jobs loaded'] = total_jobs_loaded
+        stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
+
+        if self.node_occupancy_history:
+            # Calculate average concurrent jobs per node
+            total_occupancy_sum = 0
+            max_concurrent_jobs_per_node = 0
+            num_timesteps_with_jobs = 0
+
+            for occupancy_dict in self.node_occupancy_history:
+                current_timestep_total_occupancy = sum(occupancy_dict.values())
+                if current_timestep_total_occupancy > 0:
+                    total_occupancy_sum += current_timestep_total_occupancy
+                    num_timesteps_with_jobs += 1
+
+                # Find max concurrent jobs on any single node for this timestep
+                if occupancy_dict:
+                    max_concurrent_jobs_per_node = max(max_concurrent_jobs_per_node, max(occupancy_dict.values()))
+
+            avg_concurrent_jobs_per_node = (total_occupancy_sum / num_timesteps_with_jobs) if num_timesteps_with_jobs > 0 else 0
+
+            stats['avg concurrent jobs per node'] = f"{avg_concurrent_jobs_per_node:.2f}"
+            stats['max concurrent jobs per node'] = max_concurrent_jobs_per_node
+        else:
+            stats['avg concurrent jobs per node'] = "N/A"
+            stats['max concurrent jobs per node'] = "N/A"
+
+        #network_stats = get_network_stats()
+        #stats.update(network_stats)
 
         if self.net_util_history:
             mean_net_util = sum(self.net_util_history) / len(self.net_util_history)
