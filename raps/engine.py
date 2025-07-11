@@ -613,24 +613,31 @@ class Engine:
         stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
 
         if self.node_occupancy_history:
-            # Calculate average concurrent jobs per node
-            total_occupancy_sum = 0
+            # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
+            total_jobs_running_timesteps = 0
             max_concurrent_jobs_per_node = 0
-            num_timesteps_with_jobs = 0
+            sum_jobs_per_active_node = 0 # New: Sum of (jobs / active_nodes) for each timestep
+            count_active_timesteps_for_avg_active = 0 # New: Count of timesteps with active nodes
 
             for occupancy_dict in self.node_occupancy_history:
                 current_timestep_total_occupancy = sum(occupancy_dict.values())
-                if current_timestep_total_occupancy > 0:
-                    total_occupancy_sum += current_timestep_total_occupancy
-                    num_timesteps_with_jobs += 1
+                total_jobs_running_timesteps += current_timestep_total_occupancy
 
                 # Find max concurrent jobs on any single node for this timestep
                 if occupancy_dict:
                     max_concurrent_jobs_per_node = max(max_concurrent_jobs_per_node, max(occupancy_dict.values()))
 
-            avg_concurrent_jobs_per_node = (total_occupancy_sum / num_timesteps_with_jobs) if num_timesteps_with_jobs > 0 else 0
+                # New: Calculate average jobs per *active* node for this timestep
+                active_nodes_in_timestep = [count for count in occupancy_dict.values() if count > 0]
+                if active_nodes_in_timestep:
+                    sum_jobs_per_active_node += sum(active_nodes_in_timestep) / len(active_nodes_in_timestep)
+                    count_active_timesteps_for_avg_active += 1
 
-            stats['avg concurrent jobs per node'] = f"{avg_concurrent_jobs_per_node:.2f}"
+            # Average jobs per *active* node (user's desired "1" type)
+            avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
+                if count_active_timesteps_for_avg_active > 0 else 0
+
+            stats['avg concurrent jobs per active node'] = f"{avg_jobs_per_active_node:.2f}"
             stats['max concurrent jobs per node'] = max_concurrent_jobs_per_node
         else:
             stats['avg concurrent jobs per node'] = "N/A"
