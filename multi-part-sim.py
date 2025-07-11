@@ -58,9 +58,9 @@ if args.replay:
             part = ad['partition']
             td = Telemetry(**ad)
             print(f"[{part}] loading traces from {args.replay[0]} …")
-            jobs_part, t0, t1 = td.load_data(args.replay)
+            jobs_part, t0, t1, args_from_file = td.load_data(args.replay)
             jobs_by_partition[part] = jobs_part
-            td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
+            td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
 
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():

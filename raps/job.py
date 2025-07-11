@@ -15,6 +15,8 @@ Implementing such using something like:
 
 def job_dict(*, nodes_required, name, account,
              cpu_trace, gpu_trace, ntx_trace, nrx_trace,
+             cpu_cores_required=0, gpu_units_required=0,
+             allocated_cpu_cores=0, allocated_gpu_units=0,
              end_state, scheduled_nodes=None, id, priority=0, partition=0,
              submit_time=0, time_limit=0, start_time=0, end_time=0,
              wall_time=0, trace_time=0, trace_start_time=0, trace_end_time=0,
@@ -22,6 +24,10 @@ def job_dict(*, nodes_required, name, account,
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
+        'cpu_cores_required': cpu_cores_required,
+        'gpu_units_required': gpu_units_required,
+        'allocated_cpu_cores': allocated_cpu_cores,
+        'allocated_gpu_units': allocated_gpu_units,
         'name': name,
         'account': account,
         'cpu_trace': cpu_trace,
@@ -101,6 +107,10 @@ class Job:
         self.power = 0
         self.scheduled_nodes = []  # Explicit list of requested nodes
         self.nodes_required = 0  # If scheduled_nodes is set this can be derived.
+        self.cpu_cores_required = 0
+        self.gpu_units_required = 0
+        self.allocated_cpu_cores = 0
+        self.allocated_gpu_units = 0
         self.power_history = []
         self._state = state
         self.account = account
@@ -129,6 +139,10 @@ class Job:
         """Return a string representation of the job."""
         return (f"Job(id={self.id}, name={self.name}, account={self.account}, "
                 f"nodes_required={self.nodes_required}, "
+                f"cpu_cores_required={self.cpu_cores_required}, "
+                f"gpu_units_required={self.gpu_units_required}, "
+                f"allocated_cpu_cores={self.allocated_cpu_cores}, "
+                f"allocated_gpu_units={self.allocated_gpu_units}, "
                 f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
                 f"end_state={self.end_state}, requested_nodes={self.requested_nodes}, "
                 f"submit_time={self.submit_time}, time_limit={self.time_limit}, "

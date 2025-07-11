@@ -8,6 +8,8 @@ import os
 import shutil
 import sys
 from datetime import datetime
+import math
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -317,16 +319,26 @@ def load_data(local_dataset_path, **kwargs):
 
     # 9) build final job_dicts
     jobs_list = []
+    
+    # Get CPUS_PER_NODE and GPUS_PER_NODE from config
+    config = kwargs.get('config', {})
+    cpus_per_node = config.get('CPUS_PER_NODE', 2) # Default to 2 if not found
+    gpus_per_node = config.get('GPUS_PER_NODE', 0) # Default to 0 if not found
+
     for jid, rec in data.items():
         cpu = rec.get("cpu")
         gpu = rec.get("gpu_trace")
+
+        cpu_tr = []
+        gpu_tr = []
+        t0, t1 = 0, 0
 
         if cpu_only:
             if cpu is None:
                 print("cpu None: skipping this one (a)")
                 continue
             cpu_tr = cpu.cpu_utilisation.tolist()
-            gpu_tr = 0
+            gpu_tr = [0] # Ensure gpu_tr is a list for max() operation
             t0, t1 = cpu.utime.min(), cpu.utime.max()
         elif mixed:
             if cpu is None:
@@ -347,8 +359,14 @@ def load_data(local_dataset_path, **kwargs):
         if nr>1:
             cpu_tr = [x/nr for x in cpu_tr]
 
+        # Calculate cpu_cores_required and gpu_units_required
+        cpu_cores_req = math.ceil(max(cpu_tr) * cpus_per_node) if cpu_tr else 0
+        gpu_units_req = math.ceil(max(gpu_tr) * gpus_per_node) if gpu_tr else 0
+
         jobs_list.append(job_dict(
             nodes_required   = nr,
+            cpu_cores_required = cpu_cores_req,
+            gpu_units_required = gpu_units_req,
             name             = rec.get("name_job","unknown"),
             account          = rec.get("id_user","unknown"),
             cpu_trace        = cpu_tr,
@@ -368,4 +386,14 @@ def load_data(local_dataset_path, **kwargs):
             trace_end_time   = len(cpu_tr)*10.0
         ))
 
-    return jobs_list, 0, duration
+    # Calculate min_overall_utime and max_overall_utime
+    min_overall_utime = int(sl.time_submit.min())
+    max_overall_utime = int(sl.time_submit.max())
+
+    args_namespace = SimpleNamespace(
+        fastforward=min_overall_utime,
+        system='mit_supercloud',
+        time=max_overall_utime
+    )
+
+    return jobs_list, min_overall_utime, max_overall_utime, args_namespace

@@ -51,7 +51,8 @@ class Engine:
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
             total_nodes=self.config['TOTAL_NODES'],
-            down_nodes=self.config['DOWN_NODES']
+            down_nodes=self.config['DOWN_NODES'],
+            config=self.config
         )
         # Initialize running and queue, etc.
         self.running = []
@@ -124,16 +125,26 @@ class Engine:
         Adds running jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose start_time is <= current_time.
         eligible = [job for job in jobs_to_submit if job['start_time'] < self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: Found {len(eligible)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job['start_time'] >= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         eligible_jobs_list = []
         for job_data in eligible:
             job_instance = Job(job_data)
+            job_instance.cpu_cores_required = job_data.get('cpu_cores_required', 0)
+            job_instance.gpu_units_required = job_data.get('gpu_units_required', 0)
             eligible_jobs_list.append(job_instance)
         self.queue += eligible_jobs_list
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -142,16 +153,26 @@ class Engine:
         Adds eligible jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose submit_time is <= current_time.
         eligible = [job for job in jobs_to_submit if job['submit_time'] <= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: Found {len(eligible)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job['submit_time'] > self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         eligible_jobs_list = []
         for job_data in eligible:
             job_instance = Job(job_data)
+            job_instance.cpu_cores_required = job_data.get('cpu_cores_required', 0)
+            job_instance.gpu_units_required = job_data.get('gpu_units_required', 0)
             eligible_jobs_list.append(job_instance)
         self.queue += eligible_jobs_list
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
         if eligible_jobs_list != []:
             return True
         else:
@@ -181,11 +202,17 @@ class Engine:
         else:
             newly_downed_nodes = []
 
-        # Update active/free nodes
-        self.num_free_nodes = len(self.resource_manager.available_nodes)
-        self.num_active_nodes = self.config['TOTAL_NODES'] \
-                              - len(self.resource_manager.available_nodes) \
-                              - len(self.resource_manager.down_nodes)
+        # Update active/free nodes based on core/GPU utilization
+        total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
+        total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
+        available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
+        available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+
+        self.num_free_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and node['available_cpu_cores'] == node['total_cpu_cores'] and node['available_gpu_units'] == node['total_gpu_units']])
+        self.num_active_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and (node['available_cpu_cores'] < node['total_cpu_cores'] or node['available_gpu_units'] < node['total_gpu_units'])])
+
+        # Update system utilization history
+        self.resource_manager.update_system_utilization(self.current_time, self.running)
 
         return completed_jobs, newly_downed_nodes
 
@@ -201,8 +228,8 @@ class Engine:
         net_utils = []
         net_tx_list = []
         net_rx_list = []
-        if self.debug:
-                print(f"Current Time: {self.current_time}")
+        #if self.debug:
+        #        print(f"Current Time: {self.current_time}")
 
         slowdown_factors = []
 
@@ -365,7 +392,7 @@ class Engine:
         rack_loss = rect_losses + sivoc_losses
 
         # Update system utilization
-        system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
+        system_util = self.resource_manager.sys_util_history[-1][1] if self.resource_manager.sys_util_history else 0.0
         self.sys_util_history.append((self.current_time, system_util))
 
         self.scheduler_queue_history.append(len(self.running))
@@ -485,6 +512,11 @@ class Engine:
             replay = True
         else:
             replay = False
+
+        if self.debug:
+            print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
+            if jobs:
+                print(f"[DEBUG] run_simulation: First job submit_time: {jobs[0]['submit_time']}, start_time: {jobs[0]['start_time']}")
 
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
