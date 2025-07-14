@@ -114,15 +114,15 @@ class LayoutManager:
         show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
 
         # Build the column headers
-        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
-        #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
+        #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
+        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
         if show_slowdown:
             columns.append("SLOW DOWN")
         else:
             columns.append("NODE SEGMENTS")
 
-        if show_nodes:
-            columns.append("NODELIST")
+        #if show_nodes:
+        #    columns.append("NODELIST")
 
         columns.append("TIME")
 
@@ -162,6 +162,9 @@ class LayoutManager:
                 else:
                     nodes_display = ", ".join(node_segments)
                 col_nodelist = nodes_display
+            else:
+                col_nodelist = col_slow  # This logic is a bit flawed...
+                nodes_display = col_nodelist
 
             # Build the row
             row = [
@@ -172,13 +175,11 @@ class LayoutManager:
                 job.state.value,
                 str(job.nodes_required),
             ]
-            #if self.simulate_network:
-            #    row.append(nodes_display)
-            #    row.append(convert_seconds_to_hhmm(job.running_time))
+            row.append(nodes_display)
 
-            if show_nodes:
-                # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
-                row.append(col_nodelist)
+            #if show_nodes:
+            #    # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
+            #    row.append(col_nodelist)
 
             # Finally, append the running‐time column
             row.append(convert_seconds_to_hhmm(job.running_time))
