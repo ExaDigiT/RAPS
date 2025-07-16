@@ -1,10 +1,10 @@
 """
-This module provides functionality for simulating a thermo-fluids model using 
+This module provides functionality for simulating a thermo-fluids model using
 an FMU (Functional Mock-up Unit).
 
-The module defines a `ThermoFluidsModel` class that encapsulates the 
+The module defines a `ThermoFluidsModel` class that encapsulates the
 initialization, simulation step execution,
-data conversion, and cleanup processes for the FMU-based model. 
+data conversion, and cleanup processes for the FMU-based model.
 """
 import shutil
 import re
@@ -22,7 +22,7 @@ def get_matching_variables(variables, pattern):
 
     # Filtering the list using the regex pattern
     filtered_vars = [var for var in variables if pattern.match(var)]
-    
+
     return filtered_vars
 
 
@@ -30,9 +30,9 @@ class ThermoFluidsModel:
     """
     A class to represent a thermo-fluids model using an FMU (Functional Mock-up Unit).
 
-    This class encapsulates the initialization, simulation step execution, data conversion, 
-    and cleanup processes for the FMU-based thermo-fluids model. It provides methods to 
-    initialize the model, execute simulation steps, generate runtime values, calculate Power 
+    This class encapsulates the initialization, simulation step execution, data conversion,
+    and cleanup processes for the FMU-based thermo-fluids model. It provides methods to
+    initialize the model, execute simulation steps, generate runtime values, calculate Power
     Usage Effectiveness (PUE), and properly manage the FMU resources.
 
     Attributes
@@ -40,7 +40,7 @@ class ThermoFluidsModel:
     FMU_PATH : str
         The file path to the FMU file.
     fmu_history : list
-        A list to store the history of FMU states, combining cooling input, datacenter output, 
+        A list to store the history of FMU states, combining cooling input, datacenter output,
         and central energy plant (CEP) output for each simulation step.
     inputs : list
         A list of input variables for the FMU.
@@ -56,17 +56,17 @@ class ThermoFluidsModel:
     Methods
     -------
     initialize():
-        Initializes the FMU by extracting the file, reading the model description, setting up input and output variables, 
+        Initializes the FMU by extracting the file, reading the model description, setting up input and output variables,
         and preparing the model for simulation.
     generate_runtime_values(cdu_power, sc) -> dict:
         Generates runtime values dynamically for the FMU inputs based on CDU power and other configuration parameters.
     generate_fmu_inputs(runtime_values: dict, uncertainties: bool = False) -> list:
         Converts runtime values to a list suitable for FMU inputs, handling uncertainties if specified.
     calculate_pue(cooling_input: dict, datacenter_output: dict, cep_output: dict) -> float:
-        Calculates the Power Usage Effectiveness (PUE) of the data center based on the cooling, datacenter, 
+        Calculates the Power Usage Effectiveness (PUE) of the data center based on the cooling, datacenter,
         and CEP output power values.
     step(current_time: float, fmu_inputs: list, step_size: float) -> Tuple[dict, dict, dict, float]:
-        Executes a simulation step with the given inputs and step size. Returns the cooling input, datacenter output, 
+        Executes a simulation step with the given inputs and step size. Returns the cooling input, datacenter output,
         CEP output, and PUE for the current step.
     terminate():
         Terminates the FMU instance, ensuring that all resources are properly released.
@@ -89,7 +89,7 @@ class ThermoFluidsModel:
         self.unzipdir = None
         self.fmu = None
         self.weather = None
-    
+
     def initialize(self):
         """
         Initializes the FMU by extracting the file and setting up the model.
@@ -115,7 +115,7 @@ class ThermoFluidsModel:
         # Get the value references for the variables we want to get/set
         self.inputs = [v for v in model_description.modelVariables if v.causality == 'input']
         self.outputs = [v for v in model_description.modelVariables if v.name in outputs]
-        
+
         # Instantiate and initialize the FMU
         self.fmu = FMU2Slave(guid=model_description.guid,
                              unzipDirectory=self.unzipdir,
@@ -159,7 +159,7 @@ class ThermoFluidsModel:
         runtime_values[self.config['TEMPERATURE_KEY']] = temperature
 
         return runtime_values
-    
+
     def generate_fmu_inputs(self, runtime_values, uncertainties=False):
         """
         Convert the runtime values based on the cooling model's inputs to a list suitable for FMU inputs.
@@ -182,7 +182,7 @@ class ThermoFluidsModel:
 
         # Helper function to process uncertainty
         def process_uncertainty(value):
-            """Strip uncertainty if present, otherwise return the value as-is."""    
+            """Strip uncertainty if present, otherwise return the value as-is."""
             # Convert to nominal value if it's an AffineScalarFunc and uncertainties flag is set
             return unumpy.nominal_values(value) if uncertainties and isinstance(value, AffineScalarFunc) else value
 
@@ -246,7 +246,7 @@ class ThermoFluidsModel:
         pue = (total_input_power + np.sum(W_CDUPs) + np.sum(W_HTWPs) + np.sum(W_CTWPs) + np.sum(W_CTs)) / total_input_power
 
         return pue
-    
+
     def step(self, current_time, fmu_inputs, step_size):
         """
         Executes a simulation step with the given inputs and step size.
@@ -314,3 +314,14 @@ class ThermoFluidsModel:
         """
         # Cleanup - at the end of the simulation
         shutil.rmtree(self.unzipdir, ignore_errors=True)
+
+    def simulate_cooling(self, rack_power):
+        cdu_power = rack_power.T[-1] * 1000
+        runtime_values = self.cooling_model.generate_runtime_values(cdu_power, self)
+
+        # FMU inputs are N powers and the wetbulb temp
+        fmu_inputs = self.cooling_model.generate_fmu_inputs(runtime_values,
+                                                            uncertainties=self.power_manager.uncertainties)
+        cooling_inputs, cooling_outputs = self.cooling_model.step(self.current_time,
+                                                                  fmu_inputs,
+                                                                  self.config['POWER_UPDATE_FREQ'])

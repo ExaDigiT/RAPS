@@ -265,6 +265,8 @@ class PowerManager:
         float
             Total power consumption of the scheduled nodes.
         """
+        if len(scheduled_nodes) == 0:
+            return []
         cpu_util = np.asarray(cpu_util)
         gpu_util = np.asarray(gpu_util)
         net_util = np.asarray(net_util)
@@ -276,7 +278,6 @@ class PowerManager:
         net_util_flat = np.repeat(net_util, job_lengths)
 
         node_indices = linear_to_3d_index(flattened_nodes, self.config['SC_SHAPE'])
-
         power_value, sivoc_loss = self.power_func(cpu_util_flat, gpu_util_flat, net_util_flat, self.config)
         self.power_state[node_indices] = power_value
         self.sivoc_loss[node_indices] = sivoc_loss
@@ -418,3 +419,44 @@ class PowerManager:
         power_df = pd.DataFrame(power_data, columns=power_columns)
 
         return power_df
+
+    def simulate_power(self, *,
+                          running_jobs,
+                          scheduled_nodes,
+                          cpu_utils,
+                          gpu_utils,
+                          net_utils
+                       ):
+        jobs_power = self.update_power_state(scheduled_nodes, cpu_utils, gpu_utils, net_utils)
+
+        for i, job in enumerate(running_jobs):
+            #if job.running_time % self.config['TRACE_QUANTA'] == 0:
+            job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
+
+        # Update the power array UI component
+        rack_power, rect_losses = self.compute_rack_power()
+        sivoc_losses = self.compute_sivoc_losses()
+        rack_loss = rect_losses + sivoc_losses
+        power_df = self.get_power_df(rack_power, rack_loss)
+
+        total_power_kw = sum(row[-1] for row in rack_power) + self.config['NUM_CDUS'] * self.config['POWER_CDU'] / 1000.0
+        total_loss_kw = sum(row[-1] for row in rack_loss)
+
+        # Primary return value:
+        #    power_df
+        # Other returns needed for further processing:
+        #    rack_power,        # For cooling
+        #    total_power_kw,    # For statistics
+        #    total_loss_kw,     # For statistics
+        #    jobs_power         # For statistics
+        # ===
+        return power_df, \
+               rack_power, \
+               total_power_kw, \
+               total_loss_kw, \
+               jobs_power
+
+
+def record_power_stats_foreach_job(*, running_jobs, jobs_power):
+    for i, job in enumerate(running_jobs):
+        job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))

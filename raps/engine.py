@@ -3,13 +3,14 @@ import dataclasses
 import pandas as pd
 import numpy as np
 
-from .job import Job, JobState
-from .policy import PolicyType
-from .network import network_utilization
-from .utils import summarize_ranges, expand_ranges, get_utilization
-from .utils import sum_values, min_value, max_value
-from .resmgr import ResourceManager
-from .schedulers import load_scheduler
+from raps.job import Job, JobState
+from raps.policy import PolicyType
+from raps.network import network_utilization
+from raps.utils import summarize_ranges, expand_ranges, get_utilization, get_current_utilization
+from raps.utils import sum_values, min_value, max_value
+from raps.resmgr import ResourceManager
+from raps.schedulers import load_scheduler
+from raps.power import record_power_stats_foreach_job
 
 
 @dataclasses.dataclass
@@ -54,6 +55,7 @@ class Engine:
         self.debug = kwargs.get('debug')
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
+        self.simulate_network = kwargs.get('simulate_network')
         self.sys_util_history = []
         self.scheduler_queue_history = []
         self.scheduler_running_history = []
@@ -65,15 +67,14 @@ class Engine:
 
         self.scheduler = load_scheduler(scheduler_type)(
             config=self.config,
-            policy=kwargs.get('policy'),
-            bfpolicy=kwargs.get('backfill'),
+            policy=policy_type,
+            bfpolicy=backfill_type,
             resource_manager=self.resource_manager,
             jobs=jobs
         )
         print(f"Using scheduler: {str(self.scheduler.__class__).split('.')[2]}"\
               f", with policy {self.scheduler.policy} "\
               f"and backfill {self.scheduler.bfpolicy}")
-
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -113,8 +114,6 @@ class Engine:
             return True
         else:
             return False
-
-
 
     def prepare_timestep(self, replay:bool = True):
         # 1 identify completed jobs
@@ -166,17 +165,37 @@ class Engine:
         self.current_time += 1  # Update the current time every timestep
 
         # Stop the simulation if no more jobs are running or in the queue or in the job list.
-        if autoshutdown and not self.queue and not self.running and not self.replay and not all_jobs and not jobs:
+        if autoshutdown and \
+           len(self.queue) == 0 and \
+           len(self.running) == 0 and \
+           not self.replay and \
+           len(all_jobs) == 0 and \
+           len(jobs) == 0:
             print(f"[DEBUG] {self.config['system_name']} - Stopping simulation at time {self.current_time}")
             simulation_complete = True
         else:
             simulation_complete = False
         return simulation_complete
 
-    def tick(self,time_delta=1):
-        """Simulate a timestep."""
+    def tick(self, *, time_delta=1):
+        # Tick runs all simulations of interest at the given time delta interval.
+        #
+        # The simulations which are needed for simulations consistency at each time step
+        # (inside: the main simulation loop of run_simulation) are not part of tick.
+        #
+        # Tick contains:
+        # For each running job:
+        #  - CPU utilization
+        #  - GPU utilization
+        #  - Network utilization
+        #
+        # From these the systems (across all nodes)
+        #  - System Utilization
+        #  - Power
+        #  - Cooling
+        #  - System Performance
+        # is simulated.
 
-        # Update running time for all running jobs
         scheduled_nodes = []
         cpu_utils = []
         gpu_utils = []
@@ -188,141 +207,73 @@ class Engine:
 
             if self.debug:
                 print(f"JobID: {job.id}")
-            if job.state == JobState.RUNNING:
 
+            if job.state != JobState.RUNNING:
+                raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
+            else:  # if job.state == JobState.RUNNING:
+                # Error checks
                 if job.running_time > job.wall_time:
                     raise Exception(f"Job should have ended already!\n\
                                        {job.running_time} > {job.wall_time}\
                                     ")
+                # Aggregate scheduled nodes
+                scheduled_nodes.append(job.scheduled_nodes)
 
-                if job.trace_quanta:
-                    time_quanta_index = int((job.running_time - job.trace_start_time) // job.trace_quanta)
-                    if time_quanta_index < 0:
-                        time_quanta_index = 0
-
-                # If the running time is past the last time step in the
-                # trace, use the last value in the trace. This can
-                # happen if the last valid timesteps is e.g. 17%15,
-                # the last trace value is 15%15 and the next possible
-                # trace value 30%15 but was not recorded because the
-                # job ended before.
-                # For every other error condition trace_start_ and
-                # _end_time are used!
-                # #print(type(job.cpu_trace))
-                # Similar with the first time_quanta index: If the job started
-                # in the past and no trace if there, read index 0 until values
-                # are available.
-
-                if (isinstance(job.cpu_trace,list) and job.cpu_trace != []) or \
-                   (isinstance(job.cpu_trace,np.ndarray) and job.cpu_trace.size != 0):
-                    if time_quanta_index < len(job.cpu_trace):
-                        cpu_util = get_utilization(job.cpu_trace, time_quanta_index)
-                    else:
-                        cpu_util = get_utilization(job.cpu_trace, max(0,len(job.cpu_trace) - 1))
-                elif isinstance(job.cpu_trace,float) or isinstance(job.cpu_trace,int):
-                    cpu_util = job.cpu_trace
-                else:
-                    cpu_util = 0
-
-                if (isinstance(job.gpu_trace,list) and job.gpu_trace != []) or \
-                   (isinstance(job.gpu_trace,np.ndarray) and job.gpu_trace.size != 0):
-                    if time_quanta_index < len(job.gpu_trace):
-                        gpu_util = get_utilization(job.gpu_trace, time_quanta_index)
-                    else:
-                        gpu_util = get_utilization(job.gpu_trace, max(0,len(job.gpu_trace) - 1))
-                elif isinstance(job.gpu_trace,float) or isinstance(job.gpu_trace,int):
-                    gpu_util = job.gpu_trace
-                else:
-                    gpu_util = 0
-
-                if (((isinstance(job.ntx_trace,list) and job.ntx_trace != []) or \
-                     (isinstance(job.ntx_trace,np.ndarray) and job.ntx_trace.size != 0)) \
-                    and \
-                    ((isinstance(job.nrx_trace,list) and job.nrx_trace != []) or \
-                     (isinstance(job.nrx_trace,np.ndarray) and job.nrx_trace.size != 0))):
-                    if time_quanta_index < len(job.ntx_trace):
-                        net_tx = get_utilization(job.ntx_trace, time_quanta_index)
-                    else:
-                        net_tx = get_utilization(job.ntx_trace, max(0,len(job.ntx_trace) - 1))
-                    if time_quanta_index < len(job.nrx_trace):
-                        net_rx = get_utilization(job.nrx_trace, time_quanta_index)
-                    else:
-                        net_rx = get_utilization(job.nrx_trace, max(0,len(job.nrx_trace) - 1))
-                    net_util = network_utilization(net_tx, net_rx)
-                elif (isinstance(job.ntx_trace,float) or isinstance(job.ntx_trace,int)) and \
-                     (isinstance(job.nrx_trace,float) or isinstance(job.nrx_trace,int)):
-                    net_tx = job.ntx_trace
-                    net_rx = job.nrx_trace
-                    net_util = network_utilization(net_tx, net_rx)
-                else:
-                    net_util = 0
-
-                scheduled_nodes.append(job.scheduled_nodes)  # ?
+                # Get CPU utilization
+                cpu_util = get_current_utilization(job.cpu_trace, job)
                 cpu_utils.append(cpu_util)
+
+                # Get GPU utilizaiton
+                gpu_util = get_current_utilization(job.gpu_trace, job)
                 gpu_utils.append(gpu_util)
-                net_utils.append(net_util)
-            else:
-                raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
 
-        if len(scheduled_nodes) > 0:  # When can this not happen?
-            self.flops_manager.update_flop_state(scheduled_nodes, cpu_utils, gpu_utils)
-            jobs_power = self.power_manager.update_power_state(scheduled_nodes, cpu_utils, gpu_utils, net_utils)
+                # Get network utilization
+                if self.simulate_network:
+                    ntx_util = get_current_utilization(job.ntx_trace, job)
+                    nrx_util = get_current_utilization(job.nrx_trace, job)
+                    net_util = network_utilization(ntx_util, nrx_util)
+                    net_utils.append(net_util)
+                else:
+                    net_utils.append(0.0)
 
-            _running_jobs = [job for job in self.running if job.state == JobState.RUNNING]
-            if len(jobs_power) != len(_running_jobs):
-                raise ValueError(f"Jobs power list of length ({len(jobs_power)}) should have ({len(_running_jobs)}) items.")
-            for i, job in enumerate(_running_jobs):
-                if job.running_time % self.config['TRACE_QUANTA'] == 0:
-                    job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
-            #del _running_jobs
+        # All required values for each jobs have been an collected.
+        # Continue with calculations for the whole system:
 
-        # Update the power array UI component
-        rack_power, rect_losses = self.power_manager.compute_rack_power()
-        sivoc_losses = self.power_manager.compute_sivoc_losses()
-        rack_loss = rect_losses + sivoc_losses
-
-        # Update system utilization
+        # Utilization Statistics
         system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
-        self.sys_util_history.append((self.current_time, system_util))
+        self.record_util_stats(system_util=system_util)
 
-        self.scheduler_queue_history.append(len(self.running))
-        self.scheduler_running_history.append(len(self.queue))
+        # Power
+        if self.power_manager:  # Power is always simulated
+            power_df, rack_power, total_power_kw, total_loss_kw, jobs_power = \
+                self.power_manager.simulate_power(running_jobs=self.running,
+                                                  scheduled_nodes=scheduled_nodes,
+                                                  cpu_utils=cpu_utils,
+                                                  gpu_utils=gpu_utils,
+                                                  net_utils=net_utils)
 
-        # Render the updated layout
-        power_df = None
-        cooling_inputs, cooling_outputs = None, None
-
-        # If time_delta is 1 update power history every 15s, otherwise whenever tick runs
-        if (time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:
-            total_power_kw = sum(row[-1] for row in rack_power) + self.config['NUM_CDUS'] * self.config['POWER_CDU'] / 1000.0
-            total_loss_kw = sum(row[-1] for row in rack_loss)
-            self.power_manager.history.append((self.current_time, total_power_kw))
-            self.sys_power = total_power_kw
-            self.power_manager.loss_history.append((self.current_time, total_loss_kw))
-            pflops = self.flops_manager.get_system_performance() / 1E15
-            gflop_per_watt = pflops * 1E6 / (total_power_kw * 1000)
+            # Unclear what jobs_power is!
+            self.record_power_stats(time_delta=time_delta,
+                                    total_power_kw=total_power_kw,
+                                    total_loss_kw=total_loss_kw,
+                                    jobs_power=jobs_power)
         else:
-            pflops, gflop_per_watt = None, None
+            power_df = None
 
-        if (time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:
-            if self.cooling_model:
-                # Power for NUM_CDUS (25 for Frontier)
-                cdu_power = rack_power.T[-1] * 1000
-                runtime_values = self.cooling_model.generate_runtime_values(cdu_power, self)
+        # Cooling
+        if self.cooling_model:
+            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(self.cooling_model, rack_power)
+        else:
+            cooling_inputs, cooling_outputs = None, None
 
-                # FMU inputs are N powers and the wetbulb temp
-                fmu_inputs = self.cooling_model.generate_fmu_inputs(runtime_values,
-                                                                    uncertainties=self.power_manager.uncertainties)
-                cooling_inputs, cooling_outputs = (
-                    self.cooling_model.step(self.current_time, fmu_inputs, self.config['POWER_UPDATE_FREQ'])
-                )
+        # Flops
+        if self.flops_manager:
+            pflops, gflops_per_watt = self.flops_manager.simulate_flops(scheduled_nodes=scheduled_nodes,
+                                                                        cpu_util=cpu_utils,
+                                                                        gpu_util=gpu_utils,
+                                                                        total_power_kw=total_power_kw)
 
-                # Get a dataframe of the power data
-                power_df = self.power_manager.get_power_df(rack_power, rack_loss)
-            else:
-                # Get a dataframe of the power data
-                power_df = self.power_manager.get_power_df(rack_power, rack_loss)
-
+        # Continue with System Simulation
         tick_data = TickData(
             current_time=self.current_time,
             completed=None,
@@ -331,14 +282,13 @@ class Engine:
             down_nodes=expand_ranges(self.down_nodes[1:]),
             power_df=power_df,
             p_flops=pflops,
-            g_flops_w=gflop_per_watt,
-            system_util=self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100,
+            g_flops_w=gflops_per_watt,
+            system_util=system_util,
             fmu_inputs=cooling_inputs,
             fmu_outputs=cooling_outputs,
             num_active_nodes=self.num_active_nodes,
             num_free_nodes=self.num_free_nodes,
         )
-
         return tick_data
 
     def prepare_system_state(self, all_jobs:List, timestep_start, timestep_end, replay:bool):
@@ -401,13 +351,13 @@ class Engine:
             if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions:
                 self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
 
-
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
             # 4. Run tick only at specified time_delta
-            if 0 == (timestep % time_delta):
-                tick_data = self.tick(time_delta)
+            if 0 == (timestep % time_delta) and \
+               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1):
+                tick_data = self.tick(time_delta=time_delta)
                 tick_data.completed = completed_jobs
             else:
                 tick_data = None
@@ -426,3 +376,18 @@ class Engine:
 
     def get_scheduler_running_history(self):
         return self.scheduler_running_history
+
+    def record_util_stats(self,*, system_util):
+        self.sys_util_history.append((self.current_time, system_util))
+        self.scheduler_queue_history.append(len(self.running))
+        self.scheduler_running_history.append(len(self.queue))
+
+    def record_power_stats(self, *, time_delta, total_power_kw, total_loss_kw, jobs_power):
+        if (time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:
+            # First job specific
+            record_power_stats_foreach_job(running_jobs=self.running, jobs_power=jobs_power)
+            # power manager
+            self.power_manager.history.append((self.current_time, total_power_kw))
+            self.power_manager.loss_history.append((self.current_time, total_loss_kw))
+        #engine
+        self.sys_power = total_power_kw

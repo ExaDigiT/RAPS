@@ -19,6 +19,7 @@ import sys
 import uuid
 import json
 
+from raps.job import Job
 
 def sum_values(values):
     return sum(x[1] for x in values) if values else 0
@@ -534,6 +535,30 @@ def convert_numpy_to_builtin(obj):
         return bool(obj)
     else:
         return obj
+
+
+def get_current_utilization(trace, job: Job):
+    # Return utilizaiton for a trace at the jobs current running time.
+    # Note: this should move to a trace.py and a Trace class!
+    util = 0.0
+
+    if job.trace_quanta:
+        time_quanta_index = int((job.running_time - job.trace_start_time) // job.trace_quanta)
+        if time_quanta_index < 0:
+            time_quanta_index = 0
+
+    if (isinstance(trace,list) and trace != []) or \
+       (isinstance(trace, np.ndarray) and trace.size != 0):
+        if time_quanta_index < len(trace):
+            util = get_utilization(trace, time_quanta_index)
+        else:
+            util = get_utilization(trace, max(0,len(trace) - 1))
+    elif isinstance(trace,float) or isinstance(trace,int):
+        util = trace
+    else:
+        util = 0.0
+
+    return util
 
 
 def get_utilization(trace, time_quanta_index):

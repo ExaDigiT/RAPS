@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser(description='Resource Allocator & Power Simulat
 parser.add_argument('--system', type=str, default='frontier', help='System config to use')
 parser.add_argument('-x', '--partitions', nargs='+', default=None, help='List of machine configurations to use, e.g., -x setonix-cpu setonix-gpu')
 parser.add_argument('-c', '--cooling', action='store_true', help='Include FMU cooling model')
+parser.add_argument('-net', '--simulate-network', default=False, action='store_true', help='Include Network model')
 
 # Simulation runtime options
 parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
