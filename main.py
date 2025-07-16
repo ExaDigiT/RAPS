@@ -28,7 +28,7 @@ from raps.weather import Weather
 from raps.utils import convert_to_seconds, write_dict_to_file
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
-from args import args, args_dict
+from raps.args import args, args_dict
 
 if args.verbose or args.debug:
     print(args)

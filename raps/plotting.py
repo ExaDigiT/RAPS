@@ -16,6 +16,10 @@ Plotter
 import itertools
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as md
+import matplotlib.ticker as ticker
+from matplotlib.ticker import MaxNLocator
+import time
 import numpy as np
 from uncertainties import unumpy
 from rich.progress import track
@@ -342,7 +346,7 @@ def plot_jobs_gantt(*,ax=None,jobs, bars_are_node_sized):
     ax.set_ylabel("Job ID")
     ##ax_b labels:
     ax.set_xlabel("time [hh:mm]")
-    minx_s = 0
+    minx_s = min([x.submit_time for x in jobs])
     maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
@@ -373,15 +377,21 @@ def plot_nodes_gantt(*,ax=None,jobs):
     ax.set_ylabel("Node ID")
     ##ax_b labels:
     ax.set_xlabel("time [hh:mm]")
-    minx_s = 0
+    minx_s = min([x.submit_time for x in jobs])
     maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
-    x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
-    x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
-    x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
+    #ax.xaxis.set_major_formatter(md.DateFormatter('%H:%M:%S'))
 
-    ax.set_xticks(x_label_ticks,x_label_str)
+    formatter = ticker.FuncFormatter(lambda s, x: time.strftime('%m-%d %H:%M:%S', time.gmtime(s)))
+    ax.xaxis.set_major_formatter(formatter)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    #x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
+    #x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
+    #x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
+    #                        (x1,x2) in [(n // 60,n % 60) for
+    #                                    n in x_label_mins[0::60]]]
+
+    #ax.set_xticks(x_label_ticks,x_label_str)
     ax.set_ylim(1,max(list(itertools.chain.from_iterable(nodeIDs))))
     #ax.yaxis.set_inverted(True)
     return ax

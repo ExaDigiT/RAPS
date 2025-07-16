@@ -111,7 +111,8 @@ class LayoutManager:
         """
 
         # Decide whether to show "SLOWDOWN" (if real topology) or "NODE SEGMENTS" (if capacity/none)
-        show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
+        #show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
+        show_slowdown = self.simulate_network
 
         # Build the column headers
         #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]

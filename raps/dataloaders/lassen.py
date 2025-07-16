@@ -45,7 +45,7 @@ def load_data(path, **kwargs):
     """
     Loads data from the given file paths and returns job info.
     """
-    nrows = 1E5  # None
+    nrows = None
     alloc_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
     node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
     step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
@@ -90,8 +90,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta
 
     # As these are >1.4M jobs, filtered to the simulated timestamps before creating the job structs.
-    #allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
-    #allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
+    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
+    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
 
     job_list = []
 

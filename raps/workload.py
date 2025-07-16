@@ -592,11 +592,11 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][0].scatter(x, y,zorder=3)
 
     cpu_util = [x.cpu_trace for x in jobs]
-    if isinstance(cpu_util[0],np.ndarray):
-        cpu_util = np.concatenate(cpu_util).ravel()
+    if isinstance(cpu_util[0],(np.ndarray, list)):
+        cpu_util = [sum(part) / len(part) for part in cpu_util]
     gpu_util = [x.gpu_trace for x in jobs]
-    if isinstance(gpu_util[0],np.ndarray):
-        gpu_util = np.concatenate(gpu_util).ravel()
+    if isinstance(gpu_util[0],(np.ndarray, list)):
+        gpu_util = [sum(part) / len(part) for part in gpu_util]
     if not all([x == 0 for x in gpu_util]):
         axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
         axs[0][1].hist(gpu_util,bins=100,orientation='horizontal',zorder=1, density=True,color='tab:purple')
@@ -756,7 +756,7 @@ def check_workload_args(args):
 
 if __name__ == "__main__":
 
-    from args import args, args_dict
+    from raps.args import args, args_dict
     from raps.config import ConfigManager
     config = ConfigManager(system_name=args.system).get_config()
     if args.replay:

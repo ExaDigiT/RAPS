@@ -10,11 +10,13 @@ import re
 import sys
 import random
 import argparse
-import itertools
+#import itertools
 import json
 import os.path
 
+
 if __name__ == "__main__":
+    #from raps.args import args,args_dict
     parser = argparse.ArgumentParser(description='Telemetry data validator')
     parser.add_argument('--jid', type=str, default='*', help='Replay job id')
     parser.add_argument('-f', '--replay', nargs='+', type=str,
@@ -42,6 +44,7 @@ from raps.job import Job, job_dict
 import matplotlib.pyplot as plt
 from raps.plotting import Plotter, plot_submit_times, plot_nodes_histogram, plot_jobs_gantt, plot_nodes_gantt, spaced_colors, plot_network_histogram
 from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seconds
+#from raps.args import args, args_dict
 
 
 class Telemetry:
@@ -79,9 +82,18 @@ class Telemetry:
         list_of_job_dicts = data['jobs'].tolist()
         for job_info in list_of_job_dicts:
             jobs.append(Job(job_info))
-        timestep_start = int(data['timestep_start'])
-        timestep_end = int(data['timestep_end'])
-        args_from_file = data['args'].tolist()
+        if hasattr(data,'timestep_start'):
+            timestep_start = int(data['timestep_start'])
+        else:
+            timestep_start = 0
+        if hasattr(data,'timestep_end'):
+            timestep_end = int(data['timestep_end'])
+        else:
+            timestep_end = np.inf
+        if hasattr(data,'args'):
+            args_from_file = data['args'].tolist()
+        else:
+            args_from_file = None
 
         return jobs, \
                timestep_start, \
@@ -124,12 +136,12 @@ class Telemetry:
                                 )
             job = Job(job_info)
             jobs.append(job)
-        if hasattr(data,'args'):
-            args_from_file = data["args"].item()  # This should be empty  as csv contains no args.
-        else:
-            args_from_file = None
+        #if hasattr(data,'args'):
+        #    args_from_file = data["args"].item()  # This should be empty  as csv contains no args.
+        #else:
+        #    args_from_file = None
 
-        return jobs, time_start, time_end, args_from_file
+        return jobs, time_start, time_end, None
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -200,15 +212,18 @@ class Telemetry:
             elif file.endswith(".npz"):  # Replay .npz file
                 print(f"Loading {file}...")
                 jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(file)
-                if not hasattr(args_from_file,'fastforward') or args_from_file.fastforward is None:
-                    args_from_file.fastforward = 0
-                print("File was generated with:" +\
-                      f"\n--system {args_from_file.system} " +\
-                      f"-ff {args_from_file.fastforward} " +\
-                      f"-t {args_from_file.time}\n" +\
-                      f"All Args:\n{args_from_file}" +\
-                      "To use these set them from the commandline!"
-                      )
+                if args_from_file is not None:
+                    print("File was generated with:" +\
+                          f"\n--system {args_from_file.system} " +\
+                          f"-ff {args_from_file.fastforward} " +\
+                          f"-t {args_from_file.time}\n" +\
+                          f"All Args:\n{args_from_file}" +\
+                          "To use these set them from the commandline!"
+                          )
+                else:
+                    print("No generation arguments extracted from input file!")
+                    # Args are usually extracted to tell the users how to reporduce results.
+                    # They are not processed and re-set to said arguments automatily
                 jobs.extend(jobs_from_file)
                 timestep_start = min(timestep_start,timestep_start_from_file)
                 timestep_end = max(timestep_end, timestep_end_from_file)
@@ -303,15 +318,17 @@ if __name__ == "__main__":
     # ——— compute avg network traces ———
     ntx_means = []
     nrx_means = []
-    for job_vec in jobs:
-        ntx = np.array(job_vec.get('ntx_trace', []))
-        nrx = np.array(job_vec.get('nrx_trace', []))
-
+    for job in jobs:
+        job_vec = job.__dict__
         # only if there’s at least one valid sample
-        if ntx.size > 0 and not np.all(np.isnan(ntx)):
-            ntx_means.append(np.nanmean(ntx))
-        if nrx.size > 0 and not np.all(np.isnan(nrx)):
-            nrx_means.append(np.nanmean(nrx))
+        if hasattr(job_vec,'ntx_trace'):
+            ntx = np.array(job_vec.get('ntx_trace', []))
+            if ntx.size > 0 and not np.all(np.isnan(ntx)):
+                ntx_means.append(np.nanmean(ntx))
+        if hasattr(job_vec,'nrx_trace'):
+            nrx = np.array(job_vec.get('nrx_trace', []))
+            if nrx.size > 0 and not np.all(np.isnan(nrx)):
+                nrx_means.append(np.nanmean(nrx))
 
     if ntx_means:
         print(f'Average ntx_trace per job: {np.mean(ntx_means):.2f}')
