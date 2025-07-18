@@ -53,7 +53,10 @@ For Google cluster trace v2
 
 For MIT Supercloud
 
-    python main.py -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
+
+    # download the dataset
+    python -m raps.dataloaders.mit_supercloud.cli download --start 21052021 --end 22052021 \
+                                                           --outdir /path/to/mit
 
     python multi-part-sim.py -x 'mit_supercloud/*' -f /path/to/mit_supercloud/datacenter-challenge --system mit_supercloud
 
