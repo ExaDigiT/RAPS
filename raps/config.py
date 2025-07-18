@@ -65,6 +65,9 @@ class ConfigManager:
             down_nodes.extend(range(start_node_id, end_node_id))
         self.config['DOWN_NODES'] = down_nodes
 
+        # Default multitenancy to False, unless explicitly set to True
+        self.config['multitenant'] = bool(self.config.get("multitenant", False))
+
         self.config['AVAILABLE_NODES'] = self.config['TOTAL_NODES'] - len(down_nodes)
 
     def get(self, key: str) -> Any:

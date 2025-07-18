@@ -175,15 +175,14 @@ print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds')
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end)
 
-    # Get comprehensive simulation statistics
-    simulation_stats = sc.get_stats()
+# Get comprehensive simulation statistics
+simulation_stats = sc.get_stats()
 
-    # Print a formatted report
-    print("\n--- Simulation Report ---")
-    for key, value in simulation_stats.items():
-        print(f"{key.replace('_', ' ').title()}: {value}")
-    print("-------------------------")
-
+# Print a formatted report
+print("\n--- Simulation Report ---")
+for key, value in simulation_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------")
 
 if args.plot:
     if 'power' in args.plot:

@@ -1,4 +1,5 @@
 {
+    "multitenant": true,
     "SEED": 42,
     "JOB_ARRIVAL_TIME": 900,
     "MTBF": 11,
