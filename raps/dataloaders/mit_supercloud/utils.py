@@ -11,7 +11,14 @@ DEFAULT_START = "2021-05-21T00:00"
 DEFAULT_END   = "2021-05-22T00:00"
 
 
-def _parse_dt(s: str) -> datetime:
+def to_epoch(s: str) -> int:
+    try:
+        return int(datetime.fromisoformat(s).timestamp())
+    except ValueError:
+        return int(datetime.strptime(s, "%d%m%Y").timestamp())
+
+
+def parse_dt(s: str) -> datetime:
     try:
         # handles 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]'
         return datetime.fromisoformat(s)
@@ -39,8 +46,8 @@ def load_slurm_log(slurm_path: str, start_date: str, end_date: str):
     df = pd.read_csv(slurm_path)
     # Convert submit times
     df['time_submit'] = pd.to_datetime(df['time_submit'], unit='s')
-    dt0 = _parse_dt(start_date)
-    dt1 = _parse_dt(end_date)
+    dt0 = parse_dt(start_date)
+    dt1 = parse_dt(end_date)
     window = df[(df['time_submit'] >= dt0) & (df['time_submit'] < dt1)]
 
     # Detect GPU jobs via gres_used or tres_alloc

@@ -12,7 +12,8 @@ from datetime import datetime
 from types import SimpleNamespace
 from tqdm import tqdm
 from raps.job import job_dict
-from .utils import proc_cpu_series, proc_gpu_series
+from .utils import proc_cpu_series, proc_gpu_series, to_epoch
+from .utils import DEFAULT_START, DEFAULT_END
 
 
 def load_data(local_dataset_path, **kwargs):
@@ -48,11 +49,17 @@ def load_data(local_dataset_path, **kwargs):
     sl = pd.read_csv(slurm_path)
 
     # 2) date window
-    start_ts = int(datetime.strptime(kwargs.get("start_date","21052021"), "%d%m%Y").timestamp())
-    end_ts   = int(datetime.strptime(kwargs.get("end_date",  "22052021"), "%d%m%Y").timestamp())
+    start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
+    end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
     #duration = end_ts - start_ts
-
+    
     sl = sl[(sl.time_submit >= start_ts) & (sl.time_submit < end_ts)]
+    # —— ERROR CATCH: no jobs in this window? ——
+    if sl.empty:
+        raise ValueError(
+            f"No SLURM jobs found between {kwargs.get('start_date')} and "
+            f"{kwargs.get('end_date')}. Please pick a range covered by the dataset."
+        )
 
     # 3) detect GPU‐using jobs
     gres = sl.gres_used.fillna("").astype(str)
