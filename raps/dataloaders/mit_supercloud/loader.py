@@ -17,6 +17,8 @@ from scipy.sparse import csr_matrix as csr
 from tqdm import tqdm
 
 from raps.job import job_dict
+from .utils import DEFAULT_START, DEFAULT_END
+
 
 def proc_cpu_series(dfi):
     dfi = dfi[~dfi.Step.isin([-1, -4, '-1', '-4'])].copy()

@@ -1,14 +1,23 @@
 import argparse
 from .download import download
 from .loader import load_data
+from .utils import DEFAULT_START, DEFAULT_END
 
 def main():
     p = argparse.ArgumentParser(prog="mit_supercloud")
     subs = p.add_subparsers(dest="cmd", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--start",     default="21052021")
-    common.add_argument("--end",       default="22052021")
+    common.add_argument(
+        '--start', '-s',
+        default=DEFAULT_START,
+        help="Start datetime, in ISO format (e.g. '2021-05-21T13:30'), default midnight."
+    )
+    common.add_argument(
+        '--end', '-e',
+        default=DEFAULT_END,
+        help="End datetime, in ISO format (e.g. '2021-05-21T16:45')."
+    )
     common.add_argument("--partition", choices=["all","part-cpu","part-gpu"], default="all")
     common.add_argument("--outdir",    default="source_data")
     common.add_argument("--bucket",    default="mit-supercloud-dataset")
