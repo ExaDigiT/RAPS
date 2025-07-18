@@ -121,10 +121,10 @@ def load_data(local_dataset_path, **kwargs):
     Load MIT Supercloud job traces **without** any metadata files.
     Expects under:
        local_dataset_path/
-         202201/
+         [.../]
+           slurm-log.csv
            cpu/...-timeseries.csv
            gpu/...-timeseries.csv
-           slurm-log.csv
     Returns:
        jobs_list, sim_start_time, sim_end_time
     """
@@ -135,9 +135,17 @@ def load_data(local_dataset_path, **kwargs):
             raise ValueError("Expect exactly one path")
         local_dataset_path = local_dataset_path[0]
 
-    # 1) slurm log → DataFrame
-    sub = "202201"
-    slurm_path = os.path.join(local_dataset_path, sub, "slurm-log.csv")
+    # 1) slurm log -> DataFrame
+    slurm_path = None
+    for root, _, files in os.walk(local_dataset_path):
+        if "slurm-log.csv" in files:
+            slurm_path = os.path.join(root, "slurm-log.csv")
+            break
+
+    if not slurm_path:
+        raise FileNotFoundError(f"Could not find slurm-log.csv under {local_dataset_path}")
+
+    data_root = os.path.dirname(slurm_path)
     sl = pd.read_csv(slurm_path)
 
     # 2) date window
@@ -173,27 +181,32 @@ def load_data(local_dataset_path, **kwargs):
 
     # 5) find trace files by walking directories
     cpu_files = []
-    cpu_root = os.path.join(local_dataset_path, sub, "cpu")
-    for R,_,fs in os.walk(cpu_root):
-        for f in fs:
-            if not f.endswith("-timeseries.csv"):
-                continue
-            jid = int(f.split("-",1)[0])
-            if jid in job_ids:
-                rel = os.path.relpath(os.path.join(R,f), os.path.join(local_dataset_path,sub))
-                cpu_files.append(rel)
+    cpu_root = os.path.join(data_root, "cpu")
+    if os.path.exists(cpu_root):
+        for R,_,fs in os.walk(cpu_root):
+            for f in fs:
+                if not f.endswith("-timeseries.csv"):
+                    continue
+                try:
+                    jid = int(f.split("-",1)[0])
+                    if jid in job_ids:
+                        cpu_files.append(os.path.join(R,f))
+                except (ValueError, IndexError):
+                    continue
 
     gpu_files = []
-    gpu_root = os.path.join(local_dataset_path, sub, "gpu")
-    for R,_,fs in os.walk(gpu_root):
-        for f in fs:
-            #if not f.endswith("-timeseries.csv"):
-            if not f.endswith(".csv"):
-                continue
-            jid = int(f.split("-",1)[0])
-            if jid in job_ids:
-                rel = os.path.relpath(os.path.join(R,f), os.path.join(local_dataset_path,sub))
-                gpu_files.append(rel)
+    gpu_root = os.path.join(data_root, "gpu")
+    if os.path.exists(gpu_root):
+        for R,_,fs in os.walk(gpu_root):
+            for f in fs:
+                if not f.endswith(".csv"):
+                    continue
+                try:
+                    jid = int(f.split("-",1)[0])
+                    if jid in job_ids:
+                        gpu_files.append(os.path.join(R,f))
+                except (ValueError, IndexError):
+                    continue
 
     # 6) select final trace list
     if cpu_only:
@@ -220,27 +233,41 @@ def load_data(local_dataset_path, **kwargs):
     data = {}
 
     # 8a) CPU first
-    for rel in tqdm(cpu_files, desc="Loading CPU traces"):
-        fp = os.path.join(local_dataset_path, sub, rel)
+    for fp in tqdm(cpu_files, desc="Loading CPU traces"):
         df = pd.read_csv(fp, dtype={0: str})
-        jid = int(os.path.basename(rel).split("-", 1)[0])
+        jid = int(os.path.basename(fp).split("-", 1)[0])
         rec = data.setdefault(jid, {})
-        tqdm.write(f"Reading CPU {rel}")
+
+        # Find job info in slurm log and print details
+        job_info = sl[sl.id_job == jid]
+        if not job_info.empty:
+            job_row = job_info.iloc[0]
+            start_time = job_row.get('time_start', 'N/A')
+            wall_time = job_row.get('time_limit', 'N/A')
+            tres_alloc = job_row.get('tres_alloc', 'N/A')
+            gres_used = job_row.get('gres_used', 'N/A')
+
+            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
+            tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
+            tqdm.write(f"  TRES Alloc: {tres_alloc}")
+            tqdm.write(f"  GRES Used: {gres_used}")
+        else:
+            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
+
         rec["cpu"] = proc_cpu_series(df)
 
     print(f"GPU candidate files ({len(gpu_files)}):")
     for p in gpu_files[:10]:
         print("   ", p)
 
-    for rel in tqdm(gpu_files, desc="Loading GPU traces"):
-        fp = os.path.join(local_dataset_path, sub, rel)
+    for fp in tqdm(gpu_files, desc="Loading GPU traces"):
         if debug:
-            print(f"\n[DEBUG] attempting {rel!r}")
+            print(f"\n[DEBUG] attempting {fp!r}")
             print("        full path exists:", os.path.exists(fp), fp)
         if not os.path.exists(fp):
             continue
 
-        tqdm.write(f"Reading GPU {rel}")
+        tqdm.write(f"Reading GPU {os.path.basename(fp)}")
         dfi = pd.read_csv(fp, dtype={0: str})
         if debug:
             print("        loaded dataframe, columns:", dfi.columns.tolist())
@@ -248,7 +275,7 @@ def load_data(local_dataset_path, **kwargs):
             tqdm.write("        → no gpu_index column!  SKIPPING")
             continue
 
-        jid = int(os.path.basename(rel).split("-", 1)[0])
+        jid = int(os.path.basename(fp).split("-", 1)[0])
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
         if cpu_df is None:
