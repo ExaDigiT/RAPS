@@ -78,16 +78,20 @@ def build_or_load_manifest(s3, bucket: str, prefix: str, manifest_path: str):
     # Otherwise build manifest
     keys = []
     paginator = s3.get_paginator('list_objects_v2')
+    total_pages = {'cpu': 791, 'gpu': 110}
+    progress = tqdm(total=sum(total_pages.values()), desc="Building file-manifest.txt", unit="page")
+
     for kind in ('cpu', 'gpu'):
         pfx = prefix + f"{kind}/"
-        for page in tqdm(
-            paginator.paginate(Bucket=bucket, Prefix=pfx),
-            desc=f"Listing {kind} pages", unit="page"
-        ):
+        for page in paginator.paginate(Bucket=bucket, Prefix=pfx):
             for obj in page.get('Contents', []):
                 key = obj['Key']
                 if key.lower().endswith('.csv'):
                     keys.append(key)
+            progress.update(1)
+
+    progress.close()
+
     # Cache on disk
     os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
     with open(manifest_path, 'w') as f:
