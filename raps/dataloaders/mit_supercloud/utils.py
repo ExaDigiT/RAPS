@@ -1,11 +1,11 @@
+import numpy as np
 import os
 import re
-from datetime import datetime
 import pandas as pd
+
+from datetime import datetime
+from scipy.sparse import csr_matrix as csr
 from tqdm import tqdm
-import boto3
-from botocore import UNSIGNED
-from botocore.client import Config
 
 DEFAULT_START = "2021-05-21T00:00"
 DEFAULT_END   = "2021-05-22T00:00"
@@ -127,3 +127,103 @@ def filter_keys_by_jobs(all_keys: list, job_ids: set):
             if m and int(m.group(1)) in job_ids:
                 selected.append(key)
     return selected
+
+
+def proc_cpu_series(dfi):
+    dfi = dfi[~dfi.Step.isin([-1, -4, '-1', '-4'])].copy()
+    dfi['CPUUtilization'] = dfi['CPUUtilization'].fillna(0) / 100.0
+
+    t = pd.to_datetime(dfi.EpochTime, unit='s')
+    start_time = t.min()
+    dfi['t'] = ((t - start_time).dt.total_seconds() // 10).astype(int)
+    dfi['sid'] = pd.factorize(dfi.Step)[0]
+
+    useries = dfi.Series.unique()
+    inds = np.arange(dfi.t.max() + 1)
+    df = pd.DataFrame({'t': inds})
+    Xm, Xrss, Xvm, Xreadmb, Xwritemb = (np.zeros((len(useries), len(inds))) for _ in range(5))
+
+    for cnt, i in enumerate(useries):
+        sift = dfi.Series == i
+        M, N = len(inds), dfi.sid[sift].max() + 1
+
+        for metric, arr, name in zip(
+            ['CPUUtilization', 'RSS', 'VMSize', 'ReadMB', 'WriteMB'],
+            [Xm, Xrss, Xvm, Xreadmb, Xwritemb],
+            ['cpu', 'rss', 'vm', 'readmb', 'writemb']
+        ):
+            X = csr((dfi.loc[sift, metric], (dfi.loc[sift, 't'], dfi.loc[sift, 'sid'])), shape=(M, N))
+            mm = np.array(X.max(axis=1).todense()).reshape(-1,)
+            df[f'{name}_{i}'] = mm
+            arr[cnt, :] = mm
+
+    df['cpu_utilisation'] = Xm.mean(axis=0)
+    df['rss'] = Xrss.sum(axis=0)
+    df['vm'] = Xvm.sum(axis=0)
+    df['readmb'] = Xreadmb.sum(axis=0)
+    df['writemb'] = Xwritemb.sum(axis=0)
+    df['timestamp'] = start_time + pd.to_timedelta(df.t * 10, unit='s')
+    df['utime'] = df['timestamp'].astype('int64') // 10**9
+
+    return df
+
+
+def proc_gpu_series(cpu_df, dfi, gpu_cnt):
+    # 1) Build CPU time range
+    t_cpu_start = int(cpu_df.utime.min())
+    t_cpu_end   = int(cpu_df.utime.max())
+    t_cpu = np.array([t_cpu_start, t_cpu_end, t_cpu_end - t_cpu_start])
+
+    # 2) Safely convert the GPU timestamps to integer seconds
+    #    (this handles strings like "1621607266.426")
+    ts = pd.to_numeric(dfi["timestamp"], errors="coerce")  # float64 or NaN
+    ts_int = ts.ffill().astype(float).astype(int)
+    t0, t1 = ts_int.min(), ts_int.max()
+    t_gpu = np.array([t0, t1, t1 - t0])
+
+    # 3) Sanity‐check the durations match within 10%
+    per_diff = ((t_cpu[1] - t_cpu[0]) - (t_gpu[1] - t_gpu[0])) / (t_gpu[1] - t_gpu[0]) * 100
+    if abs(per_diff) > 10:
+        # warn and proceed — GPU trace may be trimmed or misaligned
+        tqdm.write(f"Warning: GPU‐CPU time mismatch {per_diff:.1f}% exceeds 10%; continuing anyway")
+
+    # 4) Align GPU times onto CPU utime grid
+    #    Use our integer‐second Series rather than the raw column
+    dfi["t_fixed"] = ts_int - ts_int.min() + t_cpu_start
+
+    # 5) Prepare output DataFrame with a utime column
+    #ugpus = dfi.gpu_index.unique()
+    gpu_df = pd.DataFrame({"utime": cpu_df["utime"].values})
+
+    # 6) Interpolate each GPU field onto the CPU utime grid
+    fields = [
+        "utilization_gpu_pct",
+        "utilization_memory_pct",
+        "memory_free_MiB",
+        "memory_used_MiB",
+        "temperature_gpu",
+        "temperature_memory",
+        "power_draw_W",
+    ]
+    for field in fields:
+        # grab the float‐converted timestamp and the metric
+        x1 = ts_int.values
+        y1 = dfi[field].astype(float).values
+        xv = cpu_df["utime"].values
+        # numpy interpolation
+        gpu_df[field] = np.interp(xv, x1, y1)
+
+    # 7) Rename the GPU pct, memory pct, and power columns with the device index
+    ren = {
+        "gpu_index":            f"gpu_index_{gpu_cnt}",
+        "utilization_gpu_pct":  f"gpu_util_{gpu_cnt}",
+        "utilization_memory_pct":f"gpu_mempct_{gpu_cnt}",
+        "memory_free_MiB":      f"gpu_memfree_{gpu_cnt}",
+        "memory_used_MiB":      f"gpu_memused_{gpu_cnt}",
+        "temperature_gpu":      f"gpu_temp_{gpu_cnt}",
+        "temperature_memory":   f"gpu_memtemp_{gpu_cnt}",
+        "power_draw_W":         f"gpu_power_{gpu_cnt}",
+    }
+    gpu_df.rename(columns=ren, inplace=True)
+
+    return gpu_df, gpu_cnt + 1

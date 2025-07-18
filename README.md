@@ -51,20 +51,15 @@ For Google cluster trace v2
     # analyze dataset
     python -m raps.telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
 
-
-
-
-
-+    # Re-run simulation using npz files (much faster load)
-
 For MIT Supercloud
 
     # Following is the directory that contains slurm-log.csv and cpu and gpu directories
     DPATH=/path/to/mit/data
 
-    # Download the dataset
+    # Download the dataset - note the first time will build a file-manifest.txt file with all the files on S3
+    # this will take some time, but subsequent calls should be much faster.
+    # Also, this command will dump output to `source_data` directory, or can specify directory using `--outdir`
     python -m raps.dataloaders.mit_supercloud.cli download --start 2021-05-21T13:30 --end 2021-05-21T14:00
-    # this will dump output to `source_data` directory, or can specify directory using `--outdir`
 
     # Load data and run simulation - will save data as part-cpu.npz and part-gpu.npz files
     python multi-part-sim.py -x 'mit_supercloud/*' -f $DPATH --system mit_supercloud
