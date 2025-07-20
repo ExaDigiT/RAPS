@@ -39,6 +39,8 @@ class Scheduler:
 
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
+            if self.debug:
+                print(f"[DEBUG] Scheduler: Considering job {job.id} (CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required})")
             if self.policy == PolicyType.REPLAY:
                 if job.start_time > current_time:
                     continue  # Replay: Job didn't start yet. Next!
@@ -49,11 +51,13 @@ class Scheduler:
 
             nodes_available = self.check_available_nodes(job)
 
-            if nodes_available:
-                self.place_job_and_manage_queues(job, queue, running, current_time)
+            if nodes_available is not None:
+                self.place_job_and_manage_queues(job, queue, running, current_time, nodes_available)
             else:  # In case the job was not placed, see how we should continue:
                 if self.bfpolicy is not None:
-                    self.backfill(queue, running, current_time)
+                    backfill_job, node_id = self.backfill(queue, running, current_time)
+                    if backfill_job and node_id is not None:
+                        self.place_job_and_manage_queues(backfill_job, queue, running, current_time, node_id)
 
                 # After backfill dedice continue processing the queue or wait, continuing may result in fairness issues.
                 if self.policy in [PolicyType.REPLAY]:
@@ -95,42 +99,42 @@ class Scheduler:
         else:
             return jobs_to_submit
 
-    def place_job_and_manage_queues(self, job, queue,running, current_time):
-        self.resource_manager.assign_nodes_to_job(job, current_time)
+    def place_job_and_manage_queues(self, job, queue,running, current_time, node_id):
+        self.resource_manager.assign_nodes_to_job(job, current_time, node_id)
         running.append(job)
         queue.remove(job)
         if self.debug:
             scheduled_nodes = summarize_ranges(job.scheduled_nodes)
             print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
 
-    def check_available_nodes(self,job):
-        nodes_available = False
-        if job.requested_nodes:  # nodes specified, i.e., telemetry replay
-            if len(job.requested_nodes) <= len(self.resource_manager.available_nodes):
-                if self.policy == PolicyType.REPLAY:  # Check if exact set is available:
-                    nodes_available = set(job.requested_nodes).issubset(set(self.resource_manager.available_nodes))
-                else:
-                    # Sufficiently large number of nodes available
-                    # but no exact set is required!
-                    nodes_available = True
-                    # remove the request for specific nodes and ask for n nodes
-                    job.nodes_required = len(job.requested_nodes)
-                    job.requested_nodes = []
-            else:
-                pass
-        else:  # Exact nodes not specified (e.g. synthetic jobs dont have nodes assigned)
-            nodes_available = len(self.resource_manager.available_nodes) >= job.nodes_required
+    def check_available_nodes(self, job):
+        """Checks if there are available resources (CPU cores, GPU units) for the job on any node."""
+        # Iterate through all nodes managed by the ResourceManager
+        for node in self.resource_manager.nodes:
+            if self.debug:
+                print(f"[DEBUG]   Checking node {node['id']}: Available CPU: {node['available_cpu_cores']}, Available GPU: {node['available_gpu_units']}. Job needs CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required}")
+            # Skip if the node is down
+            if node['is_down']:
+                continue
 
-        return nodes_available
+            # Check if the node has enough available CPU cores and GPU units
+            if (node['available_cpu_cores'] >= job.cpu_cores_required and
+                    node['available_gpu_units'] >= job.gpu_units_required):
+                # If a suitable node is found, return its ID
+                return node['id']
+        # If no suitable node is found, return None
+        return None
 
     def backfill(self,queue:List, running:List, current_time):
         # Try to find a backfill candidate from the entire queue.
         while queue:
-            backfill_job = self.find_backfill_job(queue, running, current_time)
-            if backfill_job:
-                self.place_job_and_manage_queues(backfill_job, queue, running, current_time)
+            backfill_job, node_id = self.find_backfill_job(queue, running, current_time)
+            if backfill_job is not None and node_id is not None:
+                # Instead of placing here, return the job and node_id to the caller
+                return backfill_job, node_id
             else:
                 break
+        return None, None
 
     def find_backfill_job(self, queue, running, current_time):
         """Finds a backfill job based on available nodes and estimated completion times.
@@ -139,29 +143,31 @@ class Scheduler:
         scheduler for slurm resource manager.' Procedia computer science 66 (2015): 661-669.
         """
         if not queue:
-            return None
+            return None, None
 
         # Identify when the nex job in the queue could run as a time limit:
         first_job = queue[0]
-        nodes_required = 0
-        if first_job.requested_nodes:
-            nodes_required = len(first_job.requested_nodes)
-        else:
-            nodes_required = first_job.nodes_required
+        # For multitenancy, we need to check if the first job can fit on any node
+        # based on its core/GPU requirements, not just nodes_required.
+        # This is a simplification; a more complex backfill might consider
+        # if the job can fit by combining resources from multiple nodes.
+        # For now, we assume it needs to fit on a single node.
+        
+        # We need to know the total available resources if all running jobs finish by shadow_time_end
+        # This is complex with multitenancy, so for now, we'll simplify the backfill logic
+        # to just check if a job can fit on *any* node, not necessarily the one
+        # that will be freed up by the first job in line.
 
-        sorted_running = sorted(running, key=lambda job: job.end_time)
+        # The original logic for shadow_time_end and shadow_nodes_avail is based on whole nodes.
+        # With multitenancy, this needs a more sophisticated resource projection.
+        # For now, we will make `time_limit` effectively infinite for backfill candidates
+        # if the job can fit on *any* node, and rely on `check_available_nodes`.
+        
+        # Revert to a simpler time_limit for now, or remove it if not applicable
+        # For now, let's assume time_limit is not strictly tied to node availability
+        # in the same way as before, and focus on resource availability.
+        time_limit = float('inf') # Effectively no time limit for backfill candidates
 
-        # Identify when we have enough nodes therefore the start time of the first_job in line
-        shadow_time_end = 0
-        shadow_nodes_avail = len(self.resource_manager.available_nodes)
-        for job in sorted_running:
-            if shadow_nodes_avail >= nodes_required:
-                break
-            else:
-                shadow_nodes_avail += job.nodes_required
-                shadow_time_end = job.end_time
-
-        time_limit = shadow_time_end - current_time
         # We now have the time_limit after which no backfilled job should end
         # as the next job in line has the necessary resrouces after this time limit.
 
@@ -181,15 +187,13 @@ class Scheduler:
             raise NotImplementedError(f"{self.bfpolicy} not implemented! Please implement!")
         else:
             raise NotImplementedError(f"{self.bfpolicy} not implemented.")
+        return None, None
 
     def return_first_fit(self, queue, time_limit):
         for job in queue:
-            if job.time_limit <= time_limit:
-                nodes_available = self.check_available_nodes(job)
-                if nodes_available:
-                    return job
-                else:
-                    continue
-            else:
-                continue
-        return None
+            # Check if the job can fit on any node based on its resource requirements
+            node_id = self.check_available_nodes(job)
+            if node_id is not None:
+                # If a suitable node is found, return the job and the node_id
+                return job, node_id
+        return None, None

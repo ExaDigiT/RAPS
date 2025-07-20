@@ -80,8 +80,12 @@ class Engine:
         self.max_slowdown_history = []
         self.node_occupancy_history = []
 
-        # Get scheduler type from command-line args or default
-        scheduler_type = kwargs.get('scheduler', 'default')
+        # Set scheduler type - either based on config or command-line args - defaults to 'default'
+        if self.config['multitenant']:
+            scheduler_type = 'multitenant'
+        else:
+            scheduler_type = kwargs.get('scheduler', 'default')
+
         policy_type = kwargs.get('policy')
         backfill_type = kwargs.get('backfill')
 
@@ -142,8 +146,9 @@ class Engine:
         eligible_jobs_list = []
         for job_data in eligible:
             job_instance = Job(job_data)
-            job_instance.cpu_cores_required = job_data.get('cpu_cores_required', 0)
-            job_instance.gpu_units_required = job_data.get('gpu_units_required', 0)
+            if self.config['multitenant']:
+                job_instance.cpu_cores_required = job_data.get('cpu_cores_required', 0)
+                job_instance.gpu_units_required = job_data.get('gpu_units_required', 0)
             eligible_jobs_list.append(job_instance)
         self.queue += eligible_jobs_list
         if self.debug:
@@ -206,16 +211,23 @@ class Engine:
             newly_downed_nodes = []
 
         # Update active/free nodes based on core/GPU utilization
-        total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
-        total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
-        available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
-        available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+        if self.config['multitenant']:
+            total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
+            total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
+            available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
+            available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
 
-        self.num_free_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and node['available_cpu_cores'] == node['total_cpu_cores'] and node['available_gpu_units'] == node['total_gpu_units']])
-        self.num_active_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and (node['available_cpu_cores'] < node['total_cpu_cores'] or node['available_gpu_units'] < node['total_gpu_units'])])
+            self.num_free_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and node['available_cpu_cores'] == node['total_cpu_cores'] and node['available_gpu_units'] == node['total_gpu_units']])
+            self.num_active_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and (node['available_cpu_cores'] < node['total_cpu_cores'] or node['available_gpu_units'] < node['total_gpu_units'])])
 
-        # Update system utilization history
-        self.resource_manager.update_system_utilization(self.current_time, self.running)
+            # Update system utilization history
+            self.resource_manager.update_system_utilization(self.current_time, self.running)
+        else:
+            # Whole-node allocator
+            self.num_free_nodes = len(self.resource_manager.available_nodes)
+            self.num_active_nodes = self.config['TOTAL_NODES'] \
+                                  - len(self.resource_manager.available_nodes) \
+                                  - len(self.resource_manager.down_nodes)
 
         return completed_jobs, newly_downed_nodes
 
