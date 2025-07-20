@@ -12,7 +12,6 @@
     "MISSING_RACKS": [44],
     "DOWN_NODES": [],
     "CPUS_PER_NODE": 2,
-    "CORES_PER_CPU": 22,
     "THREADS_PER_CORE": 4,
     "CPU_FREQUENCY": 2400000000,
     "GPUS_PER_NODE": 4,

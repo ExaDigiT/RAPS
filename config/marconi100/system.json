@@ -11,7 +11,6 @@
     "NODES_PER_RECTIFIER": 4,
     "MISSING_RACKS": [49, 50],
     "DOWN_NODES": [],
-    "CORES_PER_CPU": 24,
     "CPUS_PER_NODE": 2,
     "GPUS_PER_NODE": 4,
     "CPU_PEAK_FLOPS": 396.8E9,
