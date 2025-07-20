@@ -619,10 +619,11 @@ class Engine:
             'total cost': f'${total_cost:.2f}'
         }
 
-        # Multitenancy Stats
-        total_jobs_loaded = self.total_initial_jobs # Assuming this is passed to __init__
-        stats['total jobs loaded'] = total_jobs_loaded
-        stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
+        if self.config['multitenant']:
+            # Multitenancy Stats
+            total_jobs_loaded = self.total_initial_jobs # Assuming this is passed to __init__
+            stats['total jobs loaded'] = total_jobs_loaded
+            stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
 
         if self.node_occupancy_history:
             # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
