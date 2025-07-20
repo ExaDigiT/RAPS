@@ -1,8 +1,8 @@
 from ..job import JobState
 
-class WholeNodeResourceManager:
+class ExclusiveNodeResourceManager:
     """
-    Legacy whole-node resource manager: allocates and frees full nodes.
+    Legacy exclusive-node resource manager: allocates and frees full nodes.
     """
     def __init__(self, total_nodes, down_nodes, config=None):
         self.total_nodes      = total_nodes
@@ -86,7 +86,26 @@ class WholeNodeResourceManager:
         return util
 
     def node_failure(self, mtbf):
-        """
-        Legacy whole-node mode does not simulate failures; always return empty list.
-        """
         return []
+        """Simulate node failure using Weibull distribution."""
+        shape_parameter = 1.5
+        scale_parameter = mtbf * 3600  # Convert to seconds
+
+        # Create a NumPy array of node indices, excluding down nodes
+        all_nodes = np.array(sorted(set(range(self.total_nodes)) - set(self.down_nodes)))
+
+        # Sample the Weibull distribution for all nodes at once
+        random_values = weibull_min.rvs(shape_parameter, scale=scale_parameter, size=all_nodes.size)
+
+        # Identify nodes that have failed
+        failure_threshold = 0.1
+        failed_nodes_mask = random_values < failure_threshold
+        newly_downed_nodes = all_nodes[failed_nodes_mask]
+
+        # Update available and down nodes
+        for node_index in newly_downed_nodes:
+            if node_index in self.available_nodes:
+                self.available_nodes.remove(node_index)
+            self.down_nodes.add(str(node_index))
+
+        return newly_downed_nodes.tolist()
