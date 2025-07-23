@@ -70,6 +70,9 @@ For MIT Supercloud
     # Re-run simulation using npz files (much faster load)
     python multi-part-sim.py -x mit_supercloud/* -f part-*.npz --system mit_supercloud
 
+    # Synthetic tests for verification studies:
+    python multi-part-sim.py -x 'mit_supercloud/*' -w multitenant
+
 ## Perform Network Simulation
 
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 

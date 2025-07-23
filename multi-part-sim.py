@@ -92,6 +92,8 @@ if args.replay:
 else:  # Synthetic workload
     wl = Workload(*configs)
 
+    total_initial_jobs = args.numjobs
+
     # Generate jobs based on workload type
     jobs = getattr(wl, args.workload)(num_jobs=args.numjobs)
 

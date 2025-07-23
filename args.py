@@ -12,7 +12,7 @@ parser.add_argument('-c', '--cooling', action='store_true', help='Include FMU co
 parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
 parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode and disable rich layout')
-parser.add_argument('-n', '--numjobs', type=int, default=1000, help='Number of jobs to schedule')
+parser.add_argument('-n', '--numjobs', type=int, default=100, help='Number of jobs to schedule')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 parser.add_argument('--start', type=str, help='ISO8061 string for start of simulation')
 parser.add_argument('--end', type=str, help='ISO8061 string for end of simulation')
@@ -42,7 +42,7 @@ parser.add_argument('--jid', type=str, default='*', help='Replay job id')
 parser.add_argument('--scale', type=int, default=0, help='Scale telemetry to max nodes specified in order to run telemetry on a smaller smaller target system/partition, e.g., --scale 192')
 
 # Synthetic workloads
-choices = ['random', 'benchmark', 'peak', 'idle']
+choices = ['random', 'benchmark', 'peak', 'idle', 'multitenant']
 parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
