@@ -31,6 +31,7 @@ Note: To locate the pruning logic, search for the keyword "prune" in the code.
 import ast
 import os
 import math
+import numpy as np
 import pandas as pd
 import re
 
@@ -431,9 +432,10 @@ def load_data(local_dataset_path, **kwargs):
 
         print(f"*** nr: {nr}, cpu_cores_req: {cpu_cores_req}, gpu_units_req: {gpu_units_req}", flush=True)
         print(jid, cpu_tr[:5], flush=True)
-        # we're not quite sure which is correct below - but the second one seems more likely
-        #cpu_tr = [float(f"{x/nr/cores_per_cpu:4g}") for x in cpu_tr]
-        cpu_tr = [float(f"{x/cores_per_cpu:4g}") for x in cpu_tr]
+
+        # sometimes there are spurious large values for cpu util - set max limit based on peak
+        cpu_peak = cpu_cores_req / cores_per_cpu / cpus_per_node
+        cpu_tr = [min(x/cores_per_cpu/cpus_per_node, cpu_peak) for x in cpu_tr]
         print(jid, cpu_tr[:5])
 
         submit_time = rec.get("time_submit", t0) - start_ts
@@ -463,8 +465,18 @@ def load_data(local_dataset_path, **kwargs):
         )
 
         view = job.copy()
-        view['cpu_trace'] = view['cpu_trace'][:5] + ['…']
-        view['gpu_trace'] = view['gpu_trace'][:5] + ['…']
+        #view['cpu_trace'] = view['cpu_trace'][:5] + ['…']
+        #view['gpu_trace'] = view['gpu_trace'][:5] + ['…']
+
+        summarize_trace = lambda x: {
+            'min': float(np.min(x)),
+            'max': float(np.max(x)),
+            'avg': float(np.mean(x)),
+            'len': len(x),
+        }
+        view['cpu_trace'] = summarize_trace(job['cpu_trace'])
+        view['gpu_trace'] = summarize_trace(job['gpu_trace'])
+        view['cpu_peak'] = job['cpu_cores_required'] / cores_per_cpu / cpus_per_node
         print(view)
 
         #validate_job_traces(Job(job), granularity=quanta)
