@@ -3,6 +3,11 @@ from ..job import JobState
 from scipy.stats import weibull_min
 
 
+def assert_node_accounting_ok(node):
+    assert node['available_cpu_cores'] >= 0, "available_cpu_cores went negative"
+    assert node['available_gpu_units'] >= 0, "available_gpu_units went negative"
+
+
 class MultiTenantResourceManager:
     """
     Resource manager for per-node CPU/GPU multitenancy.
@@ -64,6 +69,13 @@ class MultiTenantResourceManager:
         found['available_gpu_units'] -= job.gpu_units_required
         self.allocated_cpu_cores    += job.cpu_cores_required
         self.allocated_gpu_units    += job.gpu_units_required
+
+        # ---- Invariant checks (after mutating node/RM state) ----
+        assert_node_accounting_ok(found)  # no negatives left
+        assert self.allocated_cpu_cores >= 0 and self.allocated_gpu_units >= 0
+        # Optional: global sanity vs. totals
+        assert self.allocated_cpu_cores <= sum(n['total_cpu_cores'] for n in self.nodes)
+        assert self.allocated_gpu_units <= sum(n['total_gpu_units']  for n in self.nodes)
 
         # Record on job
         job.scheduled_nodes      = [found['id']]

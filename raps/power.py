@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import uncertainties as uf
 from .utils import linear_to_3d_index
+from .validators import recompute_power
 
 
 def custom_str_uncertainties(self):

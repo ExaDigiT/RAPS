@@ -238,3 +238,15 @@ def proc_gpu_series(cpu_df, dfi, gpu_cnt):
     gpu_df.rename(columns=ren, inplace=True)
 
     return gpu_df, gpu_cnt + 1
+
+
+def validate_job_traces(job, granularity=1):
+    print(job)
+    assert job.cpu_trace is not None, f"job {job.id} missing cpu_trace"
+    assert job.gpu_trace is not None, f"job {job.id} missing gpu_trace"
+    assert all(p >= 0 for p in job.cpu_trace), f"neg cpu power in job {job.id}"
+    assert all(p >= 0 for p in job.gpu_trace), f"neg gpu power in job {job.id}"
+    # Length sanity: at least wall_time/granularity samples
+    needed = max(1, int(job.wall_time / granularity))
+    assert len(job.cpu_trace) >= needed, f"cpu_trace too short for job {job.id}"
+    assert len(job.gpu_trace) >= needed, f"gpu_trace too short for job {job.id}"

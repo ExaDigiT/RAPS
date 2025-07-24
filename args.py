@@ -14,8 +14,8 @@ parser.add_argument('-t', '--time', type=str, default=None, help='Length of time
 parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode and disable rich layout')
 parser.add_argument('-n', '--numjobs', type=int, default=100, help='Number of jobs to schedule')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-parser.add_argument('--start', type=str, help='ISO8061 string for start of simulation')
-parser.add_argument('--end', type=str, help='ISO8061 string for end of simulation')
+parser.add_argument('--start', type=str, default='2021-05-21T13:00', help='ISO8061 string for start of simulation')
+parser.add_argument('--end', type=str, default='2021-05-21T14:00', help='ISO8061 string for end of simulation')
 parser.add_argument('--seed', action='store_true', help='Set random number seed for deterministic simulation')
 parser.add_argument('-u', '--uncertainties', action='store_true',
                     help='Change from floating point units to floating point units with uncertainties.' + \

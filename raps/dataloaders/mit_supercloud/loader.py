@@ -11,9 +11,76 @@ import pandas as pd
 from datetime import datetime
 from types import SimpleNamespace
 from tqdm import tqdm
-from raps.job import job_dict
+from raps.job import job_dict, Job
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
+from .utils import validate_job_traces
+
+
+import re
+from typing import Dict, Union, Optional
+
+
+# Default SLURM TRES id→name map (extend as needed)
+DEFAULT_TRES_ID_MAP = {
+    1: "cpu",
+    2: "mem",     # in MB
+    3: "energy",
+    4: "gres/gpu",
+    5: "billing",
+}
+
+
+def parse_tres_alloc(tres_str: Union[str, None],
+                     id_map: Optional[Dict[int, str]] = None,
+                     return_ids: bool = False) -> Dict[Union[int, str], int]:
+    """
+    Parse a Slurm tres_alloc/tres_req field like: '1=20,2=170000,4=1,5=20'
+    
+    Parameters
+    ----------
+    tres_str : str | None
+        The raw TRES string from Slurm (quotes OK). If None/empty returns {}.
+    id_map : dict[int,str] | None
+        Optional mapping from TRES numeric IDs to friendly names.
+        Falls back to DEFAULT_TRES_ID_MAP if not provided.
+    return_ids : bool
+        If True, keys are the numeric IDs. If False, keys use id_map names
+        (falls back to the numeric ID as a string if unknown).
+
+    Returns
+    -------
+    dict
+        Parsed key/value pairs. Example:
+        {'cpu': 20, 'mem': 170000, 'gres/gpu': 1, 'billing': 20}
+    """
+    if not tres_str:
+        return {}
+
+    id_map = id_map or DEFAULT_TRES_ID_MAP
+
+    # strip quotes or whitespace
+    tres_str = tres_str.strip().strip('"').strip("'")
+
+    # Split on commas, but be tolerant of spaces
+    parts = [p for p in tres_str.split(",") if p]
+
+    out: Dict[Union[int, str], int] = {}
+
+    for p in parts:
+        m = re.match(r"\s*(\d+)\s*=\s*([0-9]+)\s*$", p)
+        if not m:
+            # skip or raise; here we skip silently
+            continue
+        tid = int(m.group(1))
+        val = int(m.group(2))
+        if return_ids:
+            out[tid] = val
+        else:
+            key = id_map.get(tid, str(tid))
+            out[key] = val
+
+    return out
 
 
 def load_data(local_dataset_path, **kwargs):
@@ -47,13 +114,18 @@ def load_data(local_dataset_path, **kwargs):
 
     data_root = os.path.dirname(slurm_path)
     sl = pd.read_csv(slurm_path)
+    sl["__line__"] = sl.index + 2
 
     # 2) date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
     end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
     #duration = end_ts - start_ts
     
-    sl = sl[(sl.time_submit >= start_ts) & (sl.time_submit < end_ts)]
+    mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
+    sl = sl[mask]
+    hits = sl.loc[mask]
+    print("line numbers in slurm-log.csv", hits["__line__"].tolist())
+
     # —— ERROR CATCH: no jobs in this window? ——
     if sl.empty:
         raise ValueError(
@@ -151,15 +223,18 @@ def load_data(local_dataset_path, **kwargs):
             start_time = job_row.get('time_start', 'N/A')
             wall_time = job_row.get('time_limit', 'N/A')
             tres_alloc = job_row.get('tres_alloc', 'N/A')
+            tres_alloc_dict = parse_tres_alloc(tres_alloc)
+            rec["tres_alloc_dict"] = tres_alloc_dict
             gres_used = job_row.get('gres_used', 'N/A')
 
             tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
             tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
-            tqdm.write(f"  TRES Alloc: {tres_alloc}")
-            tqdm.write(f"  GRES Used: {gres_used}")
+            tqdm.write(f"  TRES Alloc: {tres_alloc_dict}")
+            #tqdm.write(f"  GRES Used: {gres_used}")
         else:
             tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
 
+        rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
 
     print(f"GPU candidate files ({len(gpu_files)}):")
@@ -171,6 +246,7 @@ def load_data(local_dataset_path, **kwargs):
             print(f"\n[DEBUG] attempting {fp!r}")
             print("        full path exists:", os.path.exists(fp), fp)
         if not os.path.exists(fp):
+            print("gpu path doesn't exist skipping") 
             continue
 
         tqdm.write(f"Reading GPU {os.path.basename(fp)}")
@@ -226,7 +302,8 @@ def load_data(local_dataset_path, **kwargs):
             avg_util = raw.mean(axis=1)
 
             # 4) scale by number of nodes requested
-            nodes = rec.get("nodes_alloc", 1)
+            #nodes = rec.get("nodes_alloc", 1)
+            nodes = rec.get("nodes_alloc")
             rec["gpu_trace"] = (avg_util * nodes).tolist()
 
         if debug:
@@ -255,10 +332,16 @@ def load_data(local_dataset_path, **kwargs):
     
     # Get CPUS_PER_NODE and GPUS_PER_NODE from config
     config = kwargs.get('config', {})
-    cpus_per_node = config.get('CPUS_PER_NODE', 2) # Default to 2 if not found
-    gpus_per_node = config.get('GPUS_PER_NODE', 0) # Default to 0 if not found
+    cpus_per_node = config.get('CPUS_PER_NODE')
+    cores_per_cpu = config.get('CORES_PER_CPU')
+    gpus_per_node = config.get('GPUS_PER_NODE')
+    print(f"*** cpus_per_node: {cpus_per_node}, cores_per_cpu: {cores_per_cpu}, gpus_per_node: {gpus_per_node}")
+
+    quanta = config.get('TRACE_QUANTA')
 
     for jid, rec in data.items():
+        nr = rec.get("nodes_alloc")
+
         cpu = rec.get("cpu")
         gpu = rec.get("gpu_trace")
 
@@ -287,37 +370,48 @@ def load_data(local_dataset_path, **kwargs):
             print("skipping")
             continue
 
-        st = rec.get("time_submit",t0) - start_ts
-        nr = rec.get("nodes_alloc",1)
-        if nr>1:
-            cpu_tr = [x/nr for x in cpu_tr]
+        # Calculate cpu_cores_required and gpu_units_required from tres_alloc
+        total_cpu = rec["tres_alloc_dict"].get('cpu', 0)
+        # Can either allocate gpu:volta (1002) or gpu:tesla (1001) but not both
+        total_gpu = rec["tres_alloc_dict"].get('1002') or tres_alloc_dict.get(1001, 0)
 
-        # Calculate cpu_cores_required and gpu_units_required
-        cpu_cores_req = math.ceil(max(cpu_tr) * cpus_per_node) if cpu_tr else 0
-        gpu_units_req = math.ceil(max(gpu_tr) * gpus_per_node) if gpu_tr else 0
+        cpu_cores_req = math.ceil(total_cpu / nr)
+        gpu_units_req = math.ceil(total_gpu / nr)
 
-        jobs_list.append(job_dict(
+        print(f"*** nr: {nr}, cpu_cores_req: {cpu_cores_req}, gpu_units_req: {gpu_units_req}", flush=True)
+        print(jid, cpu_tr[:5], flush=True)
+        # we're not quite sure which is correct below - but the second one seems more likely
+        #cpu_tr = [float(f"{x/nr/cores_per_cpu:4g}") for x in cpu_tr]
+        cpu_tr = [float(f"{x/cores_per_cpu:4g}") for x in cpu_tr]
+        print(jid, cpu_tr[:5])
+
+        submit_time = rec.get("time_submit", t0) - start_ts
+
+        job = job_dict(
             nodes_required   = nr,
             cpu_cores_required = cpu_cores_req,
             gpu_units_required = gpu_units_req,
-            name             = rec.get("name_job","unknown"),
-            account          = rec.get("id_user","unknown"),
+            name             = rec.get("name_job", "unknown"),
+            account          = rec.get("id_user", "unknown"),
             cpu_trace        = cpu_tr,
             gpu_trace        = gpu_tr,
             ntx_trace        = [],
             nrx_trace        = [],
-            end_state        = rec.get("state_end","UNKNOWN"),
+            end_state        = rec.get("state_end", "unknown"),
             id               = jid,
             priority         = rec.get("priority",0),
-            submit_time      = st,
+            submit_time      = submit_time,
             time_limit       = rec.get("time_limit",0),
             start_time       = t0 - start_ts,
             end_time         = t1 - start_ts,
             wall_time        = max(0, t1-t0),
-            trace_time       = len(cpu_tr)*10.0,
+            trace_time       = len(cpu_tr)*quanta,
             trace_start_time = 0,
-            trace_end_time   = len(cpu_tr)*10.0
-        ))
+            trace_end_time   = len(cpu_tr)*quanta
+        )
+        #validate_job_traces(Job(job), granularity=quanta)
+        # if nr > 1: # uncomment to test multinode jobs - need to run for 24 hours to get enough jobs to populate
+        jobs_list.append(job)
 
     # Calculate min_overall_utime and max_overall_utime
     min_overall_utime = int(sl.time_submit.min())
