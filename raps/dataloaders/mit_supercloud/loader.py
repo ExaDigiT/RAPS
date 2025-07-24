@@ -2,6 +2,30 @@
 # -*- coding: utf-8 -*-
 """
 MIT Supercloud data loader
+
+This module processes job traces from the MIT SuperCloud dataset with careful
+node filtering based on observed resource allocation history.
+
+Summary of node filtering:
+
+- A total of 1135 unique node IDs were extracted from `slurm-log.csv`.
+- Of these, 228 were identified as GPU-capable nodes (recorded in `gpu_nodes.txt`).
+- The remaining 907 nodes were treated as CPU-only candidates.
+
+Filtering steps:
+
+1. Jobs with `nodes_alloc > 480` were excluded, based on the assumption that 
+   such large allocations span across GPU nodes. This removed 413 nodes, 
+   leaving 494 candidate CPU-only nodes.
+
+2. To reach the target of 480 CPU nodes, we analyzed job frequency per node 
+   and pruned the 14 least-used nodes (those with only 1–26 jobs). 
+   These pruned nodes are listed in `prune_list.txt`.
+
+The final list of CPU-only nodes is stored in `cpu_nodes.txt`, and the list
+of GPU nodes are stored in `gpu_nodes.txt`.
+
+Note: To locate the pruning logic, search for the keyword "prune" in the code.
 """
 
 import ast
@@ -122,6 +146,18 @@ def load_data(local_dataset_path, **kwargs):
     sl = sl[mask]
     hits = sl.loc[mask]
     print("line numbers in slurm-log.csv", hits["__line__"].tolist())
+
+    # --- prune out oversized jobs and known under‑used hosts ---
+    # load list of underutilized nodes to ignore
+    pruned = set()
+    if os.path.exists("prune_list.txt"):
+        with open(prune_path) as pf:
+            pruned = {l.strip() for l in pf if l.strip()}
+    # only keep jobs requesting ≤480 nodes
+    sl = sl[ sl.nodes_alloc <= 480 ]
+    # drop any job whose nodelist includes a pruned node
+    sl["nodes_list"] = sl["nodelist"].apply(ast.literal_eval)
+    sl = sl[ ~sl["nodes_list"].apply(lambda lst: any(n in pruned for n in lst)) ]
 
     # —— ERROR CATCH: no jobs in this window? ——
     if sl.empty:
