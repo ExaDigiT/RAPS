@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MIT Supercloud job trace processing module with load_data function.
+MIT Supercloud data loader
 """
 
 import ast
@@ -9,18 +9,17 @@ import os
 import math
 import pandas as pd
 import re
+
+from tqdm import tqdm
+from types import SimpleNamespace
 from typing import Dict, Union, Optional
 
-from datetime import datetime
-from types import SimpleNamespace
-from tqdm import tqdm
 from raps.job import job_dict, Job
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 from .utils import validate_job_traces
 
-# Default SLURM TRES id→name map (extend as needed)
-DEFAULT_TRES_ID_MAP = {
+TRES_ID_MAP = {
     1: "cpu",
     2: "mem",     # in MB
     3: "energy",
@@ -41,7 +40,7 @@ def parse_tres_alloc(tres_str: Union[str, None],
         The raw TRES string from Slurm (quotes OK). If None/empty returns {}.
     id_map : dict[int,str] | None
         Optional mapping from TRES numeric IDs to friendly names.
-        Falls back to DEFAULT_TRES_ID_MAP if not provided.
+        Falls back to TRES_ID_MAP if not provided.
     return_ids : bool
         If True, keys are the numeric IDs. If False, keys use id_map names
         (falls back to the numeric ID as a string if unknown).
@@ -55,7 +54,7 @@ def parse_tres_alloc(tres_str: Union[str, None],
     if not tres_str:
         return {}
 
-    id_map = id_map or DEFAULT_TRES_ID_MAP
+    id_map = id_map or TRES_ID_MAP
 
     # strip quotes or whitespace
     tres_str = tres_str.strip().strip('"').strip("'")
@@ -100,7 +99,7 @@ def load_data(local_dataset_path, **kwargs):
             raise ValueError("Expect exactly one path")
         local_dataset_path = local_dataset_path[0]
 
-    # 1) slurm log -> DataFrame
+    # slurm log -> DataFrame
     slurm_path = None
     for root, _, files in os.walk(local_dataset_path):
         if "slurm-log.csv" in files:
@@ -114,13 +113,7 @@ def load_data(local_dataset_path, **kwargs):
     sl = pd.read_csv(slurm_path)
     sl["__line__"] = sl.index + 2
 
-    # Read the full node list into a Python list and build lookup from hostname → index
-    NL_PATH = os.path.join(os.path.dirname(__file__), "nodelist.txt")
-    with open(NL_PATH) as f:
-        all_nodes = [line.strip() for line in f if line.strip()]
-    node_to_idx = {host: idx for idx, host in enumerate(all_nodes)}
-
-    # 2) date window
+    # date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
     end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
     #duration = end_ts - start_ts
@@ -137,7 +130,7 @@ def load_data(local_dataset_path, **kwargs):
             f"{kwargs.get('end_date')}. Please pick a range covered by the dataset."
         )
 
-    # 3) detect GPU‐using jobs
+    # detect GPU‐using jobs
     gres = sl.gres_used.fillna("").astype(str)
     tres = sl.tres_alloc.fillna("").astype(str)
 
@@ -147,10 +140,21 @@ def load_data(local_dataset_path, **kwargs):
         "id_job"
     ])
 
-    # 4) partition mode
+    # partition mode
     part = kwargs.get("partition","").split("/")[-1].lower()
     cpu_only = (part=="part-cpu")
     mixed    = (part=="part-gpu")
+
+    # create nodelist mapping
+    NL_PATH = os.path.dirname(__file__)
+    if cpu_only:
+        with open(os.path.join(NL_PATH, "cpu_nodes.txt")) as f:
+            cpu_nodes = [l.strip() for l in f if l.strip()]
+        cpu_node_to_idx = {h: i for i, h in enumerate(cpu_nodes)}
+    else: # cpu + gpu
+        with open(os.path.join(NL_PATH, "gpu_nodes.txt")) as f:
+            gpu_nodes = [l.strip() for l in f if l.strip()]
+        gpu_node_to_idx = {h: i for i, h in enumerate(gpu_nodes)}
 
     if cpu_only:
         job_ids = set(sl.id_job) - gpu_jobs
@@ -161,7 +165,7 @@ def load_data(local_dataset_path, **kwargs):
 
     print(f"→ mode={part}, jobs: {len(job_ids)}")
 
-    # 5) find trace files by walking directories
+    # find trace files by walking directories
     cpu_files = []
     cpu_root = os.path.join(data_root, "cpu")
     if os.path.exists(cpu_root):
@@ -190,7 +194,7 @@ def load_data(local_dataset_path, **kwargs):
                 except (ValueError, IndexError):
                     continue
 
-    # 6) select final trace list
+    # select final trace list
     if cpu_only:
         traces = cpu_files
     elif mixed:
@@ -214,7 +218,7 @@ def load_data(local_dataset_path, **kwargs):
 
     data = {}
 
-    # 8a) CPU first
+    # CPU first
     for fp in tqdm(cpu_files, desc="Loading CPU traces"):
         df = pd.read_csv(fp, dtype={0: str})
         jid = int(os.path.basename(fp).split("-", 1)[0])
@@ -238,14 +242,14 @@ def load_data(local_dataset_path, **kwargs):
         else:
             tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
 
-        # Get allocated nodes "['r9189566-n911952','r9189567-n...']"
         raw = job_row.get("nodelist", "")
-        if raw:
-            hosts = ast.literal_eval(raw)
-            rec["scheduled_nodes"] = [ node_to_idx[h] for h in hosts ]
+        hosts = ast.literal_eval(raw)
+
+        # Get allocated nodes "['r9189566-n911952','r9189567-n...']"
+        if cpu_only:
+            rec["scheduled_nodes"] = [cpu_node_to_idx[h] for h in hosts]
         else:
-            rec["scheduled_nodes"] = []
-        #print("**", hosts, rec["scheduled_nodes"])
+            rec["scheduled_nodes"] = [gpu_node_to_idx[h] for h in hosts]
 
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
@@ -281,7 +285,7 @@ def load_data(local_dataset_path, **kwargs):
         gpu_ser, gpu_cnt = proc_gpu_series(cpu_df, dfi, gpu_cnt)
 
         gpu_cnt  = data[jid].get("gpu_cnt", 0)
-        prev_gpu = data[jid].get("gpu")   # ← define prev_gpu here
+        prev_gpu = data[jid].get("gpu")
         gpu_ser, gpu_cnt = proc_gpu_series(cpu_df, dfi, gpu_cnt)
         if prev_gpu is None:
             data[jid]["gpu"] = gpu_ser
@@ -300,22 +304,20 @@ def load_data(local_dataset_path, **kwargs):
 
         gpu_df = rec["gpu"]
 
-        # 1) grab all the gpu‐util columns
+        # grab all the gpu‐util columns
         util_cols = [c for c in gpu_df.columns if c.startswith("gpu_util_")]
 
         if not util_cols:
             # no gpu utilization columns? zero out
             rec["gpu_trace"] = []
         else:
-            # 2) as floats in [0,1]
+            # as floats in [0,1]
             raw = gpu_df[util_cols].astype(float).div(100)
 
-            # 3) average (or sum) across devices
-            #    if you want to SUM instead, use .sum(axis=1)
+            # average across devices
             avg_util = raw.mean(axis=1)
 
-            # 4) scale by number of nodes requested
-            #nodes = rec.get("nodes_alloc", 1)
+            # scale by number of nodes requested
             nodes = rec.get("nodes_alloc")
             rec["gpu_trace"] = (avg_util * nodes).tolist()
 
@@ -334,13 +336,13 @@ def load_data(local_dataset_path, **kwargs):
     if miss:
         print("   jobs missing GPU despite being in gpu_files:", miss[:10])
 
-    # 8) merge slurm metadata
+    # merge slurm metadata
     for _, row in sl.iterrows():
         jid = row.id_job
         if jid in data and jid not in data[jid]:
             data[jid].update(row.to_dict())
 
-    # 9) build final job_dicts
+    # build final job_dicts
     jobs_list = []
     
     # Get CPUS_PER_NODE and GPUS_PER_NODE from config
@@ -423,6 +425,12 @@ def load_data(local_dataset_path, **kwargs):
             trace_start_time = 0,
             trace_end_time   = len(cpu_tr)*quanta
         )
+
+        view = job.copy()
+        view['cpu_trace'] = view['cpu_trace'][:5] + ['…']
+        view['gpu_trace'] = view['gpu_trace'][:5] + ['…']
+        print(view)
+
         #validate_job_traces(Job(job), granularity=quanta)
         # if nr > 1: # uncomment to test multinode jobs - need to run for 24 hours to get enough jobs to populate
         jobs_list.append(job)
