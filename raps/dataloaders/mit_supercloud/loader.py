@@ -4,9 +4,12 @@
 MIT Supercloud job trace processing module with load_data function.
 """
 
+import ast
 import os
 import math
 import pandas as pd
+import re
+from typing import Dict, Union, Optional
 
 from datetime import datetime
 from types import SimpleNamespace
@@ -15,11 +18,6 @@ from raps.job import job_dict, Job
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 from .utils import validate_job_traces
-
-
-import re
-from typing import Dict, Union, Optional
-
 
 # Default SLURM TRES id→name map (extend as needed)
 DEFAULT_TRES_ID_MAP = {
@@ -115,6 +113,12 @@ def load_data(local_dataset_path, **kwargs):
     data_root = os.path.dirname(slurm_path)
     sl = pd.read_csv(slurm_path)
     sl["__line__"] = sl.index + 2
+
+    # Read the full node list into a Python list and build lookup from hostname → index
+    NL_PATH = os.path.join(os.path.dirname(__file__), "nodelist.txt")
+    with open(NL_PATH) as f:
+        all_nodes = [line.strip() for line in f if line.strip()]
+    node_to_idx = {host: idx for idx, host in enumerate(all_nodes)}
 
     # 2) date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
@@ -233,6 +237,15 @@ def load_data(local_dataset_path, **kwargs):
             #tqdm.write(f"  GRES Used: {gres_used}")
         else:
             tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
+
+        # Get allocated nodes "['r9189566-n911952','r9189567-n...']"
+        raw = job_row.get("nodelist", "")
+        if raw:
+            hosts = ast.literal_eval(raw)
+            rec["scheduled_nodes"] = [ node_to_idx[h] for h in hosts ]
+        else:
+            rec["scheduled_nodes"] = []
+        #print("**", hosts, rec["scheduled_nodes"])
 
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
@@ -399,9 +412,10 @@ def load_data(local_dataset_path, **kwargs):
             nrx_trace        = [],
             end_state        = rec.get("state_end", "unknown"),
             id               = jid,
-            priority         = rec.get("priority",0),
+            scheduled_nodes  = rec.get("scheduled_nodes"),
+            priority         = rec.get("priority", 0),
             submit_time      = submit_time,
-            time_limit       = rec.get("time_limit",0),
+            time_limit       = rec.get("time_limit", 0),
             start_time       = t0 - start_ts,
             end_time         = t1 - start_ts,
             wall_time        = max(0, t1-t0),
