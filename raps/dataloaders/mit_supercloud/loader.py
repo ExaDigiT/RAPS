@@ -52,6 +52,7 @@ import re
 from tqdm import tqdm
 from types import SimpleNamespace
 from typing import Dict, Union, Optional
+from collections import Counter
 
 from raps.job import job_dict, Job
 from raps.utils import summarize_ranges
@@ -70,7 +71,8 @@ TRES_ID_MAP = {
 
 def parse_tres_alloc(tres_str: Union[str, None],
                      id_map: Optional[Dict[int, str]] = None,
-                     return_ids: bool = False) -> Dict[Union[int, str], int]:
+                     return_ids: bool = False,
+                     stats: Counter = None) -> Dict[Union[int, str], int]:
     """
     Parse a Slurm tres_alloc/tres_req field like: '1=20,2=170000,4=1,5=20'
     
@@ -84,6 +86,8 @@ def parse_tres_alloc(tres_str: Union[str, None],
     return_ids : bool
         If True, keys are the numeric IDs. If False, keys use id_map names
         (falls back to the numeric ID as a string if unknown).
+    stats : Counter
+        Optional counter to track parsing errors.
 
     Returns
     -------
@@ -107,6 +111,8 @@ def parse_tres_alloc(tres_str: Union[str, None],
     for p in parts:
         m = re.match(r"\s*(\d+)\s*=\s*([0-9]+)\s*$", p)
         if not m:
+            if stats is not None:
+                stats["malformed_tres"] += 1
             # skip or raise; here we skip silently
             continue
         tid = int(m.group(1))
@@ -134,6 +140,9 @@ def load_data(local_dataset_path, **kwargs):
     """
     debug = kwargs.get("debug")
     NL_PATH = os.path.dirname(__file__)
+    
+    skip_counts = Counter()
+
     # unpack
     if isinstance(local_dataset_path, list):
         if len(local_dataset_path) != 1:
@@ -172,25 +181,29 @@ def load_data(local_dataset_path, **kwargs):
     pruned = set()
     with open(os.path.join(NL_PATH, "prune_list.txt")) as pf:
         pruned = {l.strip() for l in pf if l.strip()}
-    print(pruned)
+    
+    before_prune = len(sl)
     # only keep jobs requesting ≤480 nodes
     sl = sl[ sl.nodes_alloc <= 480 ]
-    print(f"[DEBUG] After nodes_alloc ≤ 480 filter: {len(sl)} jobs")
+    after_alloc_filter = len(sl)
+    skip_counts['nodes_alloc > 480'] += (before_prune - after_alloc_filter)
+
     # drop any job whose nodelist includes a pruned node
     sl["nodes_list"] = sl["nodelist"].apply(ast.literal_eval)
 
     def is_pruned(lst):
         matches = [n for n in lst if n in pruned]
         if matches:
-            print(f"[DEBUG] Skipping job due to pruned nodes: {matches}")
+            #print(f"[DEBUG] Skipping job due to pruned nodes: {matches}")
             return True
         return False
 
-    before = len(sl)
+    before_prune_filter = len(sl)
     sl = sl[~sl["nodes_list"].apply(is_pruned)]
-    after = len(sl)
+    after_prune_filter = len(sl)
+    skip_counts['pruned_nodes'] += (before_prune_filter - after_prune_filter)
 
-    print(f"[DEBUG] Jobs removed by pruning: {before - after}")
+
     print(f"[DEBUG] After pruning: {len(sl)} jobs")
 
     # —— ERROR CATCH: no jobs in this window? ——
@@ -227,8 +240,10 @@ def load_data(local_dataset_path, **kwargs):
 
     if cpu_only:
         job_ids = set(sl.id_job) - gpu_jobs
+        skip_counts['gpu_job_in_cpu_mode'] += len(set(sl.id_job) & gpu_jobs)
     elif mixed:
         job_ids = gpu_jobs & set(sl.id_job)
+        skip_counts['cpu_job_in_gpu_mode'] += len(set(sl.id_job) - gpu_jobs)
     else:
         job_ids = set(sl.id_job)
 
@@ -286,6 +301,11 @@ def load_data(local_dataset_path, **kwargs):
     print(f"→ {len(cpu_files)} CPU files, {len(gpu_files)} GPU files → total {len(traces)}")
 
     data = {}
+    
+    traced_jobs = {int(os.path.basename(p).split('-',1)[0]) for p in traces}
+    untraced_jobs = job_ids - traced_jobs
+    skip_counts['no_trace_file'] += len(untraced_jobs)
+
 
     # CPU first
     for fp in tqdm(cpu_files, desc="Loading CPU traces"):
@@ -295,58 +315,51 @@ def load_data(local_dataset_path, **kwargs):
 
         # Find job info in slurm log and print details
         job_info = sl[sl.id_job == jid]
-        if not job_info.empty:
-            job_row = job_info.iloc[0]
-            start_time = job_row.get('time_start', 'N/A')
-            wall_time = job_row.get('time_limit', 'N/A')
-            tres_alloc = job_row.get('tres_alloc', 'N/A')
-            tres_alloc_dict = parse_tres_alloc(tres_alloc)
-            rec["tres_alloc_dict"] = tres_alloc_dict
-            gres_used = job_row.get('gres_used', 'N/A')
+        if job_info.empty:
+            skip_counts['job_not_in_slurm_log'] += 1
+            continue
 
-            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
-            tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
-            tqdm.write(f"  TRES Alloc: {tres_alloc_dict}")
-            #tqdm.write(f"  GRES Used: {gres_used}")
-        else:
-            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
+        job_row = job_info.iloc[0]
+        start_time = job_row.get('time_start', 'N/A')
+        wall_time = job_row.get('time_limit', 'N/A')
+        tres_alloc = job_row.get('tres_alloc', 'N/A')
+        tres_alloc_dict = parse_tres_alloc(tres_alloc, stats=skip_counts)
+        rec["tres_alloc_dict"] = tres_alloc_dict
+        gres_used = job_row.get('gres_used', 'N/A')
 
         raw = job_row.get("nodelist", "")
         hosts = ast.literal_eval(raw)
         # Get allocated nodes "['r9189566-n911952','r9189567-n...']"
-        if cpu_only:
-            rec["scheduled_nodes"] = [cpu_node_to_idx[h] for h in hosts]
-        else:
-            rec["scheduled_nodes"] = [gpu_node_to_idx[h] for h in hosts]
+        try:
+            if cpu_only:
+                rec["scheduled_nodes"] = [cpu_node_to_idx[h] for h in hosts]
+            else:
+                rec["scheduled_nodes"] = [gpu_node_to_idx[h] for h in hosts]
+        except KeyError as e:
+            skip_counts['unrecognized_node_name'] += 1
+            if debug:
+                print(f"Skipping job {jid} due to unrecognized node name: {e}")
+            continue
+
 
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
 
-    print(f"GPU candidate files ({len(gpu_files)}):")
-    for p in gpu_files[:10]:
-        print("   ", p)
-
     for fp in tqdm(gpu_files, desc="Loading GPU traces"):
-        if debug:
-            print(f"\n[DEBUG] attempting {fp!r}")
-            print("        full path exists:", os.path.exists(fp), fp)
         if not os.path.exists(fp):
-            print("gpu path doesn't exist skipping") 
+            skip_counts['gpu_path_does_not_exist'] += 1
             continue
 
-        tqdm.write(f"Reading GPU {os.path.basename(fp)}")
         dfi = pd.read_csv(fp, dtype={0: str})
-        if debug:
-            print("        loaded dataframe, columns:", dfi.columns.tolist())
         if "gpu_index" not in dfi.columns:
-            tqdm.write("        → no gpu_index column!  SKIPPING")
+            skip_counts['no_gpu_index_column'] += 1
             continue
 
         jid = int(os.path.basename(fp).split("-", 1)[0])
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
         if cpu_df is None:
-            tqdm.write(f"Warning: no CPU trace for job {jid}, skipping GPU")
+            skip_counts['no_cpu_trace_for_gpu_job'] += 1
             continue
 
         gpu_cnt = rec.get("gpu_cnt", 0)
@@ -360,9 +373,6 @@ def load_data(local_dataset_path, **kwargs):
         else:
             data[jid]["gpu"] = pd.merge(prev_gpu, gpu_ser, on="utime")
         data[jid]["gpu_cnt"] = gpu_cnt
-
-        if debug:
-            print(f"[DEBUG] proc_gpu_series returned {len(gpu_ser)} rows (gpu_cnt={gpu_cnt})")
 
         if "gpu" in rec:
             rec["gpu"] = pd.merge(rec["gpu"], gpu_ser, on="utime", how="outer")
@@ -389,25 +399,10 @@ def load_data(local_dataset_path, **kwargs):
             nodes = rec.get("nodes_alloc")
             rec["gpu_trace"] = (avg_util * nodes).tolist()
 
-        if debug:
-            print(f"[DEBUG] data[{jid}].keys() now:", list(rec.keys()))
-
-    # quick check: did any jobs pick up a GPU trace?
-    print("→ data_dict contents sample:")
-    for jid, rec in list(data.items())[:5]:
-        print(f"   job {jid}: cpu={'yes' if 'cpu' in rec else 'no'}  gpu={'yes' if 'gpu' in rec else 'no'}")
-    print(f"→ total jobs seen = {len(data)}")
-
-    got = [jid for jid, rec in data.items() if "gpu" in rec]
-    miss = [jid for jid, rec in data.items() if "cpu" in rec and "gpu" not in rec]
-    print(f"→ of {len(data)} total jobs seen, {len(got)} got GPU data, {len(miss)} have only CPU")
-    if miss:
-        print("   jobs missing GPU despite being in gpu_files:", miss[:10])
-
     # merge slurm metadata
     for _, row in sl.iterrows():
         jid = row.id_job
-        if jid in data and jid not in data[jid]:
+        if jid in data and 'id_job' not in data[jid]:
             data[jid].update(row.to_dict())
 
     # build final job_dicts
@@ -418,12 +413,14 @@ def load_data(local_dataset_path, **kwargs):
     cpus_per_node = config.get('CPUS_PER_NODE')
     cores_per_cpu = config.get('CORES_PER_CPU')
     gpus_per_node = config.get('GPUS_PER_NODE')
-    print(f"*** cpus_per_node: {cpus_per_node}, cores_per_cpu: {cores_per_cpu}, gpus_per_node: {gpus_per_node}")
 
     quanta = config.get('TRACE_QUANTA')
 
     for jid, rec in data.items():
         nr = rec.get("nodes_alloc")
+        if nr is None:
+            skip_counts['final_missing_nodes_alloc'] += 1
+            continue
 
         cpu = rec.get("cpu")
         gpu = rec.get("gpu_trace")
@@ -434,40 +431,40 @@ def load_data(local_dataset_path, **kwargs):
 
         if cpu_only:
             if cpu is None:
-                print("cpu None: skipping this one (a)")
+                skip_counts['final_cpu_none_cpu_only'] += 1
                 continue
             cpu_tr = cpu.cpu_utilisation.tolist()
             gpu_tr = [0] # Ensure gpu_tr is a list for max() operation
             t0, t1 = cpu.utime.min(), cpu.utime.max()
         elif mixed:
             if cpu is None:
-                print("cpu None: skipping this one (b)")
+                skip_counts['final_cpu_none_mixed'] += 1
                 continue
             if gpu is None:
-                print("gpu None: skipping this one")
+                skip_counts['final_gpu_none_mixed'] += 1
                 continue
             cpu_tr = cpu.cpu_utilisation.tolist()
             gpu_tr = gpu
             t0, t1 = cpu.utime.min(), cpu.utime.max()
-        else:
-            print("skipping")
+        else: # not cpu_only or mixed
+            skip_counts['final_unhandled_partition'] += 1
             continue
 
         # Calculate cpu_cores_required and gpu_units_required from tres_alloc
+        if "tres_alloc_dict" not in rec:
+            skip_counts['final_missing_tres_alloc'] += 1
+            continue
+
         total_cpu = rec["tres_alloc_dict"].get('cpu', 0)
         # Can either allocate gpu:volta (1002) or gpu:tesla (1001) but not both
-        total_gpu = rec["tres_alloc_dict"].get('1002') or tres_alloc_dict.get(1001, 0)
+        total_gpu = rec["tres_alloc_dict"].get('1002') or rec["tres_alloc_dict"].get(1001, 0)
 
         cpu_cores_req = math.ceil(total_cpu / nr)
         gpu_units_req = math.ceil(total_gpu / nr)
 
-        print(f"*** nr: {nr}, cpu_cores_req: {cpu_cores_req}, gpu_units_req: {gpu_units_req}", flush=True)
-        print(jid, cpu_tr[:5], flush=True)
-
         # sometimes there are spurious large values for cpu util - set max limit based on peak
         cpu_peak = cpu_cores_req / cores_per_cpu / cpus_per_node
         cpu_tr = [min(x/cores_per_cpu/cpus_per_node, cpu_peak) for x in cpu_tr]
-        print(jid, cpu_tr[:5])
 
         submit_time = rec.get("time_submit", t0) - start_ts
 
@@ -494,24 +491,6 @@ def load_data(local_dataset_path, **kwargs):
             trace_start_time = 0,
             trace_end_time   = len(cpu_tr)*quanta
         )
-
-        view = job.copy()
-        #view['cpu_trace'] = view['cpu_trace'][:5] + ['…']
-        #view['gpu_trace'] = view['gpu_trace'][:5] + ['…']
-
-        summarize_trace = lambda x: {
-            'min': float(np.min(x)),
-            'max': float(np.max(x)),
-            'avg': float(np.mean(x)),
-            'len': len(x),
-        }
-        view['cpu_trace'] = summarize_trace(job['cpu_trace'])
-        view['gpu_trace'] = summarize_trace(job['gpu_trace'])
-        view['cpu_peak'] = job['cpu_cores_required'] / cores_per_cpu / cpus_per_node
-        print(view)
-
-        #validate_job_traces(Job(job), granularity=quanta)
-        # if nr > 1: # uncomment to test multinode jobs - need to run for 24 hours to get enough jobs to populate
         jobs_list.append(job)
 
     # Calculate min_overall_utime and max_overall_utime
@@ -523,5 +502,10 @@ def load_data(local_dataset_path, **kwargs):
         system='mit_supercloud',
         time=max_overall_utime
     )
+    
+    print("\nSkipped jobs summary:")
+    for reason, count in skip_counts.items():
+        print(f"- {reason}: {count}")
+
 
     return jobs_list, min_overall_utime, max_overall_utime, args_namespace
