@@ -40,6 +40,7 @@ from types import SimpleNamespace
 from typing import Dict, Union, Optional
 
 from raps.job import job_dict, Job
+from raps.utils import summarize_ranges
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 from .utils import validate_job_traces
@@ -118,6 +119,7 @@ def load_data(local_dataset_path, **kwargs):
        jobs_list, sim_start_time, sim_end_time
     """
     debug = kwargs.get("debug")
+    NL_PATH = os.path.dirname(__file__)
     # unpack
     if isinstance(local_dataset_path, list):
         if len(local_dataset_path) != 1:
@@ -145,20 +147,35 @@ def load_data(local_dataset_path, **kwargs):
     
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
+    print(f"[DEBUG] After time filtering: {len(sl)} jobs")
     hits = sl.loc[mask]
-    print("line numbers in slurm-log.csv", hits["__line__"].tolist())
+    print("line numbers in slurm-log.csv", summarize_ranges(hits["__line__"].tolist()))
 
     # --- prune out oversized jobs and known under‑used hosts ---
     # load list of underutilized nodes to ignore
     pruned = set()
-    if os.path.exists("prune_list.txt"):
-        with open(prune_path) as pf:
-            pruned = {l.strip() for l in pf if l.strip()}
+    with open(os.path.join(NL_PATH, "prune_list.txt")) as pf:
+        pruned = {l.strip() for l in pf if l.strip()}
+    print(pruned)
     # only keep jobs requesting ≤480 nodes
     sl = sl[ sl.nodes_alloc <= 480 ]
+    print(f"[DEBUG] After nodes_alloc ≤ 480 filter: {len(sl)} jobs")
     # drop any job whose nodelist includes a pruned node
     sl["nodes_list"] = sl["nodelist"].apply(ast.literal_eval)
-    sl = sl[ ~sl["nodes_list"].apply(lambda lst: any(n in pruned for n in lst)) ]
+
+    def is_pruned(lst):
+        matches = [n for n in lst if n in pruned]
+        if matches:
+            print(f"[DEBUG] Skipping job due to pruned nodes: {matches}")
+            return True
+        return False
+
+    before = len(sl)
+    sl = sl[~sl["nodes_list"].apply(is_pruned)]
+    after = len(sl)
+
+    print(f"[DEBUG] Jobs removed by pruning: {before - after}")
+    print(f"[DEBUG] After pruning: {len(sl)} jobs")
 
     # —— ERROR CATCH: no jobs in this window? ——
     if sl.empty:
@@ -183,7 +200,6 @@ def load_data(local_dataset_path, **kwargs):
     mixed    = (part=="part-gpu")
 
     # create nodelist mapping
-    NL_PATH = os.path.dirname(__file__)
     if cpu_only:
         with open(os.path.join(NL_PATH, "cpu_nodes.txt")) as f:
             cpu_nodes = [l.strip() for l in f if l.strip()]
@@ -281,7 +297,6 @@ def load_data(local_dataset_path, **kwargs):
 
         raw = job_row.get("nodelist", "")
         hosts = ast.literal_eval(raw)
-
         # Get allocated nodes "['r9189566-n911952','r9189567-n...']"
         if cpu_only:
             rec["scheduled_nodes"] = [cpu_node_to_idx[h] for h in hosts]
