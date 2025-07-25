@@ -254,8 +254,6 @@ class Engine:
 
         for job in self.running:
 
-            if self.debug:
-                print(f"JobID: {job.id}")
             if job.state == JobState.RUNNING:
                 job.running_time = self.current_time - job.start_time
 

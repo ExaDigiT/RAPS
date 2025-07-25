@@ -67,7 +67,7 @@ TRES_ID_MAP = {
     4: "gres/gpu",
     5: "billing",
 }
-
+GREEN, RESET = "\033[32m", "\033[0m"
 
 def parse_tres_alloc(tres_str: Union[str, None],
                      id_map: Optional[Dict[int, str]] = None,
@@ -170,11 +170,13 @@ def load_data(local_dataset_path, **kwargs):
     
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
-    print(f"[DEBUG] After time filtering: {len(sl)} jobs")
-    hits = sl.loc[mask]
-    lines = hits["__line__"].tolist()
-    print(f"data sourced from {len(lines)} records in slurm-log.csv. Line number ranges:", 
-          summarize_ranges(lines))
+
+    if debug:
+        print(f"[DEBUG] After time filtering: {len(sl)} jobs")
+        hits = sl.loc[mask]
+        lines = hits["__line__"].tolist()
+        print(f"data sourced from {len(lines)} records in slurm-log.csv. Line number ranges:", 
+              summarize_ranges(lines))
 
     # --- prune out oversized jobs and known under‑used hosts ---
     # load list of underutilized nodes to ignore
@@ -194,7 +196,8 @@ def load_data(local_dataset_path, **kwargs):
     def is_pruned(lst):
         matches = [n for n in lst if n in pruned]
         if matches:
-            #print(f"[DEBUG] Skipping job due to pruned nodes: {matches}")
+            if debug:
+                print(f"[DEBUG] Skipping job due to pruned nodes: {matches}")
             return True
         return False
 
@@ -203,8 +206,8 @@ def load_data(local_dataset_path, **kwargs):
     after_prune_filter = len(sl)
     skip_counts['pruned_nodes'] += (before_prune_filter - after_prune_filter)
 
-
-    print(f"[DEBUG] After pruning: {len(sl)} jobs")
+    if debug:
+        print(f"[DEBUG] After pruning: {len(sl)} jobs")
 
     # —— ERROR CATCH: no jobs in this window? ——
     if sl.empty:
@@ -247,7 +250,7 @@ def load_data(local_dataset_path, **kwargs):
     else:
         job_ids = set(sl.id_job)
 
-    print(f"→ mode={part}, jobs: {len(job_ids)}")
+    print(f"{GREEN}→ mode={part}, jobs: {len(job_ids)}{RESET}")
 
     # find trace files by walking directories
     cpu_files = []
@@ -317,7 +320,21 @@ def load_data(local_dataset_path, **kwargs):
         job_info = sl[sl.id_job == jid]
         if job_info.empty:
             skip_counts['job_not_in_slurm_log'] += 1
+            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
             continue
+        else:
+            job_row = job_info.iloc[0]
+            start_time = job_row.get('time_start', 'N/A')
+            wall_time = job_row.get('time_limit', 'N/A')
+            tres_alloc = job_row.get('tres_alloc', 'N/A')
+            tres_alloc_dict = parse_tres_alloc(tres_alloc)
+            rec["tres_alloc_dict"] = tres_alloc_dict
+            gres_used = job_row.get('gres_used', 'N/A')
+
+            if debug:
+                tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
+                tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
+                tqdm.write(f"  TRES Alloc: {tres_alloc_dict}")
 
         job_row = job_info.iloc[0]
         start_time = job_row.get('time_start', 'N/A')
@@ -345,13 +362,22 @@ def load_data(local_dataset_path, **kwargs):
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
 
+    if debug:
+        print(f"GPU candidate files ({len(gpu_files)}):")
+        for p in gpu_files[:10]:
+            print("   ", p)
+
     for fp in tqdm(gpu_files, desc="Loading GPU traces"):
+
         if not os.path.exists(fp):
+            if debug: print(f"[WARNING] gpu path {fp!r} doesn't exist skipping")
             skip_counts['gpu_path_does_not_exist'] += 1
             continue
 
+        if debug: tqdm.write(f"Reading GPU {os.path.basename(fp)}")
         dfi = pd.read_csv(fp, dtype={0: str})
         if "gpu_index" not in dfi.columns:
+            if debug: tqdm.write("[WARNING] → no gpu_index column!  SKIPPING")
             skip_counts['no_gpu_index_column'] += 1
             continue
 
@@ -359,6 +385,7 @@ def load_data(local_dataset_path, **kwargs):
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
         if cpu_df is None:
+            if debug: tqdm.write("[WARNING] → no cpu trace for gpu!  SKIPPING")
             skip_counts['no_cpu_trace_for_gpu_job'] += 1
             continue
 
@@ -373,6 +400,9 @@ def load_data(local_dataset_path, **kwargs):
         else:
             data[jid]["gpu"] = pd.merge(prev_gpu, gpu_ser, on="utime")
         data[jid]["gpu_cnt"] = gpu_cnt
+
+        if debug:
+            print(f"[DEBUG] proc_gpu_series returned {len(gpu_ser)} rows (gpu_cnt={gpu_cnt})")
 
         if "gpu" in rec:
             rec["gpu"] = pd.merge(rec["gpu"], gpu_ser, on="utime", how="outer")
@@ -400,10 +430,13 @@ def load_data(local_dataset_path, **kwargs):
             rec["gpu_trace"] = (avg_util * nodes).tolist()
 
     # merge slurm metadata
-    for _, row in sl.iterrows():
+    for _, row in tqdm(sl.iterrows(),
+                        total=len(sl),
+                        desc="Merging slurm metadata"):
         jid = row.id_job
         if jid in data and 'id_job' not in data[jid]:
             data[jid].update(row.to_dict())
+
 
     # build final job_dicts
     jobs_list = []
@@ -416,7 +449,7 @@ def load_data(local_dataset_path, **kwargs):
 
     quanta = config.get('TRACE_QUANTA')
 
-    for jid, rec in data.items():
+    for jid, rec in tqdm(data.items(), total=len(data), desc="Building job objects", unit="job"):
         nr = rec.get("nodes_alloc")
         if nr is None:
             skip_counts['final_missing_nodes_alloc'] += 1
