@@ -3,8 +3,22 @@
 """
 MIT Supercloud data loader
 
-This module processes job traces from the MIT SuperCloud dataset with careful
-node filtering based on observed resource allocation history.
+This module extracts and processes job traces from the MIT SuperCloud dataset,
+starting with slurm-log.csv file, and then searching for the files in the cpu
+and gpu directories. The main paper associated with the MIT Supercloud Dataset
+is available here: https://arxiv.org/abs/2108.02037.
+There is more information available here: https://dcc.mit.edu/
+
+Note, that quite a bit of filtering is done with sanity checks to make sure 
+the the CPU traces match the GPU traces, etc. At this point it's not uncommon
+if there may be 1569 total jobs in the time range, only 834 cpu jobs and 128 
+gpu jobs (962 total) are able to be replayed. This is an issue which will likely
+have to be improved in the future.
+
+---------------------------------------------------------------------------
+How we curated and generated the node ids: cpu_nodes.txt and gpu_nodes.txt
+
+Node filtering based on observed resource allocation history.
 
 Summary of node filtering:
 
@@ -149,7 +163,9 @@ def load_data(local_dataset_path, **kwargs):
     sl = sl[mask]
     print(f"[DEBUG] After time filtering: {len(sl)} jobs")
     hits = sl.loc[mask]
-    print("line numbers in slurm-log.csv", summarize_ranges(hits["__line__"].tolist()))
+    lines = hits["__line__"].tolist()
+    print(f"data sourced from {len(lines)} records in slurm-log.csv. Line number ranges:", 
+          summarize_ranges(lines))
 
     # --- prune out oversized jobs and known under‑used hosts ---
     # load list of underutilized nodes to ignore
