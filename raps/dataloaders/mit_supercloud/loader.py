@@ -16,6 +16,71 @@ gpu jobs (962 total) are able to be replayed. This is an issue which will likely
 have to be improved in the future.
 
 ---------------------------------------------------------------------------
+Understanding some of the errors. We track the different reasons that 
+less than the total number of jobs in the slurm log actually run in the 
+simulator. This is not so much an issue for the CPU partition, but for
+the GPU partition, where we have to combine traces extracted from both 
+CPU trace files and GPU trace files.
+
+At the beginning of the GPU partition analysis, we give an analysis such as:
+
+    --- Detailed Job Accounting for Partition 'part-gpu' ---
+    Initial jobs considered: 519
+       * Jobs with NO trace file found: 69 (519 - 450)
+
+    Of the 450 jobs with traces:
+       * 289 jobs have only CPU traces (417 - 128)
+       * 33 jobs have only GPU traces (161 - 128)
+       * 128 jobs have BOTH CPU and GPU traces.
+    ----------------------------------------------------
+
+We give a summary report at the end of the data loading process. An 
+example report is shown for the range `--start 2021-05-21T00:00 --end 2021-05-22T00:00`
+
+    Skipped jobs summary:
+    - nodes_alloc > 480: 0
+    - pruned_nodes: 1
+    - no_trace_file: 69
+    - no_cpu_trace_for_gpu_job: 41
+    - final_gpu_none_mixed: 289
+    - final_cpu_none_mixed: 33
+
+    [INFO] Partition 'mit_supercloud/part-cpu': 834 jobs loaded
+    [INFO] Partition 'mit_supercloud/part-gpu': 128 jobs loaded
+
+We explain each of these stats here. 
+
+    - `nodes_alloc > 480`: the number of jobs that are thrown out because 
+       they request more than 480 nodes.
+
+    - `pruned_nodes`: the number of jobs thrown out because the node was 
+       listed in `prune_list.txt`.
+
+    - `no_trace_file`: the number of jobs that were found in the Slurm log 
+       for the correct time window and partition, but for which not a single 
+       corresponding trace file (neither CPU nor GPU) could be found on the filesystem.
+
+    - `no_cpu_trace_for_gpu_job`: The number of jobs that had a GPU trace file 
+       but were discarded because they were missing their required corresponding 
+       CPU trace file.
+
+    - `final_gpu_none_mixed`: The number of jobs in a GPU partition run that had 
+      a CPU trace but were missing the final, processed GPU trace data.
+
+    - `final_cpu_none_mixed`: The number of jobs in a GPU partition run that were 
+      missing the essential CPU trace data during the final job construction phase.
+
+Now, we work on debugging some of these. For example, for `no_cpu_trace_for_gpu_job`, 
+we can take the jid from the warning message:
+
+    [WARNING] → no cpu trace for gpu! (jid=4074251073298) SKIPPING
+
+And then check the data directory to see if it can find trace files for both the cpu
+and gpu:
+
+    > find ~/data/mit/202201 -name '4074251073298*'
+
+---------------------------------------------------------------------------
 How we curated and generated the node ids: cpu_nodes.txt and gpu_nodes.txt
 
 Node filtering based on observed resource allocation history.
@@ -250,10 +315,10 @@ def load_data(local_dataset_path, **kwargs):
 
     if cpu_only:
         job_ids = set(sl.id_job) - gpu_jobs
-        skip_counts['gpu_job_in_cpu_mode'] += len(set(sl.id_job) & gpu_jobs)
+        #skip_counts['gpu_job_in_cpu_mode'] += len(set(sl.id_job) & gpu_jobs)
     elif mixed:
         job_ids = gpu_jobs & set(sl.id_job)
-        skip_counts['cpu_job_in_gpu_mode'] += len(set(sl.id_job) - gpu_jobs)
+        #skip_counts['cpu_job_in_gpu_mode'] += len(set(sl.id_job) - gpu_jobs)
     else:
         job_ids = set(sl.id_job)
 
@@ -368,11 +433,16 @@ def load_data(local_dataset_path, **kwargs):
 
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
+        #print(f'{RED}{rec["cpu"]}{RESET}')
 
     if debug:
         print(f"GPU candidate files ({len(gpu_files)}):")
         for p in gpu_files[:10]:
             print("   ", p)
+
+    # data from the cpu processes are all stored under the `data` dictionary 
+    # according to their respective jid key
+    #print("******", data.keys())
 
     for fp in tqdm(gpu_files, desc="Loading GPU traces"):
 
@@ -391,8 +461,9 @@ def load_data(local_dataset_path, **kwargs):
         jid = int(os.path.basename(fp).split("-", 1)[0])
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
+        #print(f"{YELLOW}jid={jid} {cpu_df}{RESET}")
         if cpu_df is None:
-            if debug: tqdm.write(f"{YELLOW}[WARNING] → no cpu trace for gpu!  SKIPPING{RESET}")
+            if debug: tqdm.write(f"{YELLOW}[WARNING] → no cpu trace for gpu! (jid={jid}) SKIPPING{RESET}")
             skip_counts['no_cpu_trace_for_gpu_job'] += 1
             continue
 
