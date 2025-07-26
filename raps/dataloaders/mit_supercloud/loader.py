@@ -95,13 +95,17 @@ def parse_tres_alloc(tres_str: Union[str, None],
         Parsed key/value pairs. Example:
         {'cpu': 20, 'mem': 170000, 'gres/gpu': 1, 'billing': 20}
     """
-    if not tres_str:
+    if pd.isna(tres_str):
         return {}
+    tres_str = str(tres_str)
 
     id_map = id_map or TRES_ID_MAP
 
     # strip quotes or whitespace
     tres_str = tres_str.strip().strip('"').strip("'")
+
+    if not tres_str:
+        return {}
 
     # Split on commas, but be tolerant of spaces
     parts = [p for p in tres_str.split(",") if p]
@@ -166,7 +170,6 @@ def load_data(local_dataset_path, **kwargs):
     # date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
     end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
-    #duration = end_ts - start_ts
     
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
@@ -185,7 +188,7 @@ def load_data(local_dataset_path, **kwargs):
         pruned = {l.strip() for l in pf if l.strip()}
     
     before_prune = len(sl)
-    # only keep jobs requesting ≤480 nodes
+    # only keep jobs requesting <= 480 nodes
     sl = sl[ sl.nodes_alloc <= 480 ]
     after_alloc_filter = len(sl)
     skip_counts['nodes_alloc > 480'] += (before_prune - after_alloc_filter)
@@ -281,31 +284,35 @@ def load_data(local_dataset_path, **kwargs):
                 except (ValueError, IndexError):
                     continue
 
-    # select final trace list
-    if cpu_only:
-        traces = cpu_files
-    elif mixed:
-        traces = list(set(cpu_files + gpu_files))
+    cpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in cpu_files}
+    gpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in gpu_files}
+    all_trace_ids = cpu_ids | gpu_ids
 
-        ### check overlap
-        cpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in cpu_files}
-        gpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in gpu_files}
+    print(f"→ {len(cpu_files)} CPU files, {len(gpu_files)} GPU files → {len(all_trace_ids)} jobs with traces")
 
-        if debug:
-            print(f"[DEBUG] CPU IDs: {len(cpu_ids)}  GPU IDs: {len(gpu_ids)}  OVERLAP: {len(cpu_ids & gpu_ids)}")
-            if cpu_ids & gpu_ids:
-                print("   example overlap:", list(cpu_ids & gpu_ids)[:5])
-            else:
-                print("   → **No overlap**!  That means none of your GPU job IDs ever had a CPU file in `cpu_files`.")
+    if mixed:
+        # Perform a full accounting of all jobs considered for the partition.
+        jobs_with_no_traces = len(job_ids - all_trace_ids)
+        jobs_with_traces = len(all_trace_ids)
 
-    else:
-        traces = list(set(cpu_files + gpu_files))
+        print(f"\n--- Detailed Job Accounting for Partition '{part}' ---")
+        print(f"Initial jobs considered: {len(job_ids)}")
+        print(f"   * Jobs with NO trace file found: {jobs_with_no_traces} ({len(job_ids)} - {jobs_with_traces})\n")
 
-    print(f"→ {len(cpu_files)} CPU files, {len(gpu_files)} GPU files → total {len(traces)}")
+        if jobs_with_traces > 0:
+            overlap_count = len(cpu_ids & gpu_ids)
+            cpu_only_count = len(cpu_ids) - overlap_count
+            gpu_only_count = len(gpu_ids) - overlap_count
+            print(f"Of the {jobs_with_traces} jobs with traces:")
+            print(f"   * {cpu_only_count} jobs have only CPU traces ({len(cpu_ids)} - {overlap_count})")
+            print(f"   * {gpu_only_count} jobs have only GPU traces ({len(gpu_ids)} - {overlap_count})")
+            print(f"   * {overlap_count} jobs have BOTH CPU and GPU traces.")
+        print("----------------------------------------------------\n")
+
 
     data = {}
     
-    traced_jobs = {int(os.path.basename(p).split('-',1)[0]) for p in traces}
+    traced_jobs = all_trace_ids
     untraced_jobs = job_ids - traced_jobs
     skip_counts['no_trace_file'] += len(untraced_jobs)
 
@@ -320,10 +327,12 @@ def load_data(local_dataset_path, **kwargs):
         job_info = sl[sl.id_job == jid]
         if job_info.empty:
             skip_counts['job_not_in_slurm_log'] += 1
-            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
+            if debug:
+                tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
             continue
-        else:
-            job_row = job_info.iloc[0]
+        
+        job_row = job_info.iloc[0]
+        if debug:
             start_time = job_row.get('time_start', 'N/A')
             wall_time = job_row.get('time_limit', 'N/A')
             tres_alloc = job_row.get('tres_alloc', 'N/A')
@@ -331,18 +340,13 @@ def load_data(local_dataset_path, **kwargs):
             rec["tres_alloc_dict"] = tres_alloc_dict
             gres_used = job_row.get('gres_used', 'N/A')
 
-            if debug:
-                tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
-                tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
-                tqdm.write(f"  TRES Alloc: {tres_alloc_dict}")
+            tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
+            tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
+            tqdm.write(f"  TRES Alloc: {tres_alloc_dict}")
 
-        job_row = job_info.iloc[0]
-        start_time = job_row.get('time_start', 'N/A')
-        wall_time = job_row.get('time_limit', 'N/A')
         tres_alloc = job_row.get('tres_alloc', 'N/A')
         tres_alloc_dict = parse_tres_alloc(tres_alloc, stats=skip_counts)
         rec["tres_alloc_dict"] = tres_alloc_dict
-        gres_used = job_row.get('gres_used', 'N/A')
 
         raw = job_row.get("nodelist", "")
         hosts = ast.literal_eval(raw)
@@ -412,7 +416,7 @@ def load_data(local_dataset_path, **kwargs):
 
         gpu_df = rec["gpu"]
 
-        # grab all the gpu‐util columns
+        # grab all the gpu-util columns
         util_cols = [c for c in gpu_df.columns if c.startswith("gpu_util_")]
 
         if not util_cols:

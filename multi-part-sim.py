@@ -58,7 +58,7 @@ if args.replay:
         for ad in args_dicts:
             part = ad['partition']
             td = Telemetry(**ad)
-            print(f"[{part}] loading traces from {args.replay[0]} …")
+            print(f"\n[{part}] loading traces from {args.replay[0]} …")
             jobs_part, t0, t1, args_from_file = td.load_data(args.replay)
             jobs_by_partition[part] = jobs_part
             td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
