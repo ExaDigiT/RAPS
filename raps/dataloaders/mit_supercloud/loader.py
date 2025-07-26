@@ -430,13 +430,10 @@ def load_data(local_dataset_path, **kwargs):
             rec["gpu_trace"] = (avg_util * nodes).tolist()
 
     # merge slurm metadata
-    for _, row in tqdm(sl.iterrows(),
-                        total=len(sl),
-                        desc="Merging slurm metadata"):
+    for _, row in sl.iterrows():
         jid = row.id_job
         if jid in data and 'id_job' not in data[jid]:
             data[jid].update(row.to_dict())
-
 
     # build final job_dicts
     jobs_list = []
@@ -449,7 +446,7 @@ def load_data(local_dataset_path, **kwargs):
 
     quanta = config.get('TRACE_QUANTA')
 
-    for jid, rec in tqdm(data.items(), total=len(data), desc="Building job objects", unit="job"):
+    for jid, rec in data.items():
         nr = rec.get("nodes_alloc")
         if nr is None:
             skip_counts['final_missing_nodes_alloc'] += 1
@@ -539,6 +536,5 @@ def load_data(local_dataset_path, **kwargs):
     print("\nSkipped jobs summary:")
     for reason, count in skip_counts.items():
         print(f"- {reason}: {count}")
-
 
     return jobs_list, min_overall_utime, max_overall_utime, args_namespace

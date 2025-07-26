@@ -62,7 +62,7 @@ if args.replay:
             jobs_part, t0, t1, args_from_file = td.load_data(args.replay)
             jobs_by_partition[part] = jobs_part
             td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
-
+            
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():
         print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
@@ -138,11 +138,13 @@ for timestep in range(timesteps):
         for name, lm in layout_managers.items():
             sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else (0, 0.0)
             allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
-            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} - Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - Power: {lm.engine.sys_power:.1f}kW")
+            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} -", 
+                  f"Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - ",
+                  f"Power: {lm.engine.sys_power:.1f}kW", flush=True)
             sys_power += lm.engine.sys_power
-        print(f"system power: {sys_power:.1f}kW")
+        print(f"system power: {sys_power:.1f}kW", flush=True)
 
-print("Simulation complete.")
+print("Simulation complete.", flush=True)
 
 # Print statistics for each partition
 for name, lm in layout_managers.items():
