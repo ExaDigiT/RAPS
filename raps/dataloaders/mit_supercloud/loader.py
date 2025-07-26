@@ -67,7 +67,11 @@ TRES_ID_MAP = {
     4: "gres/gpu",
     5: "billing",
 }
-GREEN, RESET = "\033[32m", "\033[0m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RED    = "\033[31m"
+RESET  = "\033[0m"
+
 
 def parse_tres_alloc(tres_str: Union[str, None],
                      id_map: Optional[Dict[int, str]] = None,
@@ -362,7 +366,6 @@ def load_data(local_dataset_path, **kwargs):
                 print(f"Skipping job {jid} due to unrecognized node name: {e}")
             continue
 
-
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
 
@@ -374,7 +377,7 @@ def load_data(local_dataset_path, **kwargs):
     for fp in tqdm(gpu_files, desc="Loading GPU traces"):
 
         if not os.path.exists(fp):
-            if debug: print(f"[WARNING] gpu path {fp!r} doesn't exist skipping")
+            if debug: print(f"{YELLOW}[WARNING] gpu path {fp!r} doesn't exist skipping{RESET}")
             skip_counts['gpu_path_does_not_exist'] += 1
             continue
 
@@ -389,7 +392,7 @@ def load_data(local_dataset_path, **kwargs):
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
         if cpu_df is None:
-            if debug: tqdm.write("[WARNING] → no cpu trace for gpu!  SKIPPING")
+            if debug: tqdm.write(f"{YELLOW}[WARNING] → no cpu trace for gpu!  SKIPPING{RESET}")
             skip_counts['no_cpu_trace_for_gpu_job'] += 1
             continue
 
