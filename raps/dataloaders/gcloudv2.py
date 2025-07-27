@@ -15,33 +15,78 @@ https://drive.google.com/file/d/0B5g07T_gRDg9Z0lsSTEtTWtpOW8/view?resourcekey=0-
 
 
 ---
-Following explanation from Gemini-CLI on how the job nodes required is being determined. Such method must be verified
+Downloading Google Cluster Traces v2:
+
+    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-471.0.0-darwin-arm.tar.gz
+    tar -xf google-cloud-cli-471.0.0-darwin-arm.tar.gz
+    gcloud components update
+
+    gcloud auth login
+
+    gsutil ls gs://clusterdata_2019_a/
+
+    * collection_events
+    * instance_events
+    * instance_usage
+    * machine_attributes
+    * machine_events
+
+    gsutil -m cp -r gs://clusterdata_2019_a/instance_usage-*.parquet.gz ./google_cluster_data/cell_a/instance_usage
+
+    # Create a directory to store your sample data
+    mkdir -p ./google_cluster_data_sample
+
+    # Download the first JSON and Parquet file for collection_events
+    gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # Download the first JSON and Parquet file for instance_events 
+    gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # Download the first JSON and Parquet file for instance_usage
+    gsutil cp gs://clusterdata_2019_a/instance_usage-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/instance_usage-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # ... and so on for other event types (machine_attributes, machine_events)
+    gsutil cp gs://clusterdata_2019_a/machine_attributes-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/machine_attributes-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    gsutil cp gs://clusterdata_2019_a/machine_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/machine_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+---
+Following explanation from Gemini-CLI on how the job nodes required is being computed. Method must be verified
 
    1. Machine Capacity Determination:
        * The machine_events data is loaded to get information about the cluster's machines.
-       * The CPU_capacity and memory_capacity of a typical machine are determined by taking the mode() (most frequent value) of these columns
-         from the machine_df. This gives us the standard CPU and memory capacity of a single node in the cluster.
+       * The CPU_capacity and memory_capacity of a typical machine are determined by taking 
+         the mode() (most frequent value) of these columns from the machine_df. This gives 
+         us the standard CPU and memory capacity of a single node in the cluster.
 
    2. Task Resource Request Aggregation:
-       * The task_events data is loaded, which contains CPU_request and memory_request for individual tasks.
-       * These task requests are then grouped by job_ID, and the CPU_request and memory_request are summed up for all tasks belonging to the
-         same job. This gives us the total CPU and memory requested by each job.
+       * The task_events data is loaded, which contains CPU_request and memory_request for 
+         individual tasks.
+       * These task requests are then grouped by job_ID, and the CPU_request and memory_request 
+         are summed up for all tasks belonging to the same job. This gives us the total CPU and 
+         memory requested by each job.
 
    3. Nodes Required Calculation (CPU and Memory):
-       * For each job, the total CPU_request is divided by the cpu_capacity of a single machine. The np.ceil() function is used to round up to
-         the nearest whole number, ensuring that enough nodes are allocated to satisfy the CPU demand. This result is stored as
+       * For each job, the total CPU_request is divided by the cpu_capacity of a single machine. 
+         The np.ceil() function is used to round up to the nearest whole number, ensuring that 
+         enough nodes are allocated to satisfy the CPU demand. This result is stored as
          nodes_required_cpu.
-       * Similarly, the total memory_request is divided by the mem_capacity of a single machine, and np.ceil() is applied. This result is
-         stored as nodes_required_mem.
+       * Similarly, the total memory_request is divided by the mem_capacity of a single machine, 
+         and np.ceil() is applied. This result is stored as nodes_required_mem.
 
    4. Final `nodes_required`:
-       * The final nodes_required for a job is determined by taking the np.maximum() of nodes_required_cpu and nodes_required_mem. This ensures
-          that the job is allocated enough nodes to satisfy both its CPU and memory requirements. The result is then cast to an integer
-         (.astype(int)).
+       * The final nodes_required for a job is determined by taking the np.maximum() of nodes_required_cpu 
+         and nodes_required_mem. This ensures that the job is allocated enough nodes to satisfy both its CPU 
+         and memory requirements. The result is then cast to an integer (.astype(int)).
 
    5. Filtering:
-       * Finally, any jobs for which the calculated nodes_required is 0 (meaning they requested no CPU or memory) are filtered out, as these
-         jobs would not require any nodes in the simulation.
+       * Finally, any jobs for which the calculated nodes_required is 0 (meaning they requested no CPU or memory) 
+         are filtered out, as these jobs would not require any nodes in the simulation.
 """
 
 # Define expected column names for each supported event type
