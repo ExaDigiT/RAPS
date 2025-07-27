@@ -113,7 +113,8 @@ class LayoutManager:
         if show_slowdown:
             columns.append("SLOW DOWN")
         else:
-            columns.append("NODE SEGMENTS")
+            #columns.append("NODE SEGMENTS")
+            columns.append("NODES")
 
         if show_nodes:
             columns.append("NODELIST")
@@ -145,6 +146,7 @@ class LayoutManager:
                         nodes_display = ", ".join(node_segments)
                     col_slow = nodes_display  # reused variable name for simplicity
                 else:
+                    #col_slow = str(len(node_segments))
                     col_slow = str(len(node_segments))
 
             # If show_nodes is True, we need to append NODELIST as well
@@ -163,7 +165,7 @@ class LayoutManager:
                 str(job.name),
                 str(job.account),
                 job.state.value,
-                #n_nodes,
+                n_nodes,
                 #col_slow,
             ]
 

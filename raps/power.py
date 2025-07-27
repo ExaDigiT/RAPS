@@ -268,7 +268,7 @@ class PowerManager:
         gpu_util = np.asarray(gpu_util)
         net_util = np.asarray(net_util)
         job_lengths = np.array([len(job) for job in scheduled_nodes])
-        flattened_nodes = np.concatenate(scheduled_nodes, axis=0)
+        flattened_nodes = np.concatenate(scheduled_nodes, axis=0).astype(np.int64)
 
         cpu_util_flat = np.repeat(cpu_util, job_lengths)
         gpu_util_flat = np.repeat(gpu_util, job_lengths)
