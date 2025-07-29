@@ -12,6 +12,7 @@
     "MISSING_RACKS": [],
     "DOWN_NODES": [],
     "CPUS_PER_NODE": 2,
+    "CORES_PER_CPU": 20,
     "GPUS_PER_NODE": 2,
     "CPU_PEAK_FLOPS": 1.248E12,
     "GPU_PEAK_FLOPS": 7.8E12,

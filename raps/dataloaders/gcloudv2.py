@@ -12,6 +12,81 @@ from raps.job import job_dict  # ensure RAPS is in PYTHONPATH
 Official instructions are here:
 
 https://drive.google.com/file/d/0B5g07T_gRDg9Z0lsSTEtTWtpOW8/view?resourcekey=0-cozD56gA4fUDdrkHnLJSrQ
+
+
+---
+Downloading Google Cluster Traces v2:
+
+    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-471.0.0-darwin-arm.tar.gz
+    tar -xf google-cloud-cli-471.0.0-darwin-arm.tar.gz
+    gcloud components update
+
+    gcloud auth login
+
+    gsutil ls gs://clusterdata_2019_a/
+
+    * collection_events
+    * instance_events
+    * instance_usage
+    * machine_attributes
+    * machine_events
+
+    gsutil -m cp -r gs://clusterdata_2019_a/instance_usage-*.parquet.gz ./google_cluster_data/cell_a/instance_usage
+
+    # Create a directory to store your sample data
+    mkdir -p ./google_cluster_data_sample
+
+    # Download the first JSON and Parquet file for collection_events
+    gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # Download the first JSON and Parquet file for instance_events 
+    gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # Download the first JSON and Parquet file for instance_usage
+    gsutil cp gs://clusterdata_2019_a/instance_usage-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/instance_usage-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    # ... and so on for other event types (machine_attributes, machine_events)
+    gsutil cp gs://clusterdata_2019_a/machine_attributes-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/machine_attributes-000000000000.parquet.gz ./google_cluster_data_sample/
+
+    gsutil cp gs://clusterdata_2019_a/machine_events-000000000000.json.gz ./google_cluster_data_sample/
+    gsutil cp gs://clusterdata_2019_a/machine_events-000000000000.parquet.gz ./google_cluster_data_sample/
+
+---
+Following explanation from Gemini-CLI on how the job nodes required is being computed. Method must be verified
+
+   1. Machine Capacity Determination:
+       * The machine_events data is loaded to get information about the cluster's machines.
+       * The CPU_capacity and memory_capacity of a typical machine are determined by taking 
+         the mode() (most frequent value) of these columns from the machine_df. This gives 
+         us the standard CPU and memory capacity of a single node in the cluster.
+
+   2. Task Resource Request Aggregation:
+       * The task_events data is loaded, which contains CPU_request and memory_request for 
+         individual tasks.
+       * These task requests are then grouped by job_ID, and the CPU_request and memory_request 
+         are summed up for all tasks belonging to the same job. This gives us the total CPU and 
+         memory requested by each job.
+
+   3. Nodes Required Calculation (CPU and Memory):
+       * For each job, the total CPU_request is divided by the cpu_capacity of a single machine. 
+         The np.ceil() function is used to round up to the nearest whole number, ensuring that 
+         enough nodes are allocated to satisfy the CPU demand. This result is stored as
+         nodes_required_cpu.
+       * Similarly, the total memory_request is divided by the mem_capacity of a single machine, 
+         and np.ceil() is applied. This result is stored as nodes_required_mem.
+
+   4. Final `nodes_required`:
+       * The final nodes_required for a job is determined by taking the np.maximum() of nodes_required_cpu 
+         and nodes_required_mem. This ensures that the job is allocated enough nodes to satisfy both its CPU 
+         and memory requirements. The result is then cast to an integer (.astype(int)).
+
+   5. Filtering:
+       * Finally, any jobs for which the calculated nodes_required is 0 (meaning they requested no CPU or memory) 
+         are filtered out, as these jobs would not require any nodes in the simulation.
 """
 
 # Define expected column names for each supported event type
@@ -131,6 +206,45 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             raise ValueError(f"Expected single path, got {data_path}")
     base_path = os.path.expanduser(data_path)
 
+    # Load machine events to determine typical machine capacities
+    machine_loader = GoogleClusterV2DataLoader(base_path, event_type="machine_events", concatenate=True)
+    machine_df = next(iter(machine_loader))
+    # Get machine capacity (using the mode for robustness)
+    # This represents the normalized CPU and memory capacity of a single node.
+    cpu_capacity = machine_df['CPU_capacity'].mode()[0]
+    mem_capacity = machine_df['memory_capacity'].mode()[0]
+
+    # Load task events to get individual task resource requests
+    task_loader = GoogleClusterV2DataLoader(base_path, event_type="task_events", concatenate=True)
+    task_df = next(iter(task_loader))
+    # Filter to only submitted tasks (event_type=0)
+    task_df = task_df[task_df['event_type'] == 0]
+
+    # Calculate total resource requests per job by summing up all task requests for each job
+    job_resources = task_df.groupby('job_ID').agg({
+        'CPU_request': 'sum',
+        'memory_request': 'sum'
+    }).reset_index()
+
+    # Calculate nodes required for each job based on CPU and memory requests
+    # Using ceiling division to ensure enough nodes are allocated to meet the demand
+    job_resources['nodes_required_cpu'] = np.ceil(job_resources['CPU_request'] / cpu_capacity)
+    job_resources['nodes_required_mem'] = np.ceil(job_resources['memory_request'] / mem_capacity)
+    # The final nodes_required is the maximum of CPU-driven and memory-driven node requirements
+    job_resources['nodes_required'] = np.maximum(job_resources['nodes_required_cpu'], job_resources['nodes_required_mem']).astype(int)
+
+    # Create a dictionary for quick lookup of nodes_required by job_ID
+    nodes_required_map = job_resources.set_index('job_ID')['nodes_required'].to_dict()
+
+    # Filter out jobs with 0 nodes required (i.e., no resource requests)
+    num_jobs_before_filter = len(job_resources)
+    job_resources = job_resources[job_resources['nodes_required'] > 0]
+    num_jobs_after_filter = len(job_resources)
+    print(f"Filtered out {num_jobs_before_filter - num_jobs_after_filter} jobs with 0 resource requests.")
+
+    print("Job resource requirements (after filtering):")
+    print(job_resources.head())
+
     # Load submit events
     loader = GoogleClusterV2DataLoader(base_path, event_type="job_events", concatenate=True)
     df = next(iter(loader))
@@ -161,8 +275,10 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
     usage_df["CPU_usage_avg"] = usage_df["CPU_usage_avg"].astype(float)
     usage_map = usage_df.groupby("job_ID")["CPU_usage_avg"].apply(lambda s: s.to_numpy()).to_dict()
 
-    # Filter to jobs with usage data
-    df = df[df["job_ID"].isin(usage_map)]
+    #print(usage_map)
+
+    # Filter to jobs with usage data AND valid resource requests
+    df = df[df["job_ID"].isin(usage_map) & df["job_ID"].isin(job_resources['job_ID'])]
 
     jobs: List[Any] = []
     jid_f = kwargs.get('jid','*')
@@ -173,12 +289,15 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
         end   = usage_map_end  [jid] - t0
         wall  = end - start
 
+        #nodes_required = int(nodes_required_map.get(jid, 1)) # Default to 1 if not found
+        nodes_required = int(nodes_required_map.get(jid))
+
         if jid_f!='*' and str(jid)!=str(jid_f): continue
         trace = usage_map[jid]
         # ensure gpu_trace is same length
         gpu_trace = np.zeros_like(trace)
-        jobs.append(job_dict(
-            nodes_required=1,
+        job = job_dict(
+            nodes_required=nodes_required,
             name=f"job_{jid}",
             account=f"user_{row.get('user_name','unknown')}",
             cpu_trace=trace,
@@ -192,7 +311,9 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             start_time=start, end_time=end,
             wall_time=wall, trace_time=row["timestamp"],
             trace_start_time=start, trace_end_time=end
-        ))
+        )
+        #if nodes_required > 0:
+        jobs.append(job)
 
     # Compute simulation span: start at t=0, end at the latest job finish
     simulation_start = 0

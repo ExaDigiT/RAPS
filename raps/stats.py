@@ -39,6 +39,46 @@ def get_engine_stats(engine: Engine):
         'total cost': f'${total_cost:.2f}'
     }
 
+    if self.config['multitenant']:
+        # Multitenancy Stats
+        total_jobs_loaded = self.total_initial_jobs # Assuming this is passed to __init__
+        stats['total jobs loaded'] = total_jobs_loaded
+        stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
+
+    if self.node_occupancy_history:
+        # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
+        total_jobs_running_timesteps = 0
+        max_concurrent_jobs_per_node = 0
+        sum_jobs_per_active_node = 0 # New: Sum of (jobs / active_nodes) for each timestep
+        count_active_timesteps_for_avg_active = 0 # New: Count of timesteps with active nodes
+
+        for occupancy_dict in self.node_occupancy_history:
+            current_timestep_total_occupancy = sum(occupancy_dict.values())
+            total_jobs_running_timesteps += current_timestep_total_occupancy
+
+            # Find max concurrent jobs on any single node for this timestep
+            if occupancy_dict:
+                max_concurrent_jobs_per_node = max(max_concurrent_jobs_per_node, max(occupancy_dict.values()))
+
+            # New: Calculate average jobs per *active* node for this timestep
+            active_nodes_in_timestep = [count for count in occupancy_dict.values() if count > 0]
+            if active_nodes_in_timestep:
+                sum_jobs_per_active_node += sum(active_nodes_in_timestep) / len(active_nodes_in_timestep)
+                count_active_timesteps_for_avg_active += 1
+
+        # Average jobs per *active* node (user's desired "1" type)
+        avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
+            if count_active_timesteps_for_avg_active > 0 else 0
+
+        stats['avg concurrent jobs per active node'] = f"{avg_jobs_per_active_node:.2f}"
+        stats['max concurrent jobs per node'] = max_concurrent_jobs_per_node
+    else:
+        stats['avg concurrent jobs per node'] = "N/A"
+        stats['max concurrent jobs per node'] = "N/A"
+
+    #network_stats = get_network_stats()
+    #stats.update(network_stats)
+
     return stats
 
 

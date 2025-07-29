@@ -4,7 +4,11 @@ import pandas as pd
 
 from raps.job import Job, JobState
 from raps.policy import PolicyType
-from raps.utils import summarize_ranges, expand_ranges, get_current_utilization
+from raps.utils import (
+    summarize_ranges,
+    expand_ranges,
+    get_current_utilization
+)
 from raps.resmgr import ResourceManager
 from raps.schedulers import load_scheduler
 from raps.power import record_power_stats_foreach_job
@@ -35,17 +39,25 @@ class TickData:
     avg_net_rx: float
     avg_net_util: float
     slowdown_per_job: float
+    node_occupancy: dict[int, int]
 
 
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, jobs=None, **kwargs):
+    def __init__(self, *, power_manager,
+                          flops_manager,
+                          cooling_model=None,
+                          config,
+                          jobs=None,
+                          total_initial_jobs=0,
+                          **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
             total_nodes=self.config['TOTAL_NODES'],
-            down_nodes=self.config['DOWN_NODES']
+            down_nodes=self.config['DOWN_NODES'],
+            config=self.config
         )
         # Initialize running and queue, etc.
         self.running = []
@@ -53,6 +65,7 @@ class Engine:
         self.accounts = None
         self.job_history_dict = []
         self.jobs_completed = 0
+        self.total_initial_jobs = total_initial_jobs
         self.current_time = 0
         self.cooling_model = cooling_model
         self.sys_power = 0
@@ -70,9 +83,14 @@ class Engine:
         self.net_util_history = []
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
+        self.node_occupancy_history = []
 
-        # Get scheduler type from command-line args or default
-        scheduler_type = kwargs.get('scheduler', 'default')
+        # Set scheduler type - either based on config or command-line args - defaults to 'default'
+        if self.config['multitenant']:
+            scheduler_type = 'multitenant'
+        else:
+            scheduler_type = kwargs.get('scheduler', 'default')
+
         policy_type = kwargs.get('policy')
         backfill_type = kwargs.get('backfill')
 
@@ -102,12 +120,20 @@ class Engine:
         Adds running jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose start_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if job.start_time < self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job.start_time >= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -119,12 +145,20 @@ class Engine:
         - true if new jobs are present
         - false if no new jobs are present
         """
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose submit_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if job.submit_time <= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
         if eligible_jobs != []:
             return True
         else:
@@ -159,11 +193,24 @@ class Engine:
         else:
             newly_downed_nodes = []
 
-        # Update active/free nodes
-        self.num_free_nodes = len(self.resource_manager.available_nodes)
-        self.num_active_nodes = self.config['TOTAL_NODES'] \
-                              - len(self.resource_manager.available_nodes) \
-                              - len(self.resource_manager.down_nodes)
+        # Update active/free nodes based on core/GPU utilization
+        if self.config['multitenant']:
+            total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
+            total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
+            available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
+            available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+
+            self.num_free_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and node['available_cpu_cores'] == node['total_cpu_cores'] and node['available_gpu_units'] == node['total_gpu_units']])
+            self.num_active_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and (node['available_cpu_cores'] < node['total_cpu_cores'] or node['available_gpu_units'] < node['total_gpu_units'])])
+
+            # Update system utilization history
+            self.resource_manager.update_system_utilization(self.current_time, self.running)
+        else:
+            # Whole-node allocator
+            self.num_free_nodes = len(self.resource_manager.available_nodes)
+            self.num_active_nodes = self.config['TOTAL_NODES'] \
+                                  - len(self.resource_manager.available_nodes) \
+                                  - len(self.resource_manager.down_nodes)
 
         return completed_jobs, newly_downed_nodes
 
@@ -231,6 +278,9 @@ class Engine:
             if self.debug:
                 print(f"JobID: {job.id}")
 
+            if job.state == JobState.RUNNING:
+                job.running_time = self.current_time - job.start_time
+
             if job.state != JobState.RUNNING:
                 raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
             else:  # if job.state == JobState.RUNNING:
@@ -245,10 +295,12 @@ class Engine:
                 # Get CPU utilization
                 cpu_util = get_current_utilization(job.cpu_trace, job)
                 cpu_utils.append(cpu_util)
+                # Percentage Utilization!
 
                 # Get GPU utilizaiton
                 gpu_util = get_current_utilization(job.gpu_trace, job)
                 gpu_utils.append(gpu_util)
+                # Percentage Utilization!
 
                 # Simulate network utilization
                 if self.simulate_network:
@@ -329,6 +381,17 @@ class Engine:
             avg_tx, avg_rx, avg_net = None,None,None
 
         # Continue with System Simulation
+
+        # Calculate node occupancy
+        node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes} # Initialize even if no running jobs
+        for job in self.running:
+            if job.scheduled_nodes:
+                node_id = job.scheduled_nodes[0] # Assuming one node per job for multitenancy
+                node_occupancy[node_id] += 1
+
+        self.node_occupancy_history.append(node_occupancy)
+
+
         tick_data = TickData(
             current_time=self.current_time,
             completed=None,
@@ -346,7 +409,8 @@ class Engine:
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
-            slowdown_per_job=0
+            slowdown_per_job=0,
+            node_occupancy=node_occupancy
         )
         return tick_data
 
@@ -384,6 +448,11 @@ class Engine:
             replay = True
         else:
             replay = False
+
+        if self.debug:
+            print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
+            if jobs:
+                print(f"[DEBUG] run_simulation: First job submit_time: {jobs[0]['submit_time']}, start_time: {jobs[0]['start_time']}")
 
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
@@ -430,64 +499,6 @@ class Engine:
             if simulation_done:
                 break
             yield tick_data
-
-    def get_stats(self):
-        """ Return output statistics """
-        sum_values = lambda values: sum(x[1] for x in values) if values else 0
-        min_value = lambda values: min(x[1] for x in values) if values else 0
-        max_value = lambda values: max(x[1] for x in values) if values else 0
-        num_samples = len(self.power_manager.history) if self.power_manager else 0
-
-        throughput = self.jobs_completed / self.timesteps * 3600 if self.timesteps else 0  # Jobs per hour
-        average_power_mw = sum_values(self.power_manager.history) / num_samples / 1000 if num_samples else 0
-        average_loss_mw = sum_values(self.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
-        min_loss_mw = min_value(self.power_manager.loss_history) / 1000 if num_samples else 0
-        max_loss_mw = max_value(self.power_manager.loss_history) / 1000 if num_samples else 0
-
-        loss_fraction = average_loss_mw / average_power_mw if average_power_mw else 0
-        efficiency = 1 - loss_fraction if loss_fraction else 0
-        total_energy_consumed = average_power_mw * self.timesteps / 3600 if self.timesteps else 0  # MW-hr
-        emissions = total_energy_consumed * 852.3 / 2204.6 / efficiency if efficiency else 0
-        total_cost = total_energy_consumed * 1000 * self.config.get('POWER_COST', 0)  # Total cost in dollars
-
-        stats = {
-            'num_samples': num_samples,
-            'jobs completed': self.jobs_completed,
-            'throughput': f'{throughput:.2f} jobs/hour',
-            'jobs still running': [job.id for job in self.running],
-            'jobs still in queue': [job.id for job in self.queue],
-            'average power': f'{average_power_mw:.2f} MW',
-            'min loss': f'{min_loss_mw:.2f} MW',
-            'average loss': f'{average_loss_mw:.2f} MW',
-            'max loss': f'{max_loss_mw:.2f} MW',
-            'system power efficiency': f'{efficiency * 100:.2f}%',
-            'total energy consumed': f'{total_energy_consumed:.2f} MW-hr',
-            'carbon emissions': f'{emissions:.2f} metric tons CO2',
-            'total cost': f'${total_cost:.2f}'
-        }
-
-        network_stats = get_network_stats()
-        stats.update(network_stats)
-
-        if self.net_util_history:
-            mean_net_util = sum(self.net_util_history) / len(self.net_util_history)
-        else:
-            mean_net_util = 0.0
-        stats["avg network util"] = f"{mean_net_util * 100:.2f}%"
-
-        if self.avg_slowdown_history:
-            avg_job_slow = sum(self.avg_slowdown_history) / len(self.avg_slowdown_history)
-        else:
-            avg_job_slow = 1.0
-        stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
-
-        if self.max_slowdown_history:
-            max_job_slow = max(self.max_slowdown_history)
-        else:
-            max_job_slow = 1.0
-        stats["max per-job slowdown"] = f"{max_job_slow:.2f}x"
-
-        return stats
 
     def get_job_history_dict(self):
         return self.job_history_dict

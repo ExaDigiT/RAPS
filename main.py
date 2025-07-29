@@ -158,6 +158,20 @@ except:
     if args.simulate_network:
         print(network_stats)
 
+# Print a formatted report
+print("\n--- Simulation Report ---")
+for key, value in engine_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------\n")
+print("\n--- Job Stat Report ---")
+for key, value in job_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------\n")
+print("\n--- Scheduler Report ---")
+for key, value in scheduler_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------")
+
 
 if args.plot:
     if 'power' in args.plot:

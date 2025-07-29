@@ -16,6 +16,7 @@ from raps.power import PowerManager, compute_node_power
 from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.utils import create_casename, convert_to_seconds, next_arrival
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 from tqdm import tqdm
 
 # Load configurations for each partition
@@ -58,21 +59,24 @@ if args.replay:
         for ad in args_dicts:
             part = ad['partition']
             td = Telemetry(**ad)
-            print(f"[{part}] loading traces from {args.replay[0]} …")
-            jobs_part, t0, t1 = td.load_data(args.replay)
+            print(f"\n[{part}] loading traces from {args.replay[0]} …")
+            jobs_part, t0, t1, args_from_file = td.load_data(args.replay)
             jobs_by_partition[part] = jobs_part
-            td.save_snapshot(jobs_part, t0, t1, args, filename=part.split('/')[-1])
+            td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
 
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():
         print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
 
     # now flatten into a single job list (or keep separate for your engine)
-    jobs = []
+    all_jobs_flat = []
     for part in partition_names:
         for job in jobs_by_partition[part]:
             job.partition = part
-            jobs.append(job)
+            all_jobs_flat.append(job)
+
+    total_initial_jobs = len(all_jobs_flat)
+    jobs = all_jobs_flat
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -87,6 +91,8 @@ if args.replay:
 else:  # Synthetic workload
     wl = Workload(*configs)
 
+    total_initial_jobs = args.numjobs
+
     # Generate jobs based on workload type
     jobs = getattr(wl, args.workload)(args=args)
 
@@ -100,7 +106,7 @@ layout_managers = {}
 for i, (config,ad) in enumerate(zip(configs,args_dicts)):
     pm = PowerManager(compute_node_power, **configs[i])
     fm = FLOPSManager(**args_dicts[i])
-    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, **args_dicts[i])
+    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, jobs=jobs_by_partition[config['system_name']], total_initial_jobs=total_initial_jobs, **args_dicts[i])
     layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, args_dict=ad, **config)
 
 # Set simulation timesteps
@@ -134,9 +140,20 @@ for timestep in range(timesteps):
     if timestep % configs[0]['UI_UPDATE_FREQ'] == 0:  # Assuming same frequency for all partitions
         sys_power = 0
         for name, lm in layout_managers.items():
-            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else 0.0
-            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} - Utilization: {sys_util[1]:.2f}% - Power: {lm.engine.sys_power:.1f}kW")
+            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else (0, 0.0)
+            allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
+            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} -",
+                  f"Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - ",
+                  f"Power: {lm.engine.sys_power:.1f}kW", flush=True)
             sys_power += lm.engine.sys_power
-        print(f"system power: {sys_power:.1f}kW")
+        print(f"system power: {sys_power:.1f}kW", flush=True)
 
-print("Simulation complete.")
+print("Simulation complete.", flush=True)
+
+# Print statistics for each partition
+for name, lm in layout_managers.items():
+    print(f"\n--- Simulation Report for Partition: {name} ---")
+    simulation_stats = lm.engine.get_stats()
+    for key, value in simulation_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("--------------------------------------------------")
