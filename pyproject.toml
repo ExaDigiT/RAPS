@@ -12,6 +12,7 @@ readme = "README.md"
 
 dependencies = [
     "matplotlib==3.7.2",
+    "networkx>=3.5",
     "numpy==1.23.5",
     "rich==13.6.0",
     "fmpy==0.3.19",
