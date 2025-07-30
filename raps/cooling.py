@@ -16,6 +16,8 @@ from fmpy import read_model_description, extract
 from fmpy.fmi2 import FMU2Slave
 from datetime import timedelta
 
+from raps.policy import PolicyType
+
 def get_matching_variables(variables, pattern):
     # Regex pattern to match strings containing .summary
     pattern = re.compile(pattern)
@@ -126,7 +128,7 @@ class ThermoFluidsModel:
         self.fmu.enterInitializationMode()
         self.fmu.exitInitializationMode()
 
-    def generate_runtime_values(self, cdu_power, sc) -> dict:
+    def generate_runtime_values(self, cdu_power, engine) -> dict:
         """
         Generate the runtime values for the FMU inputs dynamically.
 
@@ -147,9 +149,9 @@ class ThermoFluidsModel:
         temperature = self.config['WET_BULB_TEMP']
 
         # If replay mode is on and weather data is available
-        if sc.replay and self.weather and self.weather.start is not None and self.weather.has_coords:
+        if engine.scheduler.policy== PolicyType.REPLAY and self.weather and self.weather.start is not None and self.weather.has_coords:
             # Convert total seconds to timedelta object
-            delta = timedelta(seconds=sc.current_time)
+            delta = timedelta(seconds=engine.current_time)
             target_datetime = self.weather.start + delta
 
             # Get temperature from weather data
@@ -315,13 +317,14 @@ class ThermoFluidsModel:
         # Cleanup - at the end of the simulation
         shutil.rmtree(self.unzipdir, ignore_errors=True)
 
-    def simulate_cooling(self, rack_power):
+    def simulate_cooling(self, rack_power, engine):
         cdu_power = rack_power.T[-1] * 1000
-        runtime_values = self.cooling_model.generate_runtime_values(cdu_power, self)
+        runtime_values = self.generate_runtime_values(cdu_power, engine)
 
         # FMU inputs are N powers and the wetbulb temp
-        fmu_inputs = self.cooling_model.generate_fmu_inputs(runtime_values,
-                                                            uncertainties=self.power_manager.uncertainties)
-        cooling_inputs, cooling_outputs = self.cooling_model.step(self.current_time,
-                                                                  fmu_inputs,
-                                                                  self.config['POWER_UPDATE_FREQ'])
+        fmu_inputs = self.generate_fmu_inputs(runtime_values,
+                                              uncertainties=engine.power_manager.uncertainties)
+        cooling_inputs, cooling_outputs = self.step(engine.current_time,
+                                                    fmu_inputs,
+                                                    engine.config['POWER_UPDATE_FREQ'])
+        return cooling_inputs, cooling_outputs
