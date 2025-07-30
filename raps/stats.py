@@ -39,20 +39,20 @@ def get_engine_stats(engine: Engine):
         'total cost': f'${total_cost:.2f}'
     }
 
-    if self.config['multitenant']:
+    if engine.config['multitenant']:
         # Multitenancy Stats
-        total_jobs_loaded = self.total_initial_jobs # Assuming this is passed to __init__
+        total_jobs_loaded = engine.total_initial_jobs # Assuming this is passed to __init__
         stats['total jobs loaded'] = total_jobs_loaded
-        stats['jobs completed percentage'] = f"{(self.jobs_completed / total_jobs_loaded * 100):.2f}%"
+        stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
 
-    if self.node_occupancy_history:
+    if engine.node_occupancy_history:
         # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
         total_jobs_running_timesteps = 0
         max_concurrent_jobs_per_node = 0
         sum_jobs_per_active_node = 0 # New: Sum of (jobs / active_nodes) for each timestep
         count_active_timesteps_for_avg_active = 0 # New: Count of timesteps with active nodes
 
-        for occupancy_dict in self.node_occupancy_history:
+        for occupancy_dict in engine.node_occupancy_history:
             current_timestep_total_occupancy = sum(occupancy_dict.values())
             total_jobs_running_timesteps += current_timestep_total_occupancy
 

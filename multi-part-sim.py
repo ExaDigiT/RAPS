@@ -6,7 +6,7 @@ import os
 import random
 import sys
 
-from args import args
+from raps.args import args
 from raps.config import ConfigManager, CONFIG_PATH
 from raps.schedulers.default import PolicyType
 from raps.ui import LayoutManager
@@ -141,10 +141,11 @@ for timestep in range(timesteps):
         sys_power = 0
         for name, lm in layout_managers.items():
             sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else (0, 0.0)
-            allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
-            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} -",
-                  f"Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - ",
-                  f"Power: {lm.engine.sys_power:.1f}kW", flush=True)
+            if hasattr(lm.engine.resource_manager,'allocated_cpu_cores'):
+                allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
+                print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} -",
+                      f"Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - ",
+                      f"Power: {lm.engine.sys_power:.1f}kW", flush=True)
             sys_power += lm.engine.sys_power
         print(f"system power: {sys_power:.1f}kW", flush=True)
 
@@ -152,8 +153,24 @@ print("Simulation complete.", flush=True)
 
 # Print statistics for each partition
 for name, lm in layout_managers.items():
-    print(f"\n--- Simulation Report for Partition: {name} ---")
-    simulation_stats = lm.engine.get_stats()
-    for key, value in simulation_stats.items():
+    print(f"\n=== Partition: {name} ===")
+
+    engine_stats = get_engine_stats(lm.engine)
+    job_stats = get_job_stats(lm.engine)
+    scheduler_stats = get_scheduler_stats(lm.engine)
+    if args.simulate_network:
+        network_stats = get_network_stats(lm.engine)
+
+    # Print a formatted report
+    print("\n--- Simulation Report ---")
+    for key, value in engine_stats.items():
         print(f"{key.replace('_', ' ').title()}: {value}")
-    print("--------------------------------------------------")
+    print("-------------------------\n")
+    print("\n--- Job Stat Report ---")
+    for key, value in job_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------\n")
+    print("\n--- Scheduler Report ---")
+    for key, value in scheduler_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------")
