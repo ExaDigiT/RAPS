@@ -121,7 +121,7 @@ class LayoutManager:
             columns.append("SLOW DOWN")
         else:
             #columns.append("NODE SEGMENTS")
-            columns.append("NODES")
+            columns.append("SEGMENT")
 
         #if show_nodes:
         #    columns.append("NODELIST")

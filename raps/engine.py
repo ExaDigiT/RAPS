@@ -356,7 +356,8 @@ class Engine:
 
         # System Cooling
         if self.cooling_model:
-            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(self.cooling_model, rack_power)
+            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(rack_power=rack_power,
+                                                                                  engine=self)
         else:
             cooling_inputs, cooling_outputs = None, None
 

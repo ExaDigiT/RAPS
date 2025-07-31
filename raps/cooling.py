@@ -317,7 +317,7 @@ class ThermoFluidsModel:
         # Cleanup - at the end of the simulation
         shutil.rmtree(self.unzipdir, ignore_errors=True)
 
-    def simulate_cooling(self, rack_power, engine):
+    def simulate_cooling(self,*, rack_power, engine):
         cdu_power = rack_power.T[-1] * 1000
         runtime_values = self.generate_runtime_values(cdu_power, engine)
 
