@@ -453,7 +453,7 @@ class Engine:
         if self.debug:
             print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
             if jobs:
-                print(f"[DEBUG] run_simulation: First job submit_time: {jobs[0]['submit_time']}, start_time: {jobs[0]['start_time']}")
+                print(f"[DEBUG] run_simulation: First job submit_time: {jobs[0].submit_time}, start_time: {jobs[0].start_time}")
 
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)

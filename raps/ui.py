@@ -505,14 +505,17 @@ class LayoutManager:
     def run(self, jobs, timestep_start, timestep_end, time_delta):
         """ Runs the UI, blocking until the simulation is complete """
         if not self.debug:
-            context = Live(self.layout, refresh_per_second=5)
+            context = Live(self.layout, auto_refresh=True, refresh_per_second=3)
         else:
             context = nullcontext()
-        with context:
-            for data in self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True):
+        with context as ctx:
+            last_i=0
+            for i,data in enumerate(self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True)):
                 if data:
                     self.update_full_layout(data,time_delta)
-                self.update_progress_bar(1)
+                    self.update_progress_bar(i-last_i)
+                    last_i=i
+                    #ctx.refresh()  # For test with manual update
 
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
