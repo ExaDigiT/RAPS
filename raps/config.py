@@ -15,6 +15,9 @@ class ConfigManager:
 
     def load_system_config(self, system_name: str) -> None:
         base_path = CONFIG_PATH / system_name
+        if not os.path.isdir(base_path):
+            raise FileNotFoundError(f"\"{system_name}\" not found in {CONFIG_PATH}.",
+                                    f"Valid systems are:{os.listdir(CONFIG_PATH)}")
         config_files = ['system.json', 'power.json', 'scheduler.json']
         optional_files = ['cooling.json', 'uq.json', 'network.json']
 
