@@ -12,6 +12,9 @@ parser.add_argument('-x', '--partitions', nargs='+', default=None, help='List of
 parser.add_argument('-c', '--cooling', action='store_true', help='Include FMU cooling model')
 parser.add_argument('-net', '--simulate-network', default=False, action='store_true', help='Include Network model')
 
+parser.add_argument('--noui', default=False, action='store_true', help='Run without UI')
+
+
 # Simulation runtime options
 parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')

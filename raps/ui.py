@@ -21,19 +21,24 @@ from raps.engine import TickData, Engine
 
 class LayoutManager:
     def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, args_dict=None, **config):
+        self.debug = debug
+        self.noui = args_dict['noui']
         self.engine = engine
         self.config = config
         self.topology = self.engine.config.get("TOPOLOGY", "none")
         self.simulate_network = args_dict.get("simulate_network")
-        self.console = Console()
-        self.layout = Layout()
         self.hascooling = layout_type == "layout2"
-        self.debug = debug
-        self.setup_layout(layout_type)
         self.power_df_header = self.config['POWER_DF_HEADER']
         self.racks_per_cdu = self.config['RACKS_PER_CDU']
         self.power_column = self.power_df_header[self.racks_per_cdu + 1]
         self.loss_column = self.power_df_header[-1]
+
+        if self.debug or self.noui:
+            return
+
+        self.console = Console()
+        self.layout = Layout()
+        self.setup_layout(layout_type)
         self.progress = Progress(
             TextColumn("Progress: [progress.percentage]{task.percentage:>3.0f}%"),
             BarColumn(bar_width=None),
@@ -504,18 +509,19 @@ class LayoutManager:
 
     def run(self, jobs, timestep_start, timestep_end, time_delta):
         """ Runs the UI, blocking until the simulation is complete """
-        if not self.debug:
+        if not self.debug and not self.noui:
             context = Live(self.layout, auto_refresh=True, refresh_per_second=3)
         else:
             context = nullcontext()
-        with context as ctx:
+        with context:
             last_i=0
             for i,data in enumerate(self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True)):
-                if data:
+                if data and (not self.debug and not self.noui):
                     self.update_full_layout(data,time_delta)
-                    self.update_progress_bar(i-last_i)
-                    last_i=i
-                    #ctx.refresh()  # For test with manual update
+                    #self.update_progress_bar(i-last_i)
+                    #last_i=i
+                if not self.debug and not self.noui:
+                    self.update_progress_bar(1)
 
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
