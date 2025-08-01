@@ -138,39 +138,29 @@ print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].t
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, args_dict=args_dict, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
-engine_stats = get_engine_stats(sc)
-job_stats = get_job_stats(sc)
-scheduler_stats = get_scheduler_stats(sc)
-if args.simulate_network:
-    network_stats = get_network_stats(sc)
-# Following b/c we get the following error when we use PM100 telemetry dataset
-# TypeError: Object of type int64 is not JSON serializable
-try:
-    print(json.dumps(engine_stats, indent=4))
-    print(json.dumps(job_stats, indent=4))
-    print(json.dumps(scheduler_stats, indent=4))
-    if args.simulate_network:
-        print(json.dumps(network_stats, indent=4))
-except:
-    print(engine_stats)
-    print(job_stats)
-    print(scheduler_stats)
-    if args.simulate_network:
-        print(network_stats)
 
 # Print a formatted report
 print("\n--- Simulation Report ---")
+engine_stats = get_engine_stats(sc)
 for key, value in engine_stats.items():
     print(f"{key.replace('_', ' ').title()}: {value}")
 print("-------------------------\n")
 print("\n--- Job Stat Report ---")
+job_stats = get_job_stats(sc)
 for key, value in job_stats.items():
     print(f"{key.replace('_', ' ').title()}: {value}")
 print("-------------------------\n")
 print("\n--- Scheduler Report ---")
+scheduler_stats = get_scheduler_stats(sc)
 for key, value in scheduler_stats.items():
     print(f"{key.replace('_', ' ').title()}: {value}")
 print("-------------------------")
+if args.simulate_network:
+    print("\n--- Network Report ---")
+    network_stats = get_network_stats(sc)
+    for key, value in network_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------")
 
 
 if args.plot:

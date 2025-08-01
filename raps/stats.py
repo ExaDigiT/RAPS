@@ -7,7 +7,7 @@ the jobs
 Both could be part of the engine or jobs class, but as the are very verbose, try to keep statistics consolidated in this file.
 """
 import sys
-from .utils import sum_values, min_value, max_value
+from .utils import sum_values, min_value, max_value, convert_seconds_to_hhmmss
 
 from .engine import Engine
 
@@ -16,6 +16,7 @@ def get_engine_stats(engine: Engine):
     """ Return engine statistics """
     num_samples = len(engine.power_manager.history) if engine.power_manager else 0
 
+    time_simulated = convert_seconds_to_hhmmss(engine.timesteps)
     average_power_mw = sum_values(engine.power_manager.history) / num_samples / 1000 if num_samples else 0
     average_loss_mw = sum_values(engine.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
     min_loss_mw = min_value(engine.power_manager.loss_history) / 1000 if num_samples else 0
@@ -28,6 +29,7 @@ def get_engine_stats(engine: Engine):
     total_cost = total_energy_consumed * 1000 * engine.config.get('POWER_COST', 0)  # Total cost in dollars
 
     stats = {
+        'time simulated': time_simulated,
         'num_samples': num_samples,
         'average power': f'{average_power_mw:.2f} MW',
         'min loss': f'{min_loss_mw:.2f} MW',
