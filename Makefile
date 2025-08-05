@@ -8,6 +8,8 @@ pip:
 run:
 	python3 ./main.py
 
+test:
+	pytest -n 8
 
 IMAGE_NAME = raps
 

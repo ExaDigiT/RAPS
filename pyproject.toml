@@ -23,5 +23,8 @@ dependencies = [
     "requests>=2.32.3",
     "fsspec>=2025.5.1",
     "gcsfs>=2025.5.1",
-    "networkx>=3.5"
+    "networkx>=3.5",
+    "pytest",
+    "pytest-order",
+    "pytest-xdist"
 ]
