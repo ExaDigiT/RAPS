@@ -156,6 +156,10 @@ class Job:
         else:
             # Type is not as expected!
             raise ValueError(f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, with {type(self.scheduled_nodes[0])}")
+        assert isinstance(self.submit_time,(int,float))
+        assert isinstance(self.start_time,(int,float))
+        assert isinstance(self.end_time,(int,float))
+        assert self.start_time <= self.end_time, f"{self.start_time} <= {self.end_time}"
 
     def __repr__(self):
         """Return a string representation of the job."""
