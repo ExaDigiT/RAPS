@@ -514,7 +514,7 @@ class LayoutManager:
         else:
             context = nullcontext()
         with context:
-            last_i=0
+            #last_i = 0
             for i,data in enumerate(self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True)):
                 if data and (not self.debug and not self.noui):
                     self.update_full_layout(data,time_delta)

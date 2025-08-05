@@ -246,8 +246,14 @@ def get_job_stats(engine: Engine):
         avg_ntx_u = sum_ntx_u / len(engine.job_history_dict)
         avg_nrx_u = sum_nrx_u / len(engine.job_history_dict)
 
-        avg_awrt = sum_awrt / sum_agg_node_hours
-        psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
+        if sum_agg_node_hours != 0:
+            avg_awrt = sum_awrt / sum_agg_node_hours
+        else:
+            avg_awrt = 0
+        if sum_psf_partial_den != 0:
+            psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
+        else:
+            psf = 0
     else:
         # Set these to -1 to indicate nothing ran
         min_job_size, max_job_size, avg_job_size = -1,-1,-1
