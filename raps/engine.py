@@ -74,6 +74,7 @@ class Engine:
         self.debug = kwargs.get('debug')
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
+        self.downscale = kwargs.get('downscale',1)  # Factor to downscale the 1s timesteps (power of 10)
         self.simulate_network = kwargs.get('simulate_network')
         self.sys_util_history = []
         self.scheduler_queue_history = []
@@ -384,10 +385,10 @@ class Engine:
         # Continue with System Simulation
 
         # Calculate node occupancy
-        node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes} # Initialize even if no running jobs
+        node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes}  # Initialize even if no running jobs
         for job in self.running:
             if job.scheduled_nodes:
-                node_id = job.scheduled_nodes[0] # Assuming one node per job for multitenancy
+                node_id = job.scheduled_nodes[0]  # Assuming one node per job for multitenancy
                 node_occupancy[node_id] += 1
 
         self.node_occupancy_history.append(node_occupancy)
@@ -443,7 +444,7 @@ class Engine:
 
     def run_simulation(self, jobs, timestep_start, timestep_end, time_delta=1, autoshutdown=False):
         """Generator that yields after each simulation tick."""
-        self.timesteps = timestep_end - timestep_start  # Where is this used?
+        self.timesteps = (timestep_end - timestep_start)  # Where is this used?
 
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
@@ -489,7 +490,7 @@ class Engine:
 
             # 4. Run tick only at specified time_delta
             if 0 == (timestep % time_delta) and \
-               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1):
+               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or (time_delta != 1 or self.downscale != 1)):
                 tick_data = self.tick(time_delta=time_delta)
                 tick_data.completed = completed_jobs
             else:

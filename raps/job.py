@@ -26,7 +26,9 @@ def job_dict(*, nodes_required, name, account,
              start_time=0, end_time=0, wall_time=0,
              trace_time=0, trace_start_time=0, trace_end_time=0,
              trace_quanta=None,
-             trace_missing_values=False):
+             trace_missing_values=False,
+             downscale=1
+             ):
     """ Return job info dictionary """
     return {
         'nodes_required': nodes_required,
@@ -59,7 +61,8 @@ def job_dict(*, nodes_required, name, account,
         'trace_end_time': trace_end_time,
         'trace_quanta': trace_quanta,
         'trace_missing_values': trace_missing_values,
-        'dilated': False
+        'dilated': False,
+        'downscale': downscale
     }
 
 
