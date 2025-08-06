@@ -44,6 +44,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "adastraMI250": {
             "basic": True,
@@ -54,6 +55,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "frontier": {
             "basic": True,
@@ -64,6 +66,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "fugaku": {
             "basic": True,
@@ -74,6 +77,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "gcloudv2": {
             "basic": False,
@@ -84,6 +88,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "lassen":{
             "basic": True,
@@ -94,6 +99,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": True,
         },
         "marconi100":{
             "basic": True,
@@ -104,6 +110,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         },
         "mit_supercloud": {
             "basic": False,
@@ -114,6 +121,8 @@ def system_config(system):
             "time": False,
             "fastforward": False,
             "time_delta": False,
+            "net": False,
+            "net-multi-sim": True,
         },
         "setonix": {
             "basic": False,
@@ -124,6 +133,7 @@ def system_config(system):
             "time": False,
             "fastforward": False,
             "time_delta": False,
+            "net": False,
         },
         "summit": {
             "basic": True,
@@ -134,6 +144,7 @@ def system_config(system):
             "time": True,
             "fastforward": True,
             "time_delta": True,
+            "net": False,
         }
     }
     return configs.get(system, default_config)

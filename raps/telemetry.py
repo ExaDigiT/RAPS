@@ -145,11 +145,11 @@ class Telemetry:
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
-        return self.dataloader.load_data(files, downscale, **self.kwargs)
+        return self.dataloader.load_data(files, **self.kwargs)
 
     def load_data_from_df(self, *args, **kwargs):
         """Load telemetry data using custom data loaders."""
-        return self.dataloader.load_data_from_df(*args, downscale, **kwargs)
+        return self.dataloader.load_data_from_df(*args, **kwargs)
 
     def load_data_from_csv(self, file, *args, **kwargs):
         jobs = []
