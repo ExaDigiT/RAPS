@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
-from raps.utils import create_file_indexed, create_dir_indexed
+from raps.utils import create_file_indexed, create_dir_indexed, convert_to_seconds
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
              "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
@@ -44,7 +44,7 @@ ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
 
 MAX_PRIORITY = 500000
 
-from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull
+from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull, truncated_weibull_float
 
 
 class Workload:
@@ -128,7 +128,7 @@ class Workload:
         return truncated_normalvariate_float(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
 
     def cpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
+        return truncated_weibull_float(args.cpuutil_weibull_scale, args.cpuutil_weibull_shape,0.0, config['CPUS_PER_NODE'])
 
     def gpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['GPUS_PER_NODE'])
@@ -137,7 +137,7 @@ class Workload:
         return truncated_normalvariate_float(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
 
     def gpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
+        return truncated_weibull_float(args.gpuutil_weibull_scale, args.gpuutil_weibull_shape,0.0 , config['GPUS_PER_NODE'])
 
     def wall_time_distribution_draw_uniform(self,args,config):
         return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
@@ -160,7 +160,7 @@ class Workload:
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
         for job_index in range(args.numjobs):
-            submit_time = job_arrival_distribution_to_draw_from(args,config)
+            submit_time = int(job_arrival_distribution_to_draw_from(args,config))
             start_time = submit_time
             nodes_required = job_size_distribution_to_draw_from(args,config)
             name = random.choice(JOB_NAMES)
@@ -279,6 +279,11 @@ class Workload:
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
 
+        time_delta = args.time_delta
+        downscale = args.downscale
+
+        config['MIN_WALL_TIME'] = config['MIN_WALL_TIME'] * downscale
+        config['MAX_WALL_TIME'] = config['MAX_WALL_TIME'] * downscale
         jobs = []
         for job_index in range(args.numjobs):
             # Randomly select a partition
@@ -290,15 +295,19 @@ class Workload:
             gpu_util = random.random() * config['GPUS_PER_NODE']
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+            wall_time = (truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600*downscale) * (3600*downscale))
+            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // (3600*downscale) * (3600*downscale))
+            #print(f"wall_time: {wall_time//downscale}")
+           # print(f"time_limit: {time_limit//downscale}")
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
             net_tx, net_rx = None, None
 
             # Jobs arrive according to Poisson process
-            time_to_next_job = next_arrival_byconfargs(config,args)
+            time_to_next_job = int(next_arrival_byconfargs(config,args))
+            #wall_time = wall_time * downscale
+            #time_limit = time_limit * downscale
 
             job_info = job_dict(nodes_required=nodes_required, name=name,
                                  account=account, cpu_trace=cpu_trace,
@@ -312,7 +321,8 @@ class Workload:
                                  end_time=time_to_next_job + wall_time,
                                  wall_time=wall_time, trace_time=wall_time,
                                  trace_start_time=0, trace_end_time=wall_time,
-                                 trace_quanta=config['TRACE_QUANTA']
+                                 trace_quanta=config['TRACE_QUANTA'] * downscale,
+                                 downscale=downscale
                                 )
             job = Job(job_info)
             jobs.append(job)

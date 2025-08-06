@@ -22,11 +22,15 @@ from raps.engine import TickData, Engine
 class LayoutManager:
     def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, args_dict=None, **config):
         self.debug = debug
-        self.noui = args_dict['noui']
+        if args_dict is not None:
+            self.noui = args_dict.get("noui")
+            self.simulate_network = args_dict.get("simulate_network")
+        else:
+            self.noui = False
+            self.simulate_network = False
         self.engine = engine
         self.config = config
         self.topology = self.engine.config.get("TOPOLOGY", "none")
-        self.simulate_network = args_dict.get("simulate_network")
         self.hascooling = layout_type == "layout2"
         self.power_df_header = self.config['POWER_DF_HEADER']
         self.racks_per_cdu = self.config['RACKS_PER_CDU']
@@ -125,11 +129,10 @@ class LayoutManager:
         if show_slowdown:
             columns.append("SLOW DOWN")
         else:
-            #columns.append("NODE SEGMENTS")
-            columns.append("SEGMENT")
-
-        #if show_nodes:
-        #    columns.append("NODELIST")
+            if show_nodes:
+                columns.append("NODELIST")
+            else:
+                columns.append("SEGMENT")  # NODE SEGMENTS
 
         columns.append("TIME")
 
@@ -174,14 +177,22 @@ class LayoutManager:
                 col_nodelist = col_slow  # This logic is a bit flawed...
                 nodes_display = col_nodelist
 
-            # Build the row
+            if self.engine.downscale != 1:
+                running_time_str = convert_seconds_to_hhmmss(job.running_time // self.engine.downscale) + \
+                    f" +{job.running_time % self.engine.downscale}/{self.engine.downscale}s"
+            else:
+                running_time_str = convert_seconds_to_hhmm(job.running_time)
+
             row = [
                 str(job.id).zfill(5),
-                convert_seconds_to_hhmm(job.wall_time),
+                convert_seconds_to_hhmm(job.wall_time // self.engine.downscale),
+                ##str(job.wall_time),
                 str(job.name),
                 str(job.account),
                 job.state.value,
                 str(job.nodes_required),
+                nodes_display,
+                running_time_str
             ]
             row.append(nodes_display)
 
@@ -232,7 +243,7 @@ class LayoutManager:
 
         # Add data row with white values
         row = [
-            convert_seconds_to_hhmmss(time),
+            convert_seconds_to_hhmmss(time // self.engine.downscale),
             str(nrun),
             str(nqueue),
             str(active_nodes),
@@ -297,7 +308,6 @@ class LayoutManager:
         df = pd.DataFrame(data)
 
         return df
-
 
     def update_powertemp_array(self, power_df, cooling_outputs, pflops, gflop_per_watt, system_util, uncertainties=False):
         """
@@ -376,7 +386,7 @@ class LayoutManager:
             total_power_str,
             str(f"{pflops:.2f}"),
             str(f"{gflop_per_watt:.1f}"),
-            total_loss_str + " (" + percent_loss_str+ ")",
+            total_loss_str + " (" + percent_loss_str + ")",
             f"{cooling_outputs['pue']:.2f}",
             style="white"  # Apply white style to all elements in the row
         )
@@ -483,7 +493,6 @@ class LayoutManager:
             self.update_pressflow_array(data.fmu_outputs)
 
         self.update_scheduled_jobs(data.running + data.queue)
-
         self.update_status(
             data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
             data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job
@@ -522,7 +531,6 @@ class LayoutManager:
                     #last_i=i
                 if not self.debug and not self.noui:
                     self.update_progress_bar(1)
-
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
         """ Prepares the UI and returns a generator for the simulation """

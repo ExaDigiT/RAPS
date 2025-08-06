@@ -15,14 +15,15 @@ pytestmark = [
 
 
 @pytest.mark.parametrize("time_arg, tdelta_arg", [
-    ("100", "1"),
-    ("100", "1s"),
-    ("100", "10s"),
-    ("10m", "1m"),
-    ("10h", "1h"),
-    ("10h", "3h"),
-    ("3d", "1d")
-], ids=["1","1s","10s","1m","1h","3h","1d"])
+    ("10", "1ds"),
+    ("60", "3ds"),
+    ("1", "1cs"),
+    ("1", "1ms"),
+    ("10ds", "1cs"),
+    ("10cs", "1ms"),
+    ("100ms", "1ms"),
+    ("100ms", "1s"),
+], ids=["1ds","3ds","1cs","1ms","1cs-for-10ds","1ms-for-10cs","1ms-for-100ms","1s-for-100ms"])
 def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg):
     if not system_config.get("time_delta", False):
         pytest.skip(f"{system} does not support time_delta run.")
@@ -38,6 +39,9 @@ def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg):
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     time, downscale = convert_to_seconds(time_arg)
-    assert f"Time Simulated: {convert_seconds_to_hhmmss(time // downscale)}" in result.stdout
+    td, td_ds = convert_to_seconds(tdelta_arg)
+    #assert f"Time Simulated: {convert_seconds_to_hhmmss(int((time / td_ds) * downscale))}" in result.stdout
+    assert f"Time Simulated: {convert_seconds_to_hhmmss(time / downscale)}" in result.stdout
+
     del result
     gc.collect()

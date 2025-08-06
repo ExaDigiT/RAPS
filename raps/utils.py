@@ -116,6 +116,13 @@ def truncated_weibull(scale, shape, min, max):
         if min < number <= max:
             return int(number)
 
+def truncated_weibull_float(scale, shape, min, max):
+    while True:
+        number = random.weibullvariate(scale, shape)
+        if min < number <= max:
+            return float(number)
+
+
 
 def return_nearest_power_of(*,number,base):
     if base == 1:
@@ -418,11 +425,14 @@ def create_dir_indexed(dir:str, path:str = None) -> str:
 def next_arrival_byconfargs(config,args,reset=False):
     arrival_rate = 1
     arrival_time = config['JOB_ARRIVAL_TIME']
+    time_delta = args.time_delta
+    downscale = args.downscale
+
     if args.job_arrival_rate:
         arrival_rate = args.job_arrival_rate
     if args.job_arrival_time:
         arrival_time = args.job_arrival_time
-    return next_arrival(arrival_rate / arrival_time, reset)
+    return next_arrival(arrival_rate / (arrival_time * downscale), reset)
 
 
 def next_arrival_byconfkwargs(config,kwargs,reset=False):
@@ -456,6 +466,11 @@ def convert_to_seconds(time_str):
         's': 1,      # 1 second = 1 second
         '': 1        # empty string = 1 second
     }
+    downscale_factors = {
+        'ms': 1000,
+        'cs': 100,
+        'ds': 10
+    }
 
     # Check if the input string ends with a unit or is purely numeric
     # and extract the numeric part and the time unit
@@ -463,8 +478,12 @@ def convert_to_seconds(time_str):
         unit = ''
         num_str = time_str[:]
     else:
-        unit = time_str[-1]
-        num_str = time_str[:-1]
+        if time_str[-2].isdigit():
+            unit = time_str[-1]
+            num_str = time_str[:-1]
+        else:
+            unit = time_str[-2:]
+            num_str = time_str[:-2]
 
     index = num_str.find(".")  # convert int or float string
     if index != -1:
@@ -476,7 +495,10 @@ def convert_to_seconds(time_str):
 
     # Convert to seconds using the conversion factors
     if unit in time_factors:
-        return num * time_factors[unit]
+        return num * time_factors[unit], 1
+    elif unit in downscale_factors:
+        downscale = downscale_factors[unit]
+        return num, downscale
     else:
         raise ValueError(f"Unknown time unit: {unit}")
 

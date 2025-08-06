@@ -15,8 +15,7 @@ from .engine import Engine
 def get_engine_stats(engine: Engine):
     """ Return engine statistics """
     num_samples = len(engine.power_manager.history) if engine.power_manager else 0
-
-    time_simulated = convert_seconds_to_hhmmss(engine.timesteps)
+    time_simulated = convert_seconds_to_hhmmss(engine.timesteps / engine.downscale)
     average_power_mw = sum_values(engine.power_manager.history) / num_samples / 1000 if num_samples else 0
     average_loss_mw = sum_values(engine.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
     min_loss_mw = min_value(engine.power_manager.loss_history) / 1000 if num_samples else 0

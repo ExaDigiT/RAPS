@@ -88,13 +88,16 @@ else:  # Synthetic jobs
     td = Telemetry(**args_dict)
     td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
 
-if args.fastforward is not None:
-    args.fastforward = convert_to_seconds(args.fastforward)
+if args.fastforward:
     timestep_start = args.fastforward
 
-if args.time is not None:
-    timestep_end = timestep_start + convert_to_seconds(args.time)
+if args.time:
+    timestep_end = timestep_start + args.time
 
+if args.time_delta:
+    time_delta = args.time_delta
+else:
+    time_delta = 1
 
 sc = Engine(
     power_manager=power_manager,
@@ -128,14 +131,12 @@ if args.verbose:
     print(jobs)
 
 total_timesteps = timestep_end - timestep_start
-if args.time_delta:
-    time_delta = convert_to_seconds(args.time_delta)
-else:
-    time_delta = 1  # config['TRACE_QUANTA']
 
-print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
-print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].trace_quanta}s.')
-layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, args_dict=args_dict, **config)
+downscale = args.downscale
+downscale_str = ""if downscale == 1 else f"/{downscale}"
+print(f'Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str} seconds from {timestep_start} to {timestep_end}.')
+print(f'Simulation time delta: {time_delta}{downscale_str} s, Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.')
+layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
 
@@ -162,29 +163,31 @@ if args.simulate_network:
         print(f"{key.replace('_', ' ').title()}: {value}")
     print("-------------------------")
 
+if downscale_str:
+    downscale_str = "1" + downscale_str
 
 if args.plot:
     if 'power' in args.plot:
-        pl = Plotter('Time (s)', 'Power (kW)', 'Power History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power (kW)', 'Power History', \
                      OPATH / f'power.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.history)
         pl.plot_history(x, y)
 
     if 'util' in args.plot:
-        pl = Plotter('Time (s)', 'System Utilization (%)', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'System Utilization (%)', \
                      'System Utilization History', OPATH / f'util.{args.imtype}')
         x, y = zip(*sc.sys_util_history)
         pl.plot_history(x, y)
 
     if 'loss' in args.plot:
-        pl = Plotter('Time (s)', 'Power Losses (kW)', 'Power Loss History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (kW)', 'Power Loss History', \
                      OPATH / f'loss.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.loss_history)
         pl.plot_history(x, y)
 
-        pl = Plotter('Time (s)', 'Power Losses (%)', 'Power Loss History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (%)', 'Power Loss History', \
                      OPATH / f'loss_pct.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.loss_history_percentage)
@@ -194,7 +197,7 @@ if args.plot:
         if cooling_model:
             ylabel = 'pue'
             title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / f'pue.{args.imtype}', \
+            pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / f'pue.{args.imtype}', \
                          uncertainties=args.uncertainties)
             df = pd.DataFrame(cooling_model.fmu_history)
             df.to_parquet('cooling_model.parquet', engine='pyarrow')
@@ -206,7 +209,7 @@ if args.plot:
         if cooling_model:
             ylabel = 'Tr_pri_Out[1]'
             title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / 'temp.svg')
+            pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / 'temp.svg')
             df = pd.DataFrame(cooling_model.fmu_history)
             df.to_parquet('cooling_model.parquet', engine='pyarrow')
             pl.plot_compare(df['time'], df[ylabel])

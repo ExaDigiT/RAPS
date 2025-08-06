@@ -67,7 +67,7 @@ class Telemetry:
             list_of_job_dicts.append(job.__dict__)
         np.savez_compressed(filename, jobs=list_of_job_dicts, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
 
-    def load_snapshot(self, snapshot: str) -> list:
+    def load_snapshot(self, snapshot: str, downscale=1) -> list:
         """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
 
         :param str snapshot: Filename
@@ -145,11 +145,11 @@ class Telemetry:
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
-        return self.dataloader.load_data(files, **self.kwargs)
+        return self.dataloader.load_data(files, downscale, **self.kwargs)
 
     def load_data_from_df(self, *args, **kwargs):
         """Load telemetry data using custom data loaders."""
-        return self.dataloader.load_data_from_df(*args, **kwargs)
+        return self.dataloader.load_data_from_df(*args, downscale, **kwargs)
 
     def load_data_from_csv(self, file, *args, **kwargs):
         jobs = []
@@ -195,7 +195,7 @@ class Telemetry:
         """ Return (row, col) tuple for a cdu index """
         return self.dataloader.cdu_pos(index, config=self.config)
 
-    def load_jobs_times_args_from_files(self,*,files, args):
+    def load_jobs_times_args_from_files(self,*,files, args, downscale=1):
         """ Load all files as combined jobs """
         # Read telemetry data (either npz file or via custom data loader)
         # TODO: Merge args? See main.py:79

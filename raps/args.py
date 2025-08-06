@@ -19,7 +19,7 @@ parser.add_argument('--noui', default=False, action='store_true', help='Run with
 parser.add_argument('-ff', '--fastforward', type=str, default=None, help='Fast-forward by time amount (uses same units as -t)')
 parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
 #parser.add_argument("--time-delta", type=str, default=None, help='Time delta for simulation steps, e.g. 15, 15s 1m, 1h, 3d. (Default unit in seconds. If not set "TRACE_QUANTA" is used.)')  # This seems sensible, but 1s is the previous default before introducing this change!
-parser.add_argument("--time-delta", type=str, default="1s", help='Time delta for simulation steps, e.g. 15, 15s 1m, 1h, 3d. (Default unit in seconds. Default value: 1s.)')
+parser.add_argument("--time-delta", type=str, default="1s", help='Time delta for simulation steps, e.g. 15, 15s 1m, 1h, 3d, 1ms. (Default unit in seconds. Default value: 1s.)')
 parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode and disable rich layout')
 parser.add_argument('-n', '--numjobs', type=int, default=100, help='Number of jobs to schedule')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
@@ -76,10 +76,31 @@ parser.add_argument('--accounts-json', type=str, help='Json of account stats gen
 
 
 def post_process_args(args):
-    if args.fastforward:
-        args.fastforward = convert_to_seconds(args.fastforward)
+    if args.time_delta:
+        time_delta_raw, time_delta_downscale_raw = convert_to_seconds(args.time_delta)
+    else:
+        time_delta_raw, time_delta_downscale_raw = None, 1
+
     if args.time:
-        args.time = convert_to_seconds(args.time)
+        time_raw, time_downscale_raw = convert_to_seconds(args.time)
+    else:
+        time_raw, time_downscale_raw = None, 1
+
+    if args.fastforward:
+        ff_raw, ff_downscale_raw = convert_to_seconds(args.fastforward)
+    else:
+        ff_raw, ff_downscale_raw = None, 1
+
+    max_downscale = max(time_delta_downscale_raw, time_downscale_raw, ff_downscale_raw)
+    args.downscale = max_downscale
+
+    if args.time_delta:
+        args.time_delta = int((time_delta_raw / time_delta_downscale_raw) * max_downscale)
+    if args.time:
+        args.time = int((time_raw / time_downscale_raw) * max_downscale)
+    if args.fastforward:
+        args.fastforward = int((ff_raw / ff_downscale_raw) * max_downscale)
+
     return args
 
 
