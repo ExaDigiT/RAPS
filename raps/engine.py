@@ -272,10 +272,6 @@ class Engine:
         slowdown_factors = []
 
         for job in self.running:
-            if job.end_time == self.current_time:
-                job.state = JobState.COMPLETED
-
-        for job in self.running:
             if self.debug:
                 print(f"JobID: {job.id}")
 
