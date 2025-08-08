@@ -11,7 +11,8 @@ import pytest
     "marconi100",
     "mit_supercloud",
     "setonix",
-    "summit"
+    "summit",
+    "lumi"
 ])
 def system(request):
     return request.param
@@ -145,7 +146,21 @@ def system_config(system):
             "fastforward": True,
             "time_delta": True,
             "net": False,
-        }
+        },
+        "lumi": {
+            "basic": False,
+            "multi-part-sim": True,
+            "withdata": False,
+            "cooling": False,
+            "uncertainty": False,
+            "time": False,
+            "fastforward": False,
+            "time_delta": False,
+            "net": False,
+            "net-multi-sim": False
+        },
+
+
     }
     return configs.get(system, default_config)
 
@@ -162,6 +177,7 @@ def system_file(system):
         "marconi100":["job_table.parquet"],
         "mit_supercloud":["202201"],
         "setonix":[""],
-        "summit":[]
+        "summit":[],
+        "lumi":[]
     }
     return files.get(system,files)

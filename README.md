@@ -73,6 +73,11 @@ For MIT Supercloud
     # Synthetic tests for verification studies:
     python multi-part-sim.py -x 'mit_supercloud/*' -w multitenant
 
+For Lumi
+
+    # Synthetic test for lumi multi-part-sim:
+    python multi-part-sim.py -x lumi/*
+
 ## Perform Network Simulation
 
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
