@@ -15,8 +15,11 @@ class ConfigManager:
 
     def load_system_config(self, system_name: str) -> None:
         base_path = CONFIG_PATH / system_name
+        if not os.path.isdir(base_path):
+            raise FileNotFoundError(f"\"{system_name}\" not found in {CONFIG_PATH}.",
+                                    f"Valid systems are:{os.listdir(CONFIG_PATH)}")
         config_files = ['system.json', 'power.json', 'scheduler.json']
-        optional_files = ['cooling.json', 'uq.json']
+        optional_files = ['cooling.json', 'uq.json', 'network.json']
 
         for config_file in config_files + optional_files:
             file_path = base_path / config_file
@@ -64,6 +67,9 @@ class ConfigManager:
             end_node_id = start_node_id + nodes_per_rack
             down_nodes.extend(range(start_node_id, end_node_id))
         self.config['DOWN_NODES'] = down_nodes
+
+        # Default multitenancy to False, unless explicitly set to True
+        self.config['multitenant'] = bool(self.config.get("multitenant", False))
 
         self.config['AVAILABLE_NODES'] = self.config['TOTAL_NODES'] - len(down_nodes)
 

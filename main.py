@@ -25,11 +25,10 @@ from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.account import Accounts
 from raps.weather import Weather
-from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival_byconfargs
-from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats
-from raps.utils import convert_numpy_to_builtin
+from raps.utils import convert_to_seconds, write_dict_to_file
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
-from args import args, args_dict
+from raps.args import args, args_dict
 
 if args.verbose or args.debug:
     print(args)
@@ -90,12 +89,15 @@ else:  # Synthetic jobs
     td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
 
 if args.fastforward:
-    args.fastforward = convert_to_seconds(args.fastforward)
     timestep_start = args.fastforward
 
 if args.time:
-    timestep_end = timestep_start + convert_to_seconds(args.time)
+    timestep_end = timestep_start + args.time
 
+if args.time_delta:
+    time_delta = args.time_delta
+else:
+    time_delta = 1
 
 sc = Engine(
     power_manager=power_manager,
@@ -129,53 +131,63 @@ if args.verbose:
     print(jobs)
 
 total_timesteps = timestep_end - timestep_start
-if args.time_delta:
-    time_delta = convert_to_seconds(args.time_delta)
-else:
-    time_delta = 1  # config['TRACE_QUANTA']
 
-print(f'Simulating {len(jobs)} jobs for {total_timesteps} seconds from {timestep_start} to {timestep_end}.')
-print(f'Simulation time delta: {time_delta}s, Telemetry trace quanta: {jobs[0].trace_quanta}s.')
+downscale = args.downscale
+downscale_str = ""if downscale == 1 else f"/{downscale}"
+print(f'Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str} seconds from {timestep_start} to {timestep_end}.')
+print(f'Simulation time delta: {time_delta}{downscale_str} s, Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.')
 layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
-engine_stats = get_engine_stats(sc)
-job_stats = get_job_stats(sc)
-scheduler_stats = get_scheduler_stats(sc)
-# Following b/c we get the following error when we use PM100 telemetry dataset
-# TypeError: Object of type int64 is not JSON serializable
-try:
-    print(json.dumps(engine_stats, indent=4))
-    print(json.dumps(job_stats, indent=4))
-    print(json.dumps(scheduler_stats, indent=4))
-except:
-    print(engine_stats)
-    print(job_stats)
-    print(scheduler_stats)
 
+# Print a formatted report
+print("\n--- Simulation Report ---")
+engine_stats = get_engine_stats(sc)
+for key, value in engine_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------\n")
+print("\n--- Job Stat Report ---")
+job_stats = get_job_stats(sc)
+for key, value in job_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------\n")
+print("\n--- Scheduler Report ---")
+scheduler_stats = get_scheduler_stats(sc)
+for key, value in scheduler_stats.items():
+    print(f"{key.replace('_', ' ').title()}: {value}")
+print("-------------------------")
+if args.simulate_network:
+    print("\n--- Network Report ---")
+    network_stats = get_network_stats(sc)
+    for key, value in network_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------")
+
+if downscale_str:
+    downscale_str = "1" + downscale_str
 
 if args.plot:
     if 'power' in args.plot:
-        pl = Plotter('Time (s)', 'Power (kW)', 'Power History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power (kW)', 'Power History', \
                      OPATH / f'power.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.history)
         pl.plot_history(x, y)
 
     if 'util' in args.plot:
-        pl = Plotter('Time (s)', 'System Utilization (%)', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'System Utilization (%)', \
                      'System Utilization History', OPATH / f'util.{args.imtype}')
         x, y = zip(*sc.sys_util_history)
         pl.plot_history(x, y)
 
     if 'loss' in args.plot:
-        pl = Plotter('Time (s)', 'Power Losses (kW)', 'Power Loss History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (kW)', 'Power Loss History', \
                      OPATH / f'loss.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.loss_history)
         pl.plot_history(x, y)
 
-        pl = Plotter('Time (s)', 'Power Losses (%)', 'Power Loss History', \
+        pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (%)', 'Power Loss History', \
                      OPATH / f'loss_pct.{args.imtype}', \
                      uncertainties=args.uncertainties)
         x, y = zip(*power_manager.loss_history_percentage)
@@ -185,7 +197,7 @@ if args.plot:
         if cooling_model:
             ylabel = 'pue'
             title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / f'pue.{args.imtype}', \
+            pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / f'pue.{args.imtype}', \
                          uncertainties=args.uncertainties)
             df = pd.DataFrame(cooling_model.fmu_history)
             df.to_parquet('cooling_model.parquet', engine='pyarrow')
@@ -197,7 +209,7 @@ if args.plot:
         if cooling_model:
             ylabel = 'Tr_pri_Out[1]'
             title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / 'temp.svg')
+            pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / 'temp.svg')
             df = pd.DataFrame(cooling_model.fmu_history)
             df.to_parquet('cooling_model.parquet', engine='pyarrow')
             pl.plot_compare(df['time'], df[ylabel])

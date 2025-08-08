@@ -6,7 +6,7 @@ import os
 import random
 import sys
 
-from args import args
+from raps.args import args
 from raps.config import ConfigManager, CONFIG_PATH
 from raps.schedulers.default import PolicyType
 from raps.ui import LayoutManager
@@ -15,7 +15,8 @@ from raps.flops import FLOPSManager
 from raps.power import PowerManager, compute_node_power
 from raps.telemetry import Telemetry
 from raps.workload import Workload
-from raps.utils import convert_to_seconds, next_arrival
+from raps.utils import create_casename, convert_to_seconds, next_arrival
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 from tqdm import tqdm
 
 # Load configurations for each partition
@@ -23,26 +24,63 @@ partition_names = args.partitions
 
 print(args.partitions)
 if '*' in args.partitions[0]:
-    paths = glob.glob(os.path.join(CONFIG_PATH, args.partitions[0]))
+    paths = glob.glob(os.path.join(CONFIG_PATH, args.partitions[0].replace("'","")))
     partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
 
+    args.system = partition_names[0].split(os.sep)[0]
+
 configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
-args_dicts = [{**vars(args), 'config': config} for config in configs]
+args_dicts = [
+       {**vars(args), 'config': config, 'partition': partition_names[i]}
+       for i, config in enumerate(configs)
+   ]
 
 # Initialize Workload
 if args.replay:
 
-    # Currently this assumes that an .npz file has already been created
-    # e.g., python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet
-    td = Telemetry(**args_dicts[0])
-    print(f"Loading {args.replay[0]}...")
-    jobs = td.load_snapshot(args.replay[0])
-    available_nodes = [config['AVAILABLE_NODES'] for config in configs]
-    print("available nodes:", available_nodes)
+    jobs_by_partition = {}
+    t0_by_partition = {}
+    t1_by_partition = {}
 
-    # Randomly assign partition
-    for job in jobs:
-        job.partition = random.choices(partition_names, weights=available_nodes, k=1)[0]
+
+    if args.replay[0].endswith('.npz'):
+        # snapshot mode: pick the right .npz for each partition
+        snap_map = { os.path.basename(p): p for p in args.replay }
+        for ad in args_dicts:
+            part = ad['partition']                        # e.g. 'mit_supercloud/part-cpu'
+            short = part.split('/')[-1]                   # 'part-cpu'
+            snap_file = f"{short}.npz"
+            if snap_file not in snap_map:
+                raise RuntimeError(f"Snapshot '{snap_file}' not in {args.replay}")
+            td = Telemetry(**ad)
+            print(f"[{part}] loading snapshot {snap_file} …")
+            jobs_part, t0, t1, args_from_file = td.load_snapshot(snap_map[snap_file])
+            jobs_by_partition[part] = jobs_part
+    else:
+        # raw load_data mode
+        for ad in args_dicts:
+            part = ad['partition']
+            td = Telemetry(**ad)
+            print(f"\n[{part}] loading traces from {args.replay[0]} …")
+            jobs_part, t0, t1 = td.load_data(args.replay)
+            jobs_by_partition[part] = jobs_part
+            #td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
+            # Check if args need to be extracted or merged! Not implemented yet!
+            td.save_snapshot(jobs=jobs_part, timestep_start=t0, timestep_end=t1, filename=part.split('/')[-1],args=args)
+
+    # --- report how many jobs per partition ---
+    for part, jl in jobs_by_partition.items():
+        print(f"[INFO] Partition '{part}': {len(jl)} jobs loaded")
+
+    # now flatten into a single job list (or keep separate for your engine)
+    all_jobs_flat = []
+    for part in partition_names:
+        for job in jobs_by_partition[part]:
+            job.partition = part
+            all_jobs_flat.append(job)
+
+    total_initial_jobs = len(all_jobs_flat)
+    jobs = all_jobs_flat
 
     if args.scale:
         for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
@@ -54,11 +92,10 @@ if args.replay:
             partition_config = configs[partition_names.index(partition)]
             job.submit_time = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
 
-    elif args.arrival == 'prescribed':
-        raise NotImplementedError
-
 else:  # Synthetic workload
     wl = Workload(*configs)
+
+    total_initial_jobs = args.numjobs
 
     # Generate jobs based on workload type
     jobs = getattr(wl, args.workload)(args=args)
@@ -70,11 +107,11 @@ for job in jobs:
 
 # Initialize layout managers for each partition
 layout_managers = {}
-for i, config in enumerate(configs):
+for i, (config,ad) in enumerate(zip(configs,args_dicts)):
     pm = PowerManager(compute_node_power, **configs[i])
     fm = FLOPSManager(**args_dicts[i])
-    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, **args_dicts[i])
-    layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
+    sc = Engine(power_manager=pm, flops_manager=fm, cooling_model=None, jobs=jobs_by_partition[config['system_name']], total_initial_jobs=total_initial_jobs, **args_dicts[i])
+    layout_managers[config['system_name']] = LayoutManager(args.layout, engine=sc, debug=args.debug, args_dict=ad, **config)
 
 # Set simulation timesteps
 if args.fastforward:
@@ -107,10 +144,37 @@ for timestep in range(timesteps):
     if timestep % configs[0]['UI_UPDATE_FREQ'] == 0:  # Assuming same frequency for all partitions
         sys_power = 0
         for name, lm in layout_managers.items():
-            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else 0.0
-            print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} - Utilization: {sys_util[1]:.2f}% - Power: {lm.engine.sys_power:.1f}kW")
+            sys_util = lm.engine.sys_util_history[-1] if lm.engine.sys_util_history else (0, 0.0)
+            if hasattr(lm.engine.resource_manager,'allocated_cpu_cores'):
+                allocated_cores = lm.engine.resource_manager.allocated_cpu_cores
+                print(f"[DEBUG] {name} - Timestep {timestep} - Jobs running: {len(lm.engine.running)} -",
+                      f"Utilization: {sys_util[1]:.2f}% - Allocated Cores: {allocated_cores} - ",
+                      f"Power: {lm.engine.sys_power:.1f}kW", flush=True)
             sys_power += lm.engine.sys_power
-        print(f"system power: {sys_power:.1f}kW")
+        print(f"system power: {sys_power:.1f}kW", flush=True)
 
-print("Simulation complete.")
+print("Simulation complete.", flush=True)
 
+# Print statistics for each partition
+for name, lm in layout_managers.items():
+    print(f"\n=== Partition: {name} ===")
+
+    engine_stats = get_engine_stats(lm.engine)
+    job_stats = get_job_stats(lm.engine)
+    scheduler_stats = get_scheduler_stats(lm.engine)
+    if args.simulate_network:
+        network_stats = get_network_stats(lm.engine)
+
+    # Print a formatted report
+    print("\n--- Simulation Report ---")
+    for key, value in engine_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------\n")
+    print("\n--- Job Stat Report ---")
+    for key, value in job_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------\n")
+    print("\n--- Scheduler Report ---")
+    for key, value in scheduler_stats.items():
+        print(f"{key.replace('_', ' ').title()}: {value}")
+    print("-------------------------")

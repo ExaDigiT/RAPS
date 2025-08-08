@@ -10,11 +10,13 @@ import re
 import sys
 import random
 import argparse
-import itertools
+#import itertools
 import json
 import os.path
 
+
 if __name__ == "__main__":
+    #from raps.args import args,args_dict
     parser = argparse.ArgumentParser(description='Telemetry data validator')
     parser.add_argument('--jid', type=str, default='*', help='Replay job id')
     parser.add_argument('-f', '--replay', nargs='+', type=str,
@@ -22,7 +24,7 @@ if __name__ == "__main__":
                              ' -or- filename.npz (overrides --workload option)')
     parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs','nodes'], help='Output plots')
     parser.add_argument("--is-results-file", action='store_true', default=False, help='Output plots')
-    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)") # duplicate in workload!
+    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")  # duplicate in workload!
     parser.add_argument('-t', '--time', type=str, default=None, help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
     parser.add_argument('--system', type=str, default='frontier', help='System config to use')
     choices = ['prescribed', 'poisson']
@@ -39,10 +41,10 @@ from rich.progress import track
 
 from raps.config import ConfigManager
 from raps.job import Job, job_dict
-#from raps.account import Accounts
 import matplotlib.pyplot as plt
-from raps.plotting import Plotter, plot_submit_times, plot_nodes_histogram, plot_job_gantt, spaced_colors
+from raps.plotting import Plotter, plot_submit_times, plot_nodes_histogram, plot_jobs_gantt, plot_nodes_gantt, spaced_colors, plot_network_histogram
 from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seconds
+#from raps.args import args, args_dict
 
 
 class Telemetry:
@@ -58,14 +60,14 @@ class Telemetry:
         except:
             print("WARNING: Failed to load dataloader")
 
-    def save_snapshot(self,*, jobs: list, timestep_start, timestep_end, args, filename: str):
+    def save_snapshot(self, *, jobs: list, timestep_start:int, timestep_end:int, args:dict, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
         list_of_job_dicts = []
         for job in jobs:
             list_of_job_dicts.append(job.__dict__)
         np.savez_compressed(filename, jobs=list_of_job_dicts, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
 
-    def load_snapshot(self, snapshot: str) -> list:
+    def load_snapshot(self, snapshot: str, downscale=1) -> list:
         """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
 
         :param str snapshot: Filename
@@ -80,9 +82,18 @@ class Telemetry:
         list_of_job_dicts = data['jobs'].tolist()
         for job_info in list_of_job_dicts:
             jobs.append(Job(job_info))
-        timestep_start = int(data['timestep_start'])
-        timestep_end = int(data['timestep_end'])
-        args_from_file = data['args'].tolist()
+        if hasattr(data,'timestep_start'):
+            timestep_start = int(data['timestep_start'])
+        else:
+            timestep_start = 0
+        if hasattr(data,'timestep_end'):
+            timestep_end = int(data['timestep_end'])
+        else:
+            timestep_end = np.inf
+        if hasattr(data,'args'):
+            args_from_file = data['args'].tolist()
+        else:
+            args_from_file = None
 
         return jobs, \
                timestep_start, \
@@ -93,7 +104,6 @@ class Telemetry:
         jobs = []
         time_start = 0
         time_end = 0
-        args = None
         for line in pd.read_csv(file,chunksize=1):
             job_info = job_dict(nodes_required=line.get('num_nodes').item(),  # Named like this somewhere in the csv history dumper
                                 name=line.get('name').item(),
@@ -126,7 +136,12 @@ class Telemetry:
                                 )
             job = Job(job_info)
             jobs.append(job)
-        return jobs, time_start, time_end, args
+        #if hasattr(data,'args'):
+        #    args_from_file = data["args"].item()  # This should be empty  as csv contains no args.
+        #else:
+        #    args_from_file = None
+
+        return jobs, time_start, time_end, None
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -180,7 +195,7 @@ class Telemetry:
         """ Return (row, col) tuple for a cdu index """
         return self.dataloader.cdu_pos(index, config=self.config)
 
-    def load_jobs_times_args_from_files(self,*,files, args):
+    def load_jobs_times_args_from_files(self,*,files, args, downscale=1):
         """ Load all files as combined jobs """
         # Read telemetry data (either npz file or via custom data loader)
         # TODO: Merge args? See main.py:79
@@ -197,15 +212,18 @@ class Telemetry:
             elif file.endswith(".npz"):  # Replay .npz file
                 print(f"Loading {file}...")
                 jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(file)
-                if not hasattr(args_from_file,'fastforward') or args_from_file.fastforward is None:
-                    args_from_file.fastforward = 0
-                print("File was generated with:" +\
-                      f"\n--system {args_from_file.system} " +\
-                      f"-ff {args_from_file.fastforward} " +\
-                      f"-t {args_from_file.time}\n" +\
-                      f"All Args:\n{args_from_file}" +\
-                      "To use these set them from the commandline!"
-                      )
+                if args_from_file is not None:
+                    print("File was generated with:" +\
+                          f"\n--system {args_from_file.system} " +\
+                          f"-ff {args_from_file.fastforward} " +\
+                          f"-t {args_from_file.time}\n" +\
+                          f"All Args:\n{args_from_file}" +\
+                          "To use these set them from the commandline!"
+                          )
+                else:
+                    print("No generation arguments extracted from input file!")
+                    # Args are usually extracted to tell the users how to reporduce results.
+                    # They are not processed and re-set to said arguments automatily
                 jobs.extend(jobs_from_file)
                 timestep_start = min(timestep_start,timestep_start_from_file)
                 timestep_end = max(timestep_end, timestep_end_from_file)
@@ -253,79 +271,13 @@ class Telemetry:
         return jobs, timestep_start, timestep_end, args
 
 
-def plot_jobs_gantt(*,ax=None,jobs):
-    jobs.sort(key=lambda x:x.submit_time)
-    if ax is None:
-        ax = plt.figure(figsize=(10,4))
-    # Submit_time and Wall_time
-    submit_t = [x.submit_time for x in jobs]
-    duration = [x.wall_time for x in jobs]
-    nodes_required = [x.nodes_required for x in jobs]
-
-    colors = spaced_colors(len(jobs))
-    offset = 0
-    for i in track(range(len(jobs)), description="Collecting information to plot"):
-        if args.gantt_nodes:
-            ax.barh(offset + nodes_required[i] / 2,duration[i], height=nodes_required[i], left=submit_t[i])
-            offset += nodes_required[i]
-        else:
-            ax.barh(i, duration[i], height=1.0, left=submit_t[i], color=colors[i])
-    print("Plotting")
-
-    ax.set_ylabel("Job ID")
-    ##ax_b labels:
-    ax.set_xlabel("time [hh:mm]")
-    minx_s = 0
-    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
-    x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
-    x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
-    x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
-
-    ax.set_xticks(x_label_ticks,x_label_str)
-    #ax.yaxis.set_inverted(True)
-    return ax
-
-
-def plot_nodes_gantt(*,ax=None,jobs):
-    if ax is None:
-        ax = plt.figure(figsize=(10,4))
-    # Submit_time and Wall_time
-    duration = [x.wall_time for x in jobs]
-    #nodes_required = [x['nodes_required'] for x in jobs]
-    start_t = [x.start_time for x in jobs]
-    nodeIDs = [x.scheduled_nodes for x in jobs]
-
-    colors = spaced_colors(len(jobs))
-    for i in track(range(len(jobs)), description="Collecting information to plot"):
-        for nodeID in nodeIDs[i]:
-            ax.barh(nodeID, duration[i], height=1.0, left=start_t[i], color=colors[i])
-    print("Plotting")
-
-    ax.set_ylabel("Node ID")
-    ##ax_b labels:
-    ax.set_xlabel("time [hh:mm]")
-    minx_s = 0
-    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
-    x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
-    x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
-    x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
-
-    ax.set_xticks(x_label_ticks,x_label_str)
-    ax.set_ylim(1,max(list(itertools.chain.from_iterable(nodeIDs))))
-    #ax.yaxis.set_inverted(True)
-    return ax
-
-
 if __name__ == "__main__":
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
     if args.replay:
         jobs, timestep_start, timestep_end, _ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
+
     else:
         parser.print_help()
 
@@ -351,6 +303,8 @@ if __name__ == "__main__":
     dt_list = [item for item in dt_list if item is not None]
     nr_list = [item for item in nr_list if item is not None]
     wt_list = [item for item in wt_list if item is not None]
+
+    print(f'Number of jobs: {len(jobs)}')
     print(f'Simulation will run for {timesteps} seconds')
     if dt_list:
         print(f'Average job arrival time is: {np.mean(dt_list):.2f}s')
@@ -361,11 +315,41 @@ if __name__ == "__main__":
         print(f'Nodes required (max): {np.max(nr_list)}')
         print(f'Nodes required (std): {np.std(nr_list):.2f}')
 
+    # ——— compute avg network traces ———
+    ntx_means = []
+    nrx_means = []
+    for job in jobs:
+        job_vec = job.__dict__
+        # only if there’s at least one valid sample
+        if hasattr(job_vec,'ntx_trace'):
+            ntx = np.array(job_vec.get('ntx_trace', []))
+            if ntx.size > 0 and not np.all(np.isnan(ntx)):
+                ntx_means.append(np.nanmean(ntx))
+        if hasattr(job_vec,'nrx_trace'):
+            nrx = np.array(job_vec.get('nrx_trace', []))
+            if nrx.size > 0 and not np.all(np.isnan(nrx)):
+                nrx_means.append(np.nanmean(nrx))
+
+    if ntx_means:
+        print(f'Average ntx_trace per job: {np.mean(ntx_means):.2f}')
+    else:
+        print('No valid ntx_trace data found.')
+
+    if nrx_means:
+        print(f'Average nrx_trace per job: {np.mean(nrx_means):.2f}')
+    else:
+        print('No valid nrx_trace data found.')
+
     if args.plot:
         fig,ax = plt.subplots()
     if args.plot == "jobs":
-        plot_jobs_gantt(ax=ax,jobs=jobs)
+        plot_jobs_gantt(ax=ax,jobs=jobs, bars_are_node_sized=args.gantt_nodes)
         ax.invert_yaxis()
-    if args.plot == "nodes":
+    elif args.plot == "nodes":
         plot_nodes_gantt(ax=ax,jobs=jobs)
+    elif args.plot == "network":
+        if ntx_means and nrx_means:
+            # combine into total per‐job traffic
+            net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
+            plot_network_histogram(ax=ax,data=net_means)
     plt.show()

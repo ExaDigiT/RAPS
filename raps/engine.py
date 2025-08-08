@@ -1,16 +1,22 @@
 from typing import Optional, List
 import dataclasses
 import pandas as pd
-import numpy as np
 
 from raps.job import Job, JobState
 from raps.policy import PolicyType
-from raps.network import network_utilization
-from raps.utils import summarize_ranges, expand_ranges, get_utilization, get_current_utilization
-from raps.utils import sum_values, min_value, max_value
+from raps.utils import (
+    summarize_ranges,
+    expand_ranges,
+    get_current_utilization
+)
 from raps.resmgr import ResourceManager
 from raps.schedulers import load_scheduler
 from raps.power import record_power_stats_foreach_job
+from raps.network import (
+    NetworkModel,
+    apply_job_slowdown,
+    compute_system_network_stats
+)
 
 
 @dataclasses.dataclass
@@ -29,17 +35,29 @@ class TickData:
     fmu_outputs: Optional[dict]
     num_active_nodes: int
     num_free_nodes: int
+    avg_net_tx: float
+    avg_net_rx: float
+    avg_net_util: float
+    slowdown_per_job: float
+    node_occupancy: dict[int, int]
 
 
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *, power_manager, flops_manager, cooling_model=None, config, jobs=None, **kwargs):
+    def __init__(self, *, power_manager,
+                          flops_manager,
+                          cooling_model=None,
+                          config,
+                          jobs=None,
+                          total_initial_jobs=0,
+                          **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
             total_nodes=self.config['TOTAL_NODES'],
-            down_nodes=self.config['DOWN_NODES']
+            down_nodes=self.config['DOWN_NODES'],
+            config=self.config
         )
         # Initialize running and queue, etc.
         self.running = []
@@ -47,6 +65,7 @@ class Engine:
         self.accounts = None
         self.job_history_dict = []
         self.jobs_completed = 0
+        self.total_initial_jobs = total_initial_jobs
         self.current_time = 0
         self.cooling_model = cooling_model
         self.sys_power = 0
@@ -55,13 +74,24 @@ class Engine:
         self.debug = kwargs.get('debug')
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
+        self.downscale = kwargs.get('downscale',1)  # Factor to downscale the 1s timesteps (power of 10)
         self.simulate_network = kwargs.get('simulate_network')
         self.sys_util_history = []
         self.scheduler_queue_history = []
         self.scheduler_running_history = []
+        self.avg_net_tx = []
+        self.avg_net_rx = []
+        self.net_util_history = []
+        self.avg_slowdown_history = []
+        self.max_slowdown_history = []
+        self.node_occupancy_history = []
 
-        # Get scheduler type from command-line args or default
-        scheduler_type = kwargs.get('scheduler', 'default')
+        # Set scheduler type - either based on config or command-line args - defaults to 'default'
+        if self.config['multitenant']:
+            scheduler_type = 'multitenant'
+        else:
+            scheduler_type = kwargs.get('scheduler', 'default')
+
         policy_type = kwargs.get('policy')
         backfill_type = kwargs.get('backfill')
 
@@ -76,40 +106,60 @@ class Engine:
               f", with policy {self.scheduler.policy} "\
               f"and backfill {self.scheduler.bfpolicy}")
 
+        if self.simulate_network:
+            available_nodes = self.resource_manager.available_nodes
+            self.network_model = NetworkModel(available_nodes=available_nodes,config=config,kwargs=kwargs)
+        else:
+            self.network_model = None
+
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
-        Mofifies jobs_to_submit
-        and self.queue
+        Modifies jobs_to_submit and self.queue
 
         This is a preparatory step and should only be called before the main
         loop of run_simulation.
-        Adds running jobs to the queueu, and removes them from the jobs_to_submit
+        Adds running jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose start_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if job.start_time < self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job.start_time >= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
+        if self.debug:
+            print(f"[DEBUG] add_running_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
-        Mofifies jobs_to_submit
-        and self.queue
+        Modifies jobs_to_submit and self.queue
 
-        Adds eligible jobs to the queueu, and removes them from the jobs_to_submit
+        Adds eligible jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         returns
         - true if new jobs are present
         - false if no new jobs are present
         """
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_time}")
         # Build a list of jobs whose submit_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if job.submit_time <= self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_time]
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
+        if self.debug:
+            print(f"[DEBUG] add_eligible_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
         if eligible_jobs != []:
             return True
         else:
@@ -144,11 +194,24 @@ class Engine:
         else:
             newly_downed_nodes = []
 
-        # Update active/free nodes
-        self.num_free_nodes = len(self.resource_manager.available_nodes)
-        self.num_active_nodes = self.config['TOTAL_NODES'] \
-                              - len(self.resource_manager.available_nodes) \
-                              - len(self.resource_manager.down_nodes)
+        # Update active/free nodes based on core/GPU utilization
+        if self.config['multitenant']:
+            total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
+            total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
+            available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
+            available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+
+            self.num_free_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and node['available_cpu_cores'] == node['total_cpu_cores'] and node['available_gpu_units'] == node['total_gpu_units']])
+            self.num_active_nodes = len([node for node in self.resource_manager.nodes if not node['is_down'] and (node['available_cpu_cores'] < node['total_cpu_cores'] or node['available_gpu_units'] < node['total_gpu_units'])])
+
+            # Update system utilization history
+            self.resource_manager.update_system_utilization(self.current_time, self.running)
+        else:
+            # Whole-node allocator
+            self.num_free_nodes = len(self.resource_manager.available_nodes)
+            self.num_active_nodes = self.config['TOTAL_NODES'] \
+                                  - len(self.resource_manager.available_nodes) \
+                                  - len(self.resource_manager.down_nodes)
 
         return completed_jobs, newly_downed_nodes
 
@@ -199,14 +262,20 @@ class Engine:
         scheduled_nodes = []
         cpu_utils = []
         gpu_utils = []
+        net_congs = []
         net_utils = []
+        net_tx_list = []
+        net_rx_list = []
         if self.debug:
             print(f"Current Time: {self.current_time}")
 
-        for job in self.running:
+        slowdown_factors = []
 
+        for job in self.running:
             if self.debug:
                 print(f"JobID: {job.id}")
+
+            job.running_time = self.current_time - job.start_time
 
             if job.state != JobState.RUNNING:
                 raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
@@ -222,28 +291,49 @@ class Engine:
                 # Get CPU utilization
                 cpu_util = get_current_utilization(job.cpu_trace, job)
                 cpu_utils.append(cpu_util)
+                # Percentage Utilization!
 
                 # Get GPU utilizaiton
                 gpu_util = get_current_utilization(job.gpu_trace, job)
                 gpu_utils.append(gpu_util)
+                # Percentage Utilization!
 
-                # Get network utilization
+                # Simulate network utilization
                 if self.simulate_network:
-                    ntx_util = get_current_utilization(job.ntx_trace, job)
-                    nrx_util = get_current_utilization(job.nrx_trace, job)
-                    net_util = network_utilization(ntx_util, nrx_util)
+
+                    net_util, net_cong, net_tx, net_rx, max_throughput = self.network_model.simulate_network_utilization(job=job,debug=self.debug)
+
                     net_utils.append(net_util)
+                    net_congs.append(net_cong)
+                    net_tx_list.append(net_tx)
+                    net_rx_list.append(net_rx)
+
                 else:
-                    net_utils.append(0.0)
+                    net_util, net_cong, net_tx, net_rx = 0.0,0.0,0.0,0.0
+                    max_throughput = 0
+                    net_utils.append(net_util)
+                    net_congs.append(net_cong)
+                    net_tx_list.append(net_tx)
+                    net_rx_list.append(net_rx)
+
+                #Apply slowdowns
+                slowdown_factor = apply_job_slowdown(job=job,
+                                                     max_throughput=max_throughput,
+                                                     net_util=net_util,
+                                                     net_cong=net_cong,
+                                                     net_tx=net_tx,
+                                                     net_rx=net_rx,
+                                                     debug=self.debug)
+                slowdown_factors.append(slowdown_factor)
 
         # All required values for each jobs have been an collected.
         # Continue with calculations for the whole system:
 
-        # Utilization Statistics
+        # System Utilization Statistics
         system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
         self.record_util_stats(system_util=system_util)
 
-        # Power
+        # System Power
         if self.power_manager:  # Power is always simulated
             power_df, rack_power, total_power_kw, total_loss_kw, jobs_power = \
                 self.power_manager.simulate_power(running_jobs=self.running,
@@ -260,20 +350,44 @@ class Engine:
         else:
             power_df = None
 
-        # Cooling
+        # System Cooling
         if self.cooling_model:
-            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(self.cooling_model, rack_power)
+            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(rack_power=rack_power,
+                                                                                  engine=self)
         else:
             cooling_inputs, cooling_outputs = None, None
 
-        # Flops
+        # System total Flops
         if self.flops_manager:
             pflops, gflops_per_watt = self.flops_manager.simulate_flops(scheduled_nodes=scheduled_nodes,
                                                                         cpu_util=cpu_utils,
                                                                         gpu_util=gpu_utils,
                                                                         total_power_kw=total_power_kw)
 
+        # System Network
+        if self.network_model:
+            avg_tx, avg_rx, avg_net = compute_system_network_stats(net_utils=net_utils,
+                                                                   net_tx_list=net_tx_list,
+                                                                   net_rx_list=net_rx_list,
+                                                                   slowdown_factors=slowdown_factors
+                                                                   )
+            self.record_network_stats(avg_tx=avg_tx,
+                                      avg_rx=avg_rx,
+                                      avg_net=avg_net)
+        else:
+            avg_tx, avg_rx, avg_net = None,None,None
+
         # Continue with System Simulation
+
+        # Calculate node occupancy
+        node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes}  # Initialize even if no running jobs
+        for job in self.running:
+            if job.scheduled_nodes:
+                node_id = job.scheduled_nodes[0]  # Assuming one node per job for multitenancy
+                node_occupancy[node_id] += 1
+
+        self.node_occupancy_history.append(node_occupancy)
+
         tick_data = TickData(
             current_time=self.current_time,
             completed=None,
@@ -288,6 +402,11 @@ class Engine:
             fmu_outputs=cooling_outputs,
             num_active_nodes=self.num_active_nodes,
             num_free_nodes=self.num_free_nodes,
+            avg_net_tx=avg_tx,
+            avg_net_rx=avg_rx,
+            avg_net_util=avg_net,
+            slowdown_per_job=0,
+            node_occupancy=node_occupancy
         )
         return tick_data
 
@@ -319,12 +438,17 @@ class Engine:
 
     def run_simulation(self, jobs, timestep_start, timestep_end, time_delta=1, autoshutdown=False):
         """Generator that yields after each simulation tick."""
-        self.timesteps = timestep_end - timestep_start  # Where is this used?
+        self.timesteps = (timestep_end - timestep_start)  # Where is this used?
 
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
         else:
             replay = False
+
+        if self.debug:
+            print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
+            if jobs:
+                print(f"[DEBUG] run_simulation: First job submit_time: {jobs[0].submit_time}, start_time: {jobs[0].start_time}")
 
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
@@ -335,7 +459,7 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
         batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
 
-        for timestep in range(timestep_start,timestep_end):  # Runs every seconds!
+        for timestep in range(timestep_start, timestep_end):  # Runs every seconds!
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
@@ -347,16 +471,20 @@ class Engine:
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
+
             # 3. Schedule jobs that are now in the queue.
             if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions:
-                self.scheduler.schedule(self.queue, self.running, self.current_time,accounts=self.accounts, sorted=(not has_new_additions))
+                self.scheduler.schedule(self.queue, self.running,
+                                        self.current_time,
+                                        accounts=self.accounts,
+                                        sorted=(not has_new_additions))
 
             if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
             # 4. Run tick only at specified time_delta
             if 0 == (timestep % time_delta) and \
-               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1):
+               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or (time_delta != 1 or self.downscale != 1)):
                 tick_data = self.tick(time_delta=time_delta)
                 tick_data.completed = completed_jobs
             else:
@@ -381,6 +509,15 @@ class Engine:
         self.sys_util_history.append((self.current_time, system_util))
         self.scheduler_queue_history.append(len(self.running))
         self.scheduler_running_history.append(len(self.queue))
+
+    def record_network_stats(self, *,
+                             avg_tx,
+                             avg_rx,
+                             avg_net
+                             ):
+        self.avg_net_tx.append(avg_tx)
+        self.avg_net_rx.append(avg_rx)
+        self.net_util_history.append(avg_net)
 
     def record_power_stats(self, *, time_delta, total_power_kw, total_loss_kw, jobs_power):
         if (time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:

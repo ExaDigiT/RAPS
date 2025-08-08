@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
-from raps.utils import create_file_indexed, create_dir_indexed
+from raps.utils import create_file_indexed, create_dir_indexed, convert_to_seconds
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
              "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
@@ -44,7 +44,7 @@ ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
 
 MAX_PRIORITY = 500000
 
-from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull
+from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull, truncated_weibull_float
 
 
 class Workload:
@@ -128,7 +128,7 @@ class Workload:
         return truncated_normalvariate_float(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
 
     def cpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
+        return truncated_weibull_float(args.cpuutil_weibull_scale, args.cpuutil_weibull_shape,0.0, config['CPUS_PER_NODE'])
 
     def gpu_utilization_distribution_draw_uniform(self,args,config):
         return random.uniform(0.0, config['GPUS_PER_NODE'])
@@ -137,7 +137,7 @@ class Workload:
         return truncated_normalvariate_float(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
 
     def gpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
+        return truncated_weibull_float(args.gpuutil_weibull_scale, args.gpuutil_weibull_shape,0.0 , config['GPUS_PER_NODE'])
 
     def wall_time_distribution_draw_uniform(self,args,config):
         return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
@@ -160,13 +160,17 @@ class Workload:
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
         for job_index in range(args.numjobs):
-            submit_time = job_arrival_distribution_to_draw_from(args,config)
+            submit_time = int(job_arrival_distribution_to_draw_from(args,config))
             start_time = submit_time
             nodes_required = job_size_distribution_to_draw_from(args,config)
             name = random.choice(JOB_NAMES)
             account = random.choice(ACCT_NAMES)
             cpu_util = cpu_util_distribution_to_draw_from(args,config)
+            if "CORES_PER_CPU" in config:
+                cpu_cores_required = random.randint(0, config["CORES_PER_CPU"])
             gpu_util = gpu_util_distribution_to_draw_from(args,config)
+            if "GPUS_PER_NODE" in config:
+                gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(max(gpu_util))))
             wall_time = wall_time_distribution_to_draw_from(args,config)
             end_time = start_time + wall_time
             time_limit = max(wall_time,wall_time_distribution_to_draw_from(args,config))
@@ -187,6 +191,8 @@ class Workload:
                                 end_time=end_time,
                                 wall_time=wall_time, trace_time=wall_time,
                                 trace_start_time=0, trace_end_time=wall_time,
+                                cpu_cores_required=cpu_cores_required,
+                                gpu_units_required=gpu_units_required,
                                 trace_quanta=config['TRACE_QUANTA']
                                 )
             job = Job(job_info)
@@ -279,6 +285,11 @@ class Workload:
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
 
+        time_delta = args.time_delta
+        downscale = args.downscale
+
+        config['MIN_WALL_TIME'] = config['MIN_WALL_TIME'] * downscale
+        config['MAX_WALL_TIME'] = config['MAX_WALL_TIME'] * downscale
         jobs = []
         for job_index in range(args.numjobs):
             # Randomly select a partition
@@ -290,15 +301,19 @@ class Workload:
             gpu_util = random.random() * config['GPUS_PER_NODE']
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // 3600 * 3600
-            time_limit = truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // 3600 * 3600
+            wall_time = (truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
+            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
+            #print(f"wall_time: {wall_time//downscale}")
+           # print(f"time_limit: {time_limit//downscale}")
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
             net_tx, net_rx = None, None
 
             # Jobs arrive according to Poisson process
-            time_to_next_job = next_arrival_byconfargs(config,args)
+            time_to_next_job = int(next_arrival_byconfargs(config,args))
+            #wall_time = wall_time * downscale
+            #time_limit = time_limit * downscale
 
             job_info = job_dict(nodes_required=nodes_required, name=name,
                                  account=account, cpu_trace=cpu_trace,
@@ -312,7 +327,8 @@ class Workload:
                                  end_time=time_to_next_job + wall_time,
                                  wall_time=wall_time, trace_time=wall_time,
                                  trace_start_time=0, trace_end_time=wall_time,
-                                 trace_quanta=config['TRACE_QUANTA']
+                                 trace_quanta=config['TRACE_QUANTA'] * downscale,
+                                 downscale=downscale
                                 )
             job = Job(job_info)
             jobs.append(job)
@@ -592,11 +608,11 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][0].scatter(x, y,zorder=3)
 
     cpu_util = [x.cpu_trace for x in jobs]
-    if isinstance(cpu_util[0],np.ndarray):
-        cpu_util = np.concatenate(cpu_util).ravel()
+    if isinstance(cpu_util[0],(np.ndarray, list)):
+        cpu_util = [sum(part) / len(part) for part in cpu_util]
     gpu_util = [x.gpu_trace for x in jobs]
-    if isinstance(gpu_util[0],np.ndarray):
-        gpu_util = np.concatenate(gpu_util).ravel()
+    if isinstance(gpu_util[0],(np.ndarray, list)):
+        gpu_util = [sum(part) / len(part) for part in gpu_util]
     if not all([x == 0 for x in gpu_util]):
         axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
         axs[0][1].hist(gpu_util,bins=100,orientation='horizontal',zorder=1, density=True,color='tab:purple')
@@ -700,7 +716,7 @@ def plot_job_hist(jobs,config=None,dist_split=None):
 
 def add_workload_to_parser(parser):
 
-    choices = ['random', 'benchmark', 'peak', 'idle','synthetic']
+    choices = ['random', 'benchmark', 'peak', 'idle','synthetic', 'multitenant']
     parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
     parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+", help="Percentage to draw from each distribution (list of floats)e.g. '0.2 0.8' percentages apply in order to the list of the  --distribution argument list.")
@@ -756,7 +772,7 @@ def check_workload_args(args):
 
 if __name__ == "__main__":
 
-    from args import args, args_dict
+    from raps.args import args, args_dict
     from raps.config import ConfigManager
     config = ConfigManager(system_name=args.system).get_config()
     if args.replay:
@@ -773,3 +789,148 @@ if __name__ == "__main__":
         # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename,jobs=jobs,timestep_start=timestep_start, timestep_end=timestep_end, args=args)
         print(filename + ".npz")  # To std-out to show which npz was created.
+
+    def multitenant(self, **kwargs):
+        """
+        Generate deterministic jobs to validate multitenant scheduling & power.
+
+        Parameters
+        ----------
+        mode : str
+            One of:
+              - 'ONE_JOB_PER_NODE_ALL_CORES'
+              - 'TWO_JOBS_PER_NODE_SPLIT'
+              - 'STAGGERED_JOBS_PER_NODE'
+        wall_time : int
+            Duration (seconds) of each job (default: 3600)
+        trace_quanta : int
+            Sampling interval for traces; defaults to config['TRACE_QUANTA']
+
+        Returns
+        -------
+        list[dict]
+            List of job_dict entries.
+        """
+        mode         = kwargs.get('mode', 'TWO_JOBS_PER_NODE_SPLIT')
+        wall_time    = kwargs.get('wall_time', 3600)
+
+        jobs = []
+
+        for partition in self.partitions:
+            cfg           = self.config_map[partition]
+            trace_quanta  = kwargs.get('trace_quanta', cfg['TRACE_QUANTA'])
+
+            cores_per_cpu = cfg.get('CORES_PER_CPU', 1)
+            cpus_per_node = cfg.get('CPUS_PER_NODE', 1)
+            cores_per_node = cores_per_cpu * cpus_per_node
+            gpus_per_node  = cfg.get('GPUS_PER_NODE', 0)
+
+            n_nodes = cfg['AVAILABLE_NODES']
+
+            def make_trace(cpu_util, gpu_util):
+                return self.compute_traces(cpu_util, gpu_util, wall_time, trace_quanta)
+
+            job_id_ctr = 0
+
+            if mode == 'ONE_JOB_PER_NODE_ALL_CORES':
+                # Each node runs one job that consumes all cores/GPUs
+                for nid in range(n_nodes):
+                    cpu_trace, gpu_trace = make_trace(cores_per_node, gpus_per_node)
+                    jobs.append(job_dict(
+                        nodes_required=1,
+                        cpu_cores_required=cores_per_node,
+                        gpu_units_required=gpus_per_node,
+                        name=f"MT_full_node_{partition}_{nid}",
+                        account=random.choice(ACCT_NAMES),
+                        cpu_trace=cpu_trace,
+                        gpu_trace=gpu_trace,
+                        ntx_trace=[], nrx_trace=[],
+                        end_state='COMPLETED',
+                        id=job_id_ctr,
+                        priority=random.randint(0, MAX_PRIORITY),
+                        partition=partition,
+                        submit_time=0,
+                        time_limit=wall_time,
+                        start_time=0,
+                        end_time=wall_time,
+                        wall_time=wall_time,
+                        trace_time=wall_time,
+                        trace_start_time=0,
+                        trace_end_time=wall_time,
+                        trace_quanta=config['TRACE_QUANTA']
+                    ))
+                    job_id_ctr += 1
+
+            elif mode == 'TWO_JOBS_PER_NODE_SPLIT':
+                # Two jobs per node: split CPU/GPU roughly in half
+                for nid in range(n_nodes):
+                    cpu_a = cores_per_node // 2
+                    cpu_b = cores_per_node - cpu_a
+                    gpu_a = gpus_per_node // 2
+                    gpu_b = gpus_per_node - gpu_a
+
+                    for idx, (c_req, g_req, tag) in enumerate([(cpu_a, gpu_a, 'A'),
+                                                               (cpu_b, gpu_b, 'B')]):
+                        cpu_trace, gpu_trace = make_trace(c_req, g_req)
+                        jobs.append(job_dict(
+                            nodes_required=1,  # still one node; multitenant RM packs cores
+                            cpu_cores_required=c_req,
+                            gpu_units_required=g_req,
+                            name=f"MT_split_node_{partition}_{nid}_{tag}",
+                            account=random.choice(ACCT_NAMES),
+                            cpu_trace=cpu_trace,
+                            gpu_trace=gpu_trace,
+                            ntx_trace=[], nrx_trace=[],
+                            end_state='COMPLETED',
+                            id=job_id_ctr,
+                            priority=random.randint(0, MAX_PRIORITY),
+                            partition=partition,
+                            submit_time=0,
+                            time_limit=wall_time,
+                            start_time=0,
+                            end_time=wall_time,
+                            wall_time=wall_time,
+                            trace_time=wall_time,
+                            trace_start_time=0,
+                            trace_end_time=wall_time,
+                            trace_quanta=config['TRACE_QUANTA']
+                        ))
+                        job_id_ctr += 1
+
+            elif mode == 'STAGGERED_JOBS_PER_NODE':
+                # Three jobs per node, staggered starts: 0, wall_time/3, 2*wall_time/3
+                offsets = [0, wall_time // 3, 2 * wall_time // 3]
+                cpu_each = cores_per_node // 3 or 1
+                gpu_each = max(1, gpus_per_node // 3) if gpus_per_node else 0
+
+                for nid in range(n_nodes):
+                    for k, offset in enumerate(offsets):
+                        cpu_trace, gpu_trace = make_trace(cpu_each, gpu_each)
+                        jobs.append(job_dict(
+                            nodes_required=1,
+                            cpu_cores_required=cpu_each,
+                            gpu_units_required=gpu_each,
+                            name=f"MT_stagger_node_{partition}_{nid}_{k}",
+                            account=random.choice(ACCT_NAMES),
+                            cpu_trace=cpu_trace,
+                            gpu_trace=gpu_trace,
+                            ntx_trace=[], nrx_trace=[],
+                            end_state='COMPLETED',
+                            id=job_id_ctr,
+                            priority=random.randint(0, MAX_PRIORITY),
+                            partition=partition,
+                            submit_time=offset,
+                            time_limit=wall_time,
+                            start_time=offset,
+                            end_time=offset + wall_time,
+                            wall_time=wall_time,
+                            trace_time=wall_time,
+                            trace_start_time=0,
+                            trace_end_time=wall_time,
+                            trace_quanta=config['TRACE_QUANTA']
+                        ))
+                        job_id_ctr += 1
+            else:
+                raise ValueError(f"Unknown multitenant mode: {mode}")
+
+        return jobs

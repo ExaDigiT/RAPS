@@ -2,3 +2,6 @@
 __pycache__
 .venv
 venv
+*.npz
+*.prof
+simulation_results/

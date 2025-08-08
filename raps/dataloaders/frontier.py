@@ -124,7 +124,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     telemetry_stop but may different due to missing data, for each job.
 
     The returned values are these three:
-        - The list of parsed jobs. (as a job_dict)
+        - The list of parsed jobs. (as a Job object)
         - telemetry_start: int (in seconds)
         - telemetry_end: int (in seconds)
 
@@ -227,6 +227,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         end_time_timestamp = jobs_df.loc[jidx, 'time_end']
         diff = end_time_timestamp - telemetry_start_timestamp
         end_time = diff.total_seconds()
+        if not start_time <= end_time or np.isnan(end_time):
+            continue  # Start_time is not smaller than end_time or is not valid
+            #Skip entry.
 
         wall_time = end_time - start_time
         if np.isnan(wall_time):

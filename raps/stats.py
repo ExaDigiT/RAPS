@@ -7,7 +7,7 @@ the jobs
 Both could be part of the engine or jobs class, but as the are very verbose, try to keep statistics consolidated in this file.
 """
 import sys
-from .utils import sum_values, min_value, max_value
+from .utils import sum_values, min_value, max_value, convert_seconds_to_hhmmss
 
 from .engine import Engine
 
@@ -15,7 +15,7 @@ from .engine import Engine
 def get_engine_stats(engine: Engine):
     """ Return engine statistics """
     num_samples = len(engine.power_manager.history) if engine.power_manager else 0
-
+    time_simulated = convert_seconds_to_hhmmss(engine.timesteps / engine.downscale)
     average_power_mw = sum_values(engine.power_manager.history) / num_samples / 1000 if num_samples else 0
     average_loss_mw = sum_values(engine.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
     min_loss_mw = min_value(engine.power_manager.loss_history) / 1000 if num_samples else 0
@@ -28,6 +28,7 @@ def get_engine_stats(engine: Engine):
     total_cost = total_energy_consumed * 1000 * engine.config.get('POWER_COST', 0)  # Total cost in dollars
 
     stats = {
+        'time simulated': time_simulated,
         'num_samples': num_samples,
         'average power': f'{average_power_mw:.2f} MW',
         'min loss': f'{min_loss_mw:.2f} MW',
@@ -38,6 +39,46 @@ def get_engine_stats(engine: Engine):
         'carbon emissions': f'{emissions:.2f} metric tons CO2',
         'total cost': f'${total_cost:.2f}'
     }
+
+    if engine.config['multitenant']:
+        # Multitenancy Stats
+        total_jobs_loaded = engine.total_initial_jobs # Assuming this is passed to __init__
+        stats['total jobs loaded'] = total_jobs_loaded
+        stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
+
+    if engine.node_occupancy_history:
+        # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
+        total_jobs_running_timesteps = 0
+        max_concurrent_jobs_per_node = 0
+        sum_jobs_per_active_node = 0 # New: Sum of (jobs / active_nodes) for each timestep
+        count_active_timesteps_for_avg_active = 0 # New: Count of timesteps with active nodes
+
+        for occupancy_dict in engine.node_occupancy_history:
+            current_timestep_total_occupancy = sum(occupancy_dict.values())
+            total_jobs_running_timesteps += current_timestep_total_occupancy
+
+            # Find max concurrent jobs on any single node for this timestep
+            if occupancy_dict:
+                max_concurrent_jobs_per_node = max(max_concurrent_jobs_per_node, max(occupancy_dict.values()))
+
+            # New: Calculate average jobs per *active* node for this timestep
+            active_nodes_in_timestep = [count for count in occupancy_dict.values() if count > 0]
+            if active_nodes_in_timestep:
+                sum_jobs_per_active_node += sum(active_nodes_in_timestep) / len(active_nodes_in_timestep)
+                count_active_timesteps_for_avg_active += 1
+
+        # Average jobs per *active* node (user's desired "1" type)
+        avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
+            if count_active_timesteps_for_avg_active > 0 else 0
+
+        stats['avg concurrent jobs per active node'] = f"{avg_jobs_per_active_node:.2f}"
+        stats['max concurrent jobs per node'] = max_concurrent_jobs_per_node
+    else:
+        stats['avg concurrent jobs per node'] = "N/A"
+        stats['max concurrent jobs per node'] = "N/A"
+
+    #network_stats = get_network_stats()
+    #stats.update(network_stats)
 
     return stats
 
@@ -67,6 +108,31 @@ def get_scheduler_stats(engine: Engine):
         'average_queue': average_queue,
         'average_running': average_running,
     }
+    return stats
+
+
+def get_network_stats(engine: Engine):
+    stats = {}
+
+    if engine.net_util_history:
+        mean_net_util = sum(engine.net_util_history) / len(engine.net_util_history)
+    else:
+        mean_net_util = 0.0
+
+    stats["avg network util"] = f"{mean_net_util * 100:.2f}%"
+
+    if engine.avg_slowdown_history:
+        avg_job_slow = sum(engine.avg_slowdown_history) / len(engine.avg_slowdown_history)
+    else:
+        avg_job_slow = 1.0
+    stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
+
+    if engine.max_slowdown_history:
+        max_job_slow = max(engine.max_slowdown_history)
+    else:
+        max_job_slow = 1.0
+    stats["max per-job slowdown"] = f"{max_job_slow:.2f}x"
+
     return stats
 
 
@@ -179,8 +245,14 @@ def get_job_stats(engine: Engine):
         avg_ntx_u = sum_ntx_u / len(engine.job_history_dict)
         avg_nrx_u = sum_nrx_u / len(engine.job_history_dict)
 
-        avg_awrt = sum_awrt / sum_agg_node_hours
-        psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
+        if sum_agg_node_hours != 0:
+            avg_awrt = sum_awrt / sum_agg_node_hours
+        else:
+            avg_awrt = 0
+        if sum_psf_partial_den != 0:
+            psf = (3 * sum_psf_partial_num) / (4 * sum_psf_partial_den)
+        else:
+            psf = 0
     else:
         # Set these to -1 to indicate nothing ran
         min_job_size, max_job_size, avg_job_size = -1,-1,-1

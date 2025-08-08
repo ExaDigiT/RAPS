@@ -1,0 +1,30 @@
+import os
+import subprocess
+import gc
+import pytest
+from tests.util import PROJECT_ROOT
+
+
+pytestmark = [
+    pytest.mark.system,
+    pytest.mark.nodata
+]
+
+
+def test_main_run(system, system_config):
+    if not system_config.get("basic", False):
+        pytest.skip(f"{system} does not support basic run.")
+
+    if not system_config.get("net", False):
+        pytest.skip(f"{system} does not support network run.")
+
+    os.chdir(PROJECT_ROOT)
+    result = subprocess.run([
+        "python", "main.py",
+        "--time", "1m",
+        "--system", system,
+        "-net"
+    ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
+    del result
+    gc.collect()

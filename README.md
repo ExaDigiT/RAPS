@@ -44,6 +44,42 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
     # Adastra MI250
     python main.py --system adastraMI250 -f AdastaJobsMI250_15days.parquet 
 
+For Google cluster trace v2
+
+    python main.py --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -ff 600
+
+    # analyze dataset
+    python -m raps.telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
+
+For MIT Supercloud
+
+    # Following is the directory that contains slurm-log.csv and cpu and gpu directories
+    DPATH=/path/to/mit/data
+
+    # Download the dataset - note the first time will build a file-manifest.txt file with all the files on S3
+    # this will take some time, but subsequent calls should be much faster.
+    # Also, this command will dump output to `source_data` directory, or can specify directory using `--outdir`
+    python -m raps.dataloaders.mit_supercloud.cli download --start 2021-05-21T13:00 --end 2021-05-21T14:00
+
+    # Load data and run simulation - will save data as part-cpu.npz and part-gpu.npz files
+    python multi-part-sim.py -x 'mit_supercloud/*' -f $DPATH --system mit_supercloud \
+                             --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    # Note: if no start, end dates provided will default to run 24 hours between
+    # 2021-05-21T00:00 to 2021-05-22T00:00 set by defaults in raps/dataloaders/mit_supercloud/utils.py
+
+    # Re-run simulation using npz files (much faster load)
+    python multi-part-sim.py -x mit_supercloud/* -f part-*.npz --system mit_supercloud
+
+    # Synthetic tests for verification studies:
+    python multi-part-sim.py -x 'mit_supercloud/*' -w multitenant
+
+## Perform Network Simulation
+
+Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
+get the datasets. To run a network simulation, use the following command:
+
+    python main.py -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson
+
 ## Snapshot of extracted workload data
 
 To reduce the expense of extracting the needed data from the telemetry parquet files,
@@ -63,6 +99,12 @@ or simply:
     python multi-part-sim.py -x setonix/* # bash
 
     python multi-part-sim.py -x 'setonix/*' # zsh
+
+To run this in parallel use:
+
+    mpiexec -n 2 python multi-part-sim-mpi.py -x setonix/part-cpu setonix/part-gpu
+
+*Note: first install `mpi4py` via pip or conda.*
 
 This will simulate synthetic workloads on two partitions as defined in `config/setonix-cpu` and `config/setonix-gpu`. To replay telemetry workloads from another system, e.g., Marconi100's PM100 dataset, first create a .npz snapshot of the telemetry data, e.g., 
 
