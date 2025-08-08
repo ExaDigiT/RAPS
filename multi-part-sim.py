@@ -24,8 +24,10 @@ partition_names = args.partitions
 
 print(args.partitions)
 if '*' in args.partitions[0]:
-    paths = glob.glob(os.path.join(CONFIG_PATH, args.partitions[0]))
+    paths = glob.glob(os.path.join(CONFIG_PATH, args.partitions[0].replace("'","")))
     partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
+
+    args.system = partition_names[0].split(os.sep)[0]
 
 configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
 args_dicts = [
@@ -60,9 +62,11 @@ if args.replay:
             part = ad['partition']
             td = Telemetry(**ad)
             print(f"\n[{part}] loading traces from {args.replay[0]} …")
-            jobs_part, t0, t1, args_from_file = td.load_data(args.replay)
+            jobs_part, t0, t1 = td.load_data(args.replay)
             jobs_by_partition[part] = jobs_part
-            td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
+            #td.save_snapshot(jobs_part, t0, t1, args_from_file, filename=part.split('/')[-1])
+            # Check if args need to be extracted or merged! Not implemented yet!
+            td.save_snapshot(jobs=jobs_part, timestep_start=t0, timestep_end=t1, filename=part.split('/')[-1],args=args)
 
     # --- report how many jobs per partition ---
     for part, jl in jobs_by_partition.items():

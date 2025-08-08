@@ -166,7 +166,11 @@ class Workload:
             name = random.choice(JOB_NAMES)
             account = random.choice(ACCT_NAMES)
             cpu_util = cpu_util_distribution_to_draw_from(args,config)
+            if "CORES_PER_CPU" in config:
+                cpu_cores_required = random.randint(0, config["CORES_PER_CPU"])
             gpu_util = gpu_util_distribution_to_draw_from(args,config)
+            if "GPUS_PER_NODE" in config:
+                gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(max(gpu_util))))
             wall_time = wall_time_distribution_to_draw_from(args,config)
             end_time = start_time + wall_time
             time_limit = max(wall_time,wall_time_distribution_to_draw_from(args,config))
@@ -187,6 +191,8 @@ class Workload:
                                 end_time=end_time,
                                 wall_time=wall_time, trace_time=wall_time,
                                 trace_start_time=0, trace_end_time=wall_time,
+                                cpu_cores_required=cpu_cores_required,
+                                gpu_units_required=gpu_units_required,
                                 trace_quanta=config['TRACE_QUANTA']
                                 )
             job = Job(job_info)
@@ -295,8 +301,8 @@ class Workload:
             gpu_util = random.random() * config['GPUS_PER_NODE']
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = (truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600*downscale) * (3600*downscale))
-            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // (3600*downscale) * (3600*downscale))
+            wall_time = (truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
+            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
             #print(f"wall_time: {wall_time//downscale}")
            # print(f"time_limit: {time_limit//downscale}")
             end_state = determine_state(config['JOB_END_PROBS'])

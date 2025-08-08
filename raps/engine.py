@@ -275,8 +275,7 @@ class Engine:
             if self.debug:
                 print(f"JobID: {job.id}")
 
-            if job.state == JobState.RUNNING:
-                job.running_time = self.current_time - job.start_time
+            job.running_time = self.current_time - job.start_time
 
             if job.state != JobState.RUNNING:
                 raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
@@ -388,7 +387,6 @@ class Engine:
                 node_occupancy[node_id] += 1
 
         self.node_occupancy_history.append(node_occupancy)
-
 
         tick_data = TickData(
             current_time=self.current_time,

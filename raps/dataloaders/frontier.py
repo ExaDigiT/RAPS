@@ -124,7 +124,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     telemetry_stop but may different due to missing data, for each job.
 
     The returned values are these three:
-        - The list of parsed jobs. (as a job_dict)
+        - The list of parsed jobs. (as a Job object)
         - telemetry_start: int (in seconds)
         - telemetry_end: int (in seconds)
 

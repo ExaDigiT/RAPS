@@ -115,7 +115,7 @@ def system_config(system):
         "mit_supercloud": {
             "basic": False,
             "multi-part-sim": True,
-            "withdata": False,
+            "withdata": True,
             "cooling": False,
             "uncertainty": False,
             "time": False,
@@ -160,7 +160,7 @@ def system_file(system):
         "gcloudv2":["/v2/google_cluster_data_2011_sample"],
         "lassen":["Lassen-Supercomputer-Job-Dataset"],
         "marconi100":["job_table.parquet"],
-        "mit_supercloud":[""],
+        "mit_supercloud":["202201"],
         "setonix":[""],
         "summit":[]
     }

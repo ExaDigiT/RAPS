@@ -56,7 +56,7 @@ parser = add_workload_to_parser(parser)
 #parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
 
 # Scheduling options
-choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux', 'experimental']
+choices = ['default', 'scheduleflow', 'nrel', 'anl', 'flux', 'experimental', 'multitenant']
 parser.add_argument('--scheduler', type=str, choices=choices, default=choices[0], help='Name of scheduler')
 choices = [policy.value for policy in PolicyType]
 parser.add_argument('--policy', type=str, default=None, help='Schedule policy to use, e.g.:' + str(choices) + " or extended policies")

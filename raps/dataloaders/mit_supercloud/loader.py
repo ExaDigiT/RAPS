@@ -9,17 +9,17 @@ and gpu directories. The main paper associated with the MIT Supercloud Dataset
 is available here: https://arxiv.org/abs/2108.02037.
 There is more information available here: https://dcc.mit.edu/
 
-Note, that quite a bit of filtering is done with sanity checks to make sure 
+Note, that quite a bit of filtering is done with sanity checks to make sure
 the the CPU traces match the GPU traces, etc. At this point it's not uncommon
-if there may be 1569 total jobs in the time range, only 834 cpu jobs and 128 
+if there may be 1569 total jobs in the time range, only 834 cpu jobs and 128
 gpu jobs (962 total) are able to be replayed. This is an issue which will likely
 have to be improved in the future.
 
 ---------------------------------------------------------------------------
-Understanding some of the errors. We track the different reasons that 
-less than the total number of jobs in the slurm log actually run in the 
+Understanding some of the errors. We track the different reasons that
+less than the total number of jobs in the slurm log actually run in the
 simulator. This is not so much an issue for the CPU partition, but for
-the GPU partition, where we have to combine traces extracted from both 
+the GPU partition, where we have to combine traces extracted from both
 CPU trace files and GPU trace files.
 
 At the beginning of the GPU partition analysis, we give an analysis such as:
@@ -34,7 +34,7 @@ At the beginning of the GPU partition analysis, we give an analysis such as:
        * 128 jobs have BOTH CPU and GPU traces.
     ----------------------------------------------------
 
-We give a summary report at the end of the data loading process. An 
+We give a summary report at the end of the data loading process. An
 example report is shown for the range `--start 2021-05-21T00:00 --end 2021-05-22T00:00`
 
     Skipped jobs summary:
@@ -48,29 +48,29 @@ example report is shown for the range `--start 2021-05-21T00:00 --end 2021-05-22
     [INFO] Partition 'mit_supercloud/part-cpu': 834 jobs loaded
     [INFO] Partition 'mit_supercloud/part-gpu': 128 jobs loaded
 
-We explain each of these stats here. 
+We explain each of these stats here.
 
-    - `nodes_alloc > 480`: the number of jobs that are thrown out because 
+    - `nodes_alloc > 480`: the number of jobs that are thrown out because
        they request more than 480 nodes.
 
-    - `pruned_nodes`: the number of jobs thrown out because the node was 
+    - `pruned_nodes`: the number of jobs thrown out because the node was
        listed in `prune_list.txt`.
 
-    - `no_trace_file`: the number of jobs that were found in the Slurm log 
-       for the correct time window and partition, but for which not a single 
+    - `no_trace_file`: the number of jobs that were found in the Slurm log
+       for the correct time window and partition, but for which not a single
        corresponding trace file (neither CPU nor GPU) could be found on the filesystem.
 
-    - `no_cpu_trace_for_gpu_job`: The number of jobs that had a GPU trace file 
-       but were discarded because they were missing their required corresponding 
+    - `no_cpu_trace_for_gpu_job`: The number of jobs that had a GPU trace file
+       but were discarded because they were missing their required corresponding
        CPU trace file.
 
-    - `final_gpu_none_mixed`: The number of jobs in a GPU partition run that had 
+    - `final_gpu_none_mixed`: The number of jobs in a GPU partition run that had
       a CPU trace but were missing the final, processed GPU trace data.
 
-    - `final_cpu_none_mixed`: The number of jobs in a GPU partition run that were 
+    - `final_cpu_none_mixed`: The number of jobs in a GPU partition run that were
       missing the essential CPU trace data during the final job construction phase.
 
-Now, we work on debugging some of these. For example, for `no_cpu_trace_for_gpu_job`, 
+Now, we work on debugging some of these. For example, for `no_cpu_trace_for_gpu_job`,
 we can take the jid from the warning message:
 
     [WARNING] → no cpu trace for gpu! (jid=4074251073298) SKIPPING
@@ -93,12 +93,12 @@ Summary of node filtering:
 
 Filtering steps:
 
-1. Jobs with `nodes_alloc > 480` were excluded, based on the assumption that 
-   such large allocations span across GPU nodes. This removed 413 nodes, 
+1. Jobs with `nodes_alloc > 480` were excluded, based on the assumption that
+   such large allocations span across GPU nodes. This removed 413 nodes,
    leaving 494 candidate CPU-only nodes.
 
-2. To reach the target of 480 CPU nodes, we analyzed job frequency per node 
-   and pruned the 14 least-used nodes (those with only 1–26 jobs). 
+2. To reach the target of 480 CPU nodes, we analyzed job frequency per node
+   and pruned the 14 least-used nodes (those with only 1–26 jobs).
    These pruned nodes are listed in `prune_list.txt`.
 
 The final list of CPU-only nodes is stored in `cpu_nodes.txt`, and the list
@@ -144,7 +144,7 @@ def parse_tres_alloc(tres_str: Union[str, None],
                      stats: Counter = None) -> Dict[Union[int, str], int]:
     """
     Parse a Slurm tres_alloc/tres_req field like: '1=20,2=170000,4=1,5=20'
-    
+
     Parameters
     ----------
     tres_str : str | None
@@ -213,7 +213,7 @@ def load_data(local_dataset_path, **kwargs):
     """
     debug = kwargs.get("debug")
     NL_PATH = os.path.dirname(__file__)
-    
+
     skip_counts = Counter()
 
     # unpack
@@ -224,7 +224,7 @@ def load_data(local_dataset_path, **kwargs):
 
     # slurm log -> DataFrame
     slurm_path = None
-    for root, _, files in os.walk(local_dataset_path):
+    for root, _, files in os.walk(os.path.expanduser(local_dataset_path)):
         if "slurm-log.csv" in files:
             slurm_path = os.path.join(root, "slurm-log.csv")
             break
@@ -239,7 +239,7 @@ def load_data(local_dataset_path, **kwargs):
     # date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
     end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
-    
+
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
 
@@ -247,7 +247,7 @@ def load_data(local_dataset_path, **kwargs):
         print(f"[DEBUG] After time filtering: {len(sl)} jobs")
         hits = sl.loc[mask]
         lines = hits["__line__"].tolist()
-        print(f"data sourced from {len(lines)} records in slurm-log.csv. Line number ranges:", 
+        print(f"data sourced from {len(lines)} records in slurm-log.csv. Line number ranges:",
               summarize_ranges(lines))
 
     # --- prune out oversized jobs and known under‑used hosts ---
@@ -255,7 +255,7 @@ def load_data(local_dataset_path, **kwargs):
     pruned = set()
     with open(os.path.join(NL_PATH, "prune_list.txt")) as pf:
         pruned = {l.strip() for l in pf if l.strip()}
-    
+
     before_prune = len(sl)
     # only keep jobs requesting <= 480 nodes
     sl = sl[ sl.nodes_alloc <= 480 ]
@@ -380,7 +380,7 @@ def load_data(local_dataset_path, **kwargs):
 
 
     data = {}
-    
+
     traced_jobs = all_trace_ids
     untraced_jobs = job_ids - traced_jobs
     skip_counts['no_trace_file'] += len(untraced_jobs)
@@ -399,7 +399,7 @@ def load_data(local_dataset_path, **kwargs):
             if debug:
                 tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
             continue
-        
+
         job_row = job_info.iloc[0]
         if debug:
             start_time = job_row.get('time_start', 'N/A')
@@ -440,7 +440,7 @@ def load_data(local_dataset_path, **kwargs):
         for p in gpu_files[:10]:
             print("   ", p)
 
-    # data from the cpu processes are all stored under the `data` dictionary 
+    # data from the cpu processes are all stored under the `data` dictionary
     # according to their respective jid key
     #print("******", data.keys())
 
@@ -515,7 +515,7 @@ def load_data(local_dataset_path, **kwargs):
 
     # build final job_dicts
     jobs_list = []
-    
+
     # Get CPUS_PER_NODE and GPUS_PER_NODE from config
     config = kwargs.get('config', {})
     cpus_per_node = config.get('CPUS_PER_NODE')
@@ -571,12 +571,12 @@ def load_data(local_dataset_path, **kwargs):
         gpu_units_req = math.ceil(total_gpu / nr)
 
         # sometimes there are spurious large values for cpu util - set max limit based on peak
-        cpu_peak = cpu_cores_req / cores_per_cpu / cpus_per_node
+        cpu_peak = cpu_cores_req / cores_per_cpu / cpus_per_node  # Is this per CPU?
         cpu_tr = [min(x/cores_per_cpu/cpus_per_node, cpu_peak) for x in cpu_tr]
 
         submit_time = rec.get("time_submit", t0) - start_ts
 
-        job = job_dict(
+        current_job_dict = job_dict(
             nodes_required   = nr,
             cpu_cores_required = cpu_cores_req,
             gpu_units_required = gpu_units_req,
@@ -597,22 +597,26 @@ def load_data(local_dataset_path, **kwargs):
             wall_time        = max(0, t1-t0),
             trace_time       = len(cpu_tr)*quanta,
             trace_start_time = 0,
-            trace_end_time   = len(cpu_tr)*quanta
+            trace_end_time   = len(cpu_tr)*quanta,
+            trace_quanta = quanta
         )
+        job = Job(current_job_dict)
         jobs_list.append(job)
 
     # Calculate min_overall_utime and max_overall_utime
-    min_overall_utime = int(sl.time_submit.min())
-    max_overall_utime = int(sl.time_submit.max())
+    telemetry_start = int(sl.time_start.min())
+    telemetry_end = int(sl.time_end.max())
+    #min_overall_utime = int(sl.time_submit.min())
+    #max_overall_utime = int(sl.time_submit.max())
 
-    args_namespace = SimpleNamespace(
-        fastforward=min_overall_utime,
-        system='mit_supercloud',
-        time=max_overall_utime
-    )
-    
+    #args_namespace = SimpleNamespace(
+    #    fastforward=min_overall_utime,
+    #    system='mit_supercloud',
+    #    time=max_overall_utime
+    #)
+
     print("\nSkipped jobs summary:")
     for reason, count in skip_counts.items():
         print(f"- {reason}: {count}")
 
-    return jobs_list, min_overall_utime, max_overall_utime, args_namespace
+    return jobs_list, telemetry_start, telemetry_end  # min_overall_utime, max_overall_utime, args_namespace
