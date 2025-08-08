@@ -233,7 +233,7 @@ class Telemetry:
                         job['nodes_required'] = random.randint(1, args.scale)
                         job['scheduled_nodes'] = None  # Setting to None triggers scheduler to assign nodes
 
-                if hasattr(args,'policy') and args.policy == 'poisson':
+                if hasattr(args,'arrival') and args.arrival == 'poisson':
                     print("available nodes:", config['AVAILABLE_NODES'])
                     for job in tqdm(jobs, desc="Rescheduling jobs"):
                         job['scheduled_nodes'] = None
