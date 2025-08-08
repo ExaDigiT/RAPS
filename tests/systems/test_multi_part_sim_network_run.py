@@ -11,19 +11,22 @@ pytestmark = [
 ]
 
 
-def test_main_run(system, system_config):
-    if not system_config.get("basic", False):
-        pytest.skip(f"{system} does not support basic run.")
+def test_multi_part_sim_run(system, system_config):
+
+    if not system_config.get("multi-part-sim", False):
+        pytest.skip(f"{system} does not support basic multi-part-sim run.")
 
     if not system_config.get("net", False):
         pytest.skip(f"{system} does not support network run.")
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
-        "--time", "1m",
+        "python", "multi-part-sim.py",
+        "--time", "1h",
         "--system", system,
-        "-net"
+        "-x", f"{system}/*",
+        "-net",
+        #"--noui"
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     del result

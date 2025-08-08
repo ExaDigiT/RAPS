@@ -856,7 +856,8 @@ if __name__ == "__main__":
                         wall_time=wall_time,
                         trace_time=wall_time,
                         trace_start_time=0,
-                        trace_end_time=wall_time
+                        trace_end_time=wall_time,
+                        trace_quanta=config['TRACE_QUANTA']
                     ))
                     job_id_ctr += 1
 
@@ -887,12 +888,13 @@ if __name__ == "__main__":
                             submit_time=0,
                             time_limit=wall_time,
                             start_time=0,
-                                end_time=wall_time,
-                                wall_time=wall_time,
-                                trace_time=wall_time,
-                                trace_start_time=0,
-                                trace_end_time=wall_time
-                            ))
+                            end_time=wall_time,
+                            wall_time=wall_time,
+                            trace_time=wall_time,
+                            trace_start_time=0,
+                            trace_end_time=wall_time,
+                            trace_quanta=config['TRACE_QUANTA']
+                        ))
                         job_id_ctr += 1
 
             elif mode == 'STAGGERED_JOBS_PER_NODE':
@@ -924,7 +926,8 @@ if __name__ == "__main__":
                             wall_time=wall_time,
                             trace_time=wall_time,
                             trace_start_time=0,
-                            trace_end_time=wall_time
+                            trace_end_time=wall_time,
+                            trace_quanta=config['TRACE_QUANTA']
                         ))
                         job_id_ctr += 1
             else:

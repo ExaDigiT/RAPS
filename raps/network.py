@@ -220,7 +220,10 @@ def link_loads_for_job(G, job_hosts, tx_volume_bytes):
     loads = {edge: 0.0 for edge in G.edges()}
     # each host sends tx_volume_bytes to each of the (N-1) peers
     for src in job_hosts:
-        per_peer = tx_volume_bytes / (len(job_hosts)-1)
+        if len(job_hosts) >= 2:
+            per_peer = tx_volume_bytes / (len(job_hosts)-1)
+        else:
+            per_peer = 0
         # find paths where src is the sender
         for (s, d, p) in paths:
             if s != src: continue
