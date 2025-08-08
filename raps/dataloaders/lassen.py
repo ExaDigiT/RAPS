@@ -193,7 +193,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         if arrival == 'poisson':  # Modify the submit times according to Poisson process
             scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config,kwargs)
+            submit_time = fastforward + next_arrival_byconfkwargs(config,kwargs)
             start_time = submit_time  # Pretend Job could start immediately # Alternative: None
             end_time = submit_time + wall_time  # Alternative: None
         else:  # Prescribed replay

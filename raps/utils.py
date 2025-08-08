@@ -425,7 +425,6 @@ def create_dir_indexed(dir:str, path:str = None) -> str:
 def next_arrival_byconfargs(config,args,reset=False):
     arrival_rate = 1
     arrival_time = config['JOB_ARRIVAL_TIME']
-    time_delta = args.time_delta
     downscale = args.downscale
 
     if args.job_arrival_rate:
