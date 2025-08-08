@@ -17,7 +17,7 @@
         "V_flow_prim_GPM": "Facility Flowrate (gpm)",
         "W_flow_CDUP_kW": "Work Done By CDUP (kW)"	
     },
-    "TEMPERATURE_KEY": "simulator_1_centralEnergyPlant_1_coolingTowerLoop_1_sources_Towb",
+    "TEMPERATURE_KEYS": ["simulator_1_centralEnergyPlant_1_coolingTowerLoop_1_sources_Towb"],
     "W_HTWPs_KEY": "simulator[1].centralEnergyPlant[1].hotWaterLoop[1].summary.W_flow_HTWP_kW",
     "W_CTWPs_KEY": "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CTWP_kW",
     "W_CTs_KEY": "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CT_kW"
