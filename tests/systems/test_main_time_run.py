@@ -13,8 +13,10 @@ pytestmark = [
 
 
 @pytest.mark.parametrize("time_args", [
-    "0", "1", "3600", "7200", "43200",
-    "0s", "1s", "3600s", "7200s", "43200s",
+    "0", "1", "3600", "7200",
+    pytest.param("43200", marks=pytest.mark.long),  # mark this one as long
+    "0s", "1s", "3600s", "7200s",
+    pytest.param("43200s", marks=pytest.mark.long),  # mark this one as long
     "0m", "1m", "60m",
     "0h", "1h",
     pytest.param("6h", marks=pytest.mark.long),  # mark this one as long

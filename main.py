@@ -88,13 +88,13 @@ else:  # Synthetic jobs
     td = Telemetry(**args_dict)
     td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
 
-if args.fastforward:
+if args.fastforward is not None:
     timestep_start = args.fastforward
 
-if args.time:
+if args.time is not None:
     timestep_end = timestep_start + args.time
 
-if args.time_delta:
+if args.time_delta is not None:
     time_delta = args.time_delta
 else:
     time_delta = 1
