@@ -32,6 +32,7 @@ from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
 from raps.utils import create_file_indexed, create_dir_indexed, convert_to_seconds
 
+
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
              "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
              "ABINIT", "Cactus", "Charm++", "NWChem", "STAR-CCM+",\
@@ -775,8 +776,7 @@ def check_workload_args(args):
         exit(1)
 
 
-if __name__ == "__main__":
-
+def run_workload():
     from raps.args import args, args_dict
     from raps.config import ConfigManager
     config = ConfigManager(system_name=args.system).get_config()
@@ -939,3 +939,7 @@ if __name__ == "__main__":
                 raise ValueError(f"Unknown multitenant mode: {mode}")
 
         return jobs
+
+
+if __name__ == "__main__":
+    run_workload()

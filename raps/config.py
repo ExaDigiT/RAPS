@@ -3,7 +3,8 @@ import os
 from typing import Dict, Any
 from pathlib import Path
 
-CONFIG_PATH = Path(os.environ.get("RAPS_CONFIG", 'config')).resolve()
+ROOT_DIR = os.path.dirname(os.path.split(__file__)[0])
+CONFIG_PATH = Path(os.environ.get("RAPS_CONFIG", ROOT_DIR + '/config')).resolve()
 
 
 class ConfigManager:

@@ -326,3 +326,35 @@ def get_job_stats(engine: Engine):
         'priority_weighted_specific_response_time': psf
     }
     return job_stats
+
+
+def print_formatted_report(engine_stats=None,
+                           job_stats=None,
+                           scheduler_stats=None,
+                           network_stats=None
+                           ):
+    # Print a formatted report
+    if engine_stats:
+        rep_str = "--- Simulation Report ---"
+        print(f"\n{rep_str}")
+        for key, value in engine_stats.items():
+            print(f"{key.replace('_', ' ').title()}: {value}")
+        print(f"{'-' * len(rep_str)}\n")
+    if job_stats:
+        rep_str = "--- Job Stat Report ---"
+        print(f"\n{rep_str}")
+        for key, value in job_stats.items():
+            print(f"{key.replace('_', ' ').title()}: {value}")
+        print(f"{'-' * len(rep_str)}\n")
+    if scheduler_stats:
+        rep_str = "--- Scheduler Report ---"
+        print(f"\n{rep_str}")
+        for key, value in scheduler_stats.items():
+            print(f"{key.replace('_', ' ').title()}: {value}")
+        print(f"{'-' * len(rep_str)}\n")
+    if network_stats:
+        rep_str = "--- Network Report ---"
+        print(f"\n{rep_str}")
+        for key, value in network_stats.items():
+            print(f"{key.replace('_', ' ').title()}: {value}")
+        print(f"{'-' * len(rep_str)}\n")

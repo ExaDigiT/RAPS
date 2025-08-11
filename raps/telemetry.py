@@ -271,7 +271,7 @@ class Telemetry:
         return jobs, timestep_start, timestep_end, args
 
 
-if __name__ == "__main__":
+def run_telemetry():
     config = ConfigManager(system_name=args.system).get_config()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
@@ -353,3 +353,7 @@ if __name__ == "__main__":
             net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
             plot_network_histogram(ax=ax,data=net_means)
     plt.show()
+
+
+if __name__ == "__main__":
+    run_telemetry()
