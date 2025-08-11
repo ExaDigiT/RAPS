@@ -136,7 +136,7 @@ downscale = args.downscale
 downscale_str = ""if downscale == 1 else f"/{downscale}"
 print(f'Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str} seconds from {timestep_start} to {timestep_end}.')
 print(f'Simulation time delta: {time_delta}{downscale_str} s, Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.')
-layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, **config)
+layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, args_dict=args_dict, **config)
 layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
 
 

@@ -125,6 +125,7 @@ def load_data_from_df(df, **kwargs):
         trace_start_time = start_time
         trace_end_time = end_time
         trace_missing_values = False  # Sane Choice?
+        trace_quanta = config['TRACE_QUANTA']
 
         # Should we still have this?
         # if arrival == 'poisson':  # Modify the arrival times of according to Poisson distribution
@@ -142,6 +143,7 @@ def load_data_from_df(df, **kwargs):
             gpu_trace=gpu_trace,
             ntx_trace=[],
             nrx_trace=[],
+            trace_quanta=trace_quanta,
             end_state=end_state,
             scheduled_nodes=scheduled_nodes,
             id=job_id,

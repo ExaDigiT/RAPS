@@ -16,7 +16,7 @@ class Scheduler:
     """
 
     def __init__(self, config, policy, bfpolicy, resource_manager, jobs):
-        self.sorted_priorities = sorted([x['priority'] for x in jobs])
+        self.sorted_priorities = sorted([x.priority for x in jobs])
         num_prios = len(self.sorted_priorities)
         # self.sf_queue = []
         self.queue = []  # track submitted jobs
@@ -95,7 +95,7 @@ class Scheduler:
                     for sf_app in start_jobs:
                         job = _match_sf_app_and_job(sf_app,queue,start_jobs)
                         queue.remove(job)
-                        self.resource_manager.assign_nodes_to_job(job, current_time)
+                        self.resource_manager.assign_nodes_to_job(job, current_time, self.policy)
                         running.append(job)
 
 
