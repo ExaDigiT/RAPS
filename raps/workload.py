@@ -168,9 +168,14 @@ class Workload:
             cpu_util = cpu_util_distribution_to_draw_from(args,config)
             if "CORES_PER_CPU" in config:
                 cpu_cores_required = random.randint(0, config["CORES_PER_CPU"])
+            else:
+                cpu_cores_required = None
             gpu_util = gpu_util_distribution_to_draw_from(args,config)
             if "GPUS_PER_NODE" in config:
-                gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(max(gpu_util))))
+                if isinstance(gpu_util,list):
+                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(max(gpu_util))))
+                else:
+                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(gpu_util)))
             wall_time = wall_time_distribution_to_draw_from(args,config)
             end_time = start_time + wall_time
             time_limit = max(wall_time,wall_time_distribution_to_draw_from(args,config))
