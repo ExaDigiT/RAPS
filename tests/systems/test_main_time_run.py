@@ -22,7 +22,7 @@ pytestmark = [
     pytest.param("6h", marks=pytest.mark.long),  # mark this one as long
 ])
 def test_main_time_run(system, system_config, time_args):
-    if not system_config.get("basic", False):
+    if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
     os.chdir(PROJECT_ROOT)

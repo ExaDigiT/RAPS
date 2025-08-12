@@ -280,6 +280,7 @@ def run_telemetry():
 
     else:
         parser.print_help()
+        exit()
 
     timesteps = timestep_end - timestep_start
 

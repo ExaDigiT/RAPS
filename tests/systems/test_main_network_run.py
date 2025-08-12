@@ -12,8 +12,8 @@ pytestmark = [
 
 
 def test_main_network_run(system, system_config):
-    if not system_config.get("basic", False):
-        pytest.skip(f"{system} does not support basic run.")
+    if not system_config.get("main", False):
+        pytest.skip(f"{system} does not support basic main run.")
 
     if not system_config.get("net", False):
         pytest.skip(f"{system} does not support network run.")
