@@ -39,6 +39,7 @@ def system_config(system):
         "40frontiers": {
             "main": True,
             "telemetry": False,
+            "workload": False,
             "multi-part-sim": False,
             "withdata": False,
             "cooling": False,
@@ -51,6 +52,7 @@ def system_config(system):
         "adastraMI250": {
             "main": True,
             "telemetry": True,
+            "workload": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": False,
@@ -63,6 +65,7 @@ def system_config(system):
         "frontier": {
             "main": True,
             "telemetry": True,
+            "workload": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": True,
