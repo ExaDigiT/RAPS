@@ -30,6 +30,7 @@ if __name__ == "__main__":
     choices = ['prescribed', 'poisson']
     parser.add_argument('--arrival', default=choices[0], type=str, choices=choices, help=f'Modify arrival distribution ({choices[1]}) or use the original submit times ({choices[0]})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('-o', '--output', type=str, default=None, help='Store output in --output <arg> file.')
     args = parser.parse_args()
     args_dict = vars(args)
 
@@ -353,7 +354,11 @@ def run_telemetry():
             # combine into total per‐job traffic
             net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
             plot_network_histogram(ax=ax,data=net_means)
-    plt.show()
+    if args.output:
+        plt.savefig(f'{args.output}')
+        print(f"Saved to: {args.output}")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
