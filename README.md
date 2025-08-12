@@ -13,7 +13,7 @@ Instructions for setup and usage are given below. An online documentation of Exa
 
 ## Setup environment
 
-Note: Requires python3.9 or greater.
+Note: Requires python3.11 or greater.
 
     pip install -e .
 

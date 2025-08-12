@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "raps"
 version = "0.0.1"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 description = "RAPS"
 readme = "README.md"
 # license = {file = "LICENSE.txt"}
