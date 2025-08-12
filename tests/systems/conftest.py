@@ -37,7 +37,8 @@ def system_config(system):
 
     configs = {
         "40frontiers": {
-            "basic": True,
+            "main": True,
+            "telemetry": False,
             "multi-part-sim": False,
             "withdata": False,
             "cooling": False,
@@ -48,7 +49,8 @@ def system_config(system):
             "net": False,
         },
         "adastraMI250": {
-            "basic": True,
+            "main": True,
+            "telemetry": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": False,
@@ -59,7 +61,8 @@ def system_config(system):
             "net": False,
         },
         "frontier": {
-            "basic": True,
+            "main": True,
+            "telemetry": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": True,
@@ -70,7 +73,8 @@ def system_config(system):
             "net": False,
         },
         "fugaku": {
-            "basic": True,
+            "main": True,
+            "telemetry": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": False,
@@ -81,7 +85,8 @@ def system_config(system):
             "net": False,
         },
         "gcloudv2": {
-            "basic": False,
+            "main": False,
+            "telemetry": False,
             "multi-part-sim": False,
             "withdata": False,
             "cooling": False,
@@ -92,7 +97,8 @@ def system_config(system):
             "net": False,
         },
         "lassen":{
-            "basic": True,
+            "main": True,
+            "telemetry": False,  # Takes very long!
             "multi-part-sim": False,
             "withdata": True,
             "cooling": True,
@@ -103,7 +109,8 @@ def system_config(system):
             "net": True,
         },
         "marconi100":{
-            "basic": True,
+            "main": True,
+            "telemetry": True,
             "multi-part-sim": False,
             "withdata": True,
             "cooling": True,
@@ -114,7 +121,8 @@ def system_config(system):
             "net": False,
         },
         "mit_supercloud": {
-            "basic": False,
+            "main": False,
+            "telemetry": False,
             "multi-part-sim": True,
             "withdata": True,
             "cooling": False,
@@ -126,7 +134,8 @@ def system_config(system):
             "net-multi-sim": True,
         },
         "setonix": {
-            "basic": False,
+            "main": False,
+            "telemetry": True,
             "multi-part-sim": True,
             "withdata": False,
             "cooling": False,
@@ -137,7 +146,8 @@ def system_config(system):
             "net": False,
         },
         "summit": {
-            "basic": True,
+            "main": True,
+            "telemetry": False,
             "multi-part-sim": False,
             "withdata": False,
             "cooling": True,
@@ -148,7 +158,8 @@ def system_config(system):
             "net": False,
         },
         "lumi": {
-            "basic": False,
+            "main": False,
+            "telemetry": False,
             "multi-part-sim": True,
             "withdata": False,
             "cooling": False,

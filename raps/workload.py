@@ -566,7 +566,7 @@ class Workload:
         return jobs
 
 
-def plot_job_hist(jobs,config=None,dist_split=None):
+def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     # put args.multimodal in dist_split!
     split = [1.0]
     num_dist = 1
@@ -614,10 +614,14 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     axs[1][0].scatter(x, y,zorder=3)
 
     cpu_util = [x.cpu_trace for x in jobs]
-    if isinstance(cpu_util[0],(np.ndarray, list)):
+    if isinstance(cpu_util[0], np.ndarray):
+        cpu_util = np.concatenate(cpu_util).ravel()
+    elif isinstance(cpu_util[0], list):
         cpu_util = [sum(part) / len(part) for part in cpu_util]
     gpu_util = [x.gpu_trace for x in jobs]
-    if isinstance(gpu_util[0],(np.ndarray, list)):
+    if isinstance(gpu_util[0], np.ndarray):
+        gpu_util = np.concatenate(gpu_util).ravel()
+    elif isinstance(gpu_util[0], list):
         gpu_util = [sum(part) / len(part) for part in gpu_util]
     if not all([x == 0 for x in gpu_util]):
         axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
@@ -677,7 +681,6 @@ def plot_job_hist(jobs,config=None,dist_split=None):
     offset = 0
     split_index = 0
     split_offset = math.floor(len(x) * split[split_index])
-    gantt_nodes = args.gantt_nodes
     if gantt_nodes:
         if split[0] == 0.0:
             ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
@@ -786,7 +789,7 @@ def run_workload():
     else:
         workload = Workload(config)
         jobs = getattr(workload, args.workload)(args=args)
-    plot_job_hist(jobs, config=config, dist_split=args.multimodal)
+    plot_job_hist(jobs, config=config, dist_split=args.multimodal, gantt_nodes=args.gantt_nodes)
     if args.output:
         timestep_start = min([x.submit_time for x in jobs])
         timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.wall_time for x in jobs]))

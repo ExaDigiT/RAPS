@@ -12,7 +12,7 @@ pytestmark = [
 
 
 def test_main_run(system, system_config):
-    if not system_config.get("basic", False):
+    if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
     os.chdir(PROJECT_ROOT)
