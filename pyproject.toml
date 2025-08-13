@@ -26,5 +26,6 @@ dependencies = [
     "networkx>=3.5",
     "pytest",
     "pytest-order",
-    "pytest-xdist"
+    "pytest-xdist",
+    "pyyaml>=6.0.2"
 ]

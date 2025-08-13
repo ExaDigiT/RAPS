@@ -1,0 +1,3 @@
+system: marconi100
+replay:
+  - ~/data/marconi100/job_table.parquet

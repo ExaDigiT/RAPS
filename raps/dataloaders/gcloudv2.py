@@ -6,7 +6,8 @@ from typing import List, Optional, Generator, Tuple, Any, Union
 import numpy as np
 import pandas as pd
 
-from raps.job import job_dict  # ensure RAPS is in PYTHONPATH
+from raps.job import job_dict
+from raps.job import Job
 
 """
 Official instructions are here:
@@ -198,6 +199,7 @@ class GoogleClusterV2DataLoader:
 
 
 def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any], float, float]:
+    config = kwargs.get('config')
     # Unpack list
     if isinstance(data_path, list):
         if len(data_path)==1:
@@ -256,6 +258,9 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
     t0 = df["timestamp"].min()
     t1 = df["timestamp"] - t0
 
+    # Get trace quanta
+    trace_quanta = config['TRACE_QUANTA']
+
     # Load task usage
     usage_loader = GoogleClusterV2DataLoader(base_path, event_type="task_usage", concatenate=True)
     usage_df = next(iter(usage_loader))
@@ -294,15 +299,20 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
 
         if jid_f!='*' and str(jid)!=str(jid_f): continue
         trace = usage_map[jid]
-        # ensure gpu_trace is same length
-        gpu_trace = np.zeros_like(trace)
-        job = job_dict(
-            nodes_required=nodes_required,
+        # ensure gpu_trace is same length as cpu_trace
+        gpu_trace = np.zeros_like(trace, dtype=float)
+
+        # nodes_required should be a positive int
+        nr = int(nodes_required_map.get(jid, 1))
+        if nr < 1:
+            nr = 1
+
+        job_d = job_dict(
+            nodes_required=nr,
             name=f"job_{jid}",
             account=f"user_{row.get('user_name','unknown')}",
             cpu_trace=trace,
-            #gpu_trace=gpu_trace,
-            gpu_trace=0,
+            gpu_trace=gpu_trace,
             nrx_trace=[], ntx_trace=[],
             end_state="UNKNOWN", scheduled_nodes=[],
             id=jid, priority=int(row.get('scheduling_class',0)),
@@ -310,10 +320,11 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             submit_time=start, time_limit=0,
             start_time=start, end_time=end,
             wall_time=wall, trace_time=row["timestamp"],
-            trace_start_time=start, trace_end_time=end
+            trace_start_time=start, trace_end_time=end, trace_quanta=trace_quanta
         )
+        # Wrap dict in a real Job so telemetry.save_snapshot() can use __dict__
         #if nodes_required > 0:
-        jobs.append(job)
+        jobs.append(Job(job_d))
 
     # Compute simulation span: start at t=0, end at the latest job finish
     simulation_start = 0
