@@ -12,12 +12,6 @@ def load_config(path):
     return {}
 
 
-def check_partitions(config):
-    if len(config.get("partitions", [])) > 1 and \
-       os.path.basename(sys.argv[0]) == "main.py":
-        sys.exit("Error: Use multi-part-sim.py for multi-partition runs.")
-
-
 def _expand_path(p):
     if isinstance(p, str):
         # expand ~ and $VARS
@@ -113,9 +107,9 @@ parser.add_argument("-n", "--numjobs", type=int, default=100,
 parser.add_argument("-v", "--verbose", action="store_true",
                     help="Enable verbose output")
 parser.add_argument("--start", type=str, default="2021-05-21T13:00",
-                    help="ISO8061 start of simulation")
+                    help="ISO8601 start of simulation")
 parser.add_argument("--end", type=str, default="2021-05-21T14:00",
-                    help="ISO8061 end of simulation")
+                    help="ISO8601 end of simulation")
 parser.add_argument("--seed", action="store_true",
                     help="Set RNG seed for deterministic simulation")
 parser.add_argument(
@@ -225,9 +219,6 @@ if args.config_file and not os.path.isfile(args.config_file):
 
 cfg = load_config(args.config_file)
 
-# If launching multi-partition case with main.py error out
-check_partitions(cfg)
-
 apply_config_to_args(cfg, args)
 
 # Optional: format fileprefix after config merge (if provided by workload parser)
@@ -237,9 +228,37 @@ if hasattr(args, "fileprefix") and isinstance(args.fileprefix, str):
     except KeyError as e:
         print(f"Warning: missing placeholder {e} in fileprefix; skipping.")
 
+# Expand paths inside list fields (e.g., replay)
+if getattr(args, "replay", None):
+    if isinstance(args.replay, str):
+        args.replay = [args.replay]
+    args.replay = [_expand_path(p) for p in args.replay]
+
 # Prefer replay if both replay and workload got set
 if getattr(args, "replay", None) and getattr(args, "workload", None):
     print("Info: --replay provided; ignoring --workload.", file=sys.stderr)
+    print("Info: --replay provided; ignoring --workload.", file=sys.stderr)
+    args.workload = None
+
+# Enforce valid policy/backfill values (after normalization in apply_config_to_args)
+if getattr(args, "policy", None):
+    _valid_policies = {p.value for p in PolicyType}
+    if args.policy not in _valid_policies:
+        sys.exit(f"Error: Unknown policy '{args.policy}'. "
+                 f"Valid: {sorted(_valid_policies)}")
+if getattr(args, "backfill", None):
+    _valid_backfills = {b.value for b in BackfillType}
+    if args.backfill not in _valid_backfills:
+        sys.exit(f"Error: Unknown backfill '{args.backfill}'. "
+                 f"Valid: {sorted(_valid_backfills)}")
+
+# Multi-partition guard for single-part driver (check merged args incl. CLI)
+if os.path.basename(sys.argv[0]) == "main.py":
+    _parts = args.partitions or []
+    if isinstance(_parts, str):
+        _parts = [_parts]
+    if len(_parts) > 1:
+        sys.exit("Error: Use multi-part-sim.py for multi-partition runs.")
 
 # Validate workload args before time conversions
 check_workload_args(args)
