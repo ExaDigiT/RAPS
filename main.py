@@ -1,4 +1,11 @@
-""" Shortest-job first (SJF) job schedule simulator """
+"""
+Main driver for simulating the RAPS single-partition (homogeneous)
+system in the ExaDigiT digital twin. Supports synthetic workload
+generation or telemetry replay, dynamic power modeling (including
+conversion losses), and optional coupling to a thermo-fluids cooling
+model. Produces performance, utilization, and energy metrics, with
+optional plots and output files for analysis and validation.
+"""
 
 import json
 import numpy as np

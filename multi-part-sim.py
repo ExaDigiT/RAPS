@@ -1,3 +1,12 @@
+"""
+Main driver for simulating multi-partition (heterogeneous) systems in the RAPS
+module of ExaDigiT.  Supports replaying telemetry or generating synthetic 
+workloads across CPU-only, GPU, and mixed partitions.  Initializes per-
+partition power, FLOPS, and scheduling models, then advances simulations in 
+lockstep.  Outputs per-partition performance, utilization, and energy 
+statistics for systems such as MIT Supercloud, Setonix, Adastra, and LUMI.
+"""
+
 from raps.helpers import check_python_version
 check_python_version()
 

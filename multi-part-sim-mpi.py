@@ -1,3 +1,11 @@
+"""
+MPI-enabled driver for simulating multi-partition RAPS systems.
+Distributes partitions across ranks with mpi4py for parallel run.
+Supports telemetry replay or synthetic workloads with per-rank
+power, FLOPS, and scheduling models. Outputs debug and summary
+stats for heterogeneous systems (e.g., LUMI, Setonix, Adastra).
+"""
+
 from raps.helpers import check_python_version
 check_python_version()
 
