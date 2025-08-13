@@ -55,7 +55,11 @@ class Telemetry:
         self.kwargs = kwargs
         self.system = kwargs.get('system')
         self.config = kwargs.get('config')
-        self.dirname = create_casename()
+        outname = kwargs.get('output')
+        if outname is None or outname == "":
+            self.dirname = create_casename()
+        else:
+            self.dirname = outname
         try:
             self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
         except:
@@ -250,8 +254,8 @@ class Telemetry:
                 extracted_date = matched_date.group(0)
                 self.dirname = "sim=" + extracted_date
             else:
-                extracted_date = "Date not found"
-                self.dirname = create_casename()
+                extracted_date = f"Date not found, dirname is: {self.dirname}"
+                print(extracted_date)
 
             print(*args.replay)
             try:
@@ -354,9 +358,13 @@ def run_telemetry():
             # combine into total per‐job traffic
             net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
             plot_network_histogram(ax=ax,data=net_means)
-    if args.output:
-        plt.savefig(f'{args.output}')
-        print(f"Saved to: {args.output}")
+    if args.output is not None:
+        if args.output == "":
+            filename = f"{td.dirname}.svg"
+        else:
+            filename = args.output
+        plt.savefig(f'{filename}')
+        print(f"Saved to: {filename}")
     else:
         plt.show()
 

@@ -12,7 +12,7 @@ pytestmark = [
 ]
 
 
-def test_main_run(request, system, system_config):
+def test_main_run(request, system, system_config, random_id):
     print(f"Markexpr: {request.config.option.markexpr}")
     if not system_config.get("uncertainty", False) or not system_config.get("cooling", False):
         pytest.skip(f"{system} does not support cooling or uncertainty.")
@@ -24,8 +24,16 @@ def test_main_run(request, system, system_config):
         "--system", system,
         "-c",
         "-u",
-        "--noui"
+        "--noui",
+        "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
+
+    subprocess.run(
+        f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",
+        shell=True,
+        check=True
+    )
+
     del result
     gc.collect()

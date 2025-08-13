@@ -11,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_main_withdata_run(system, system_config, system_file):
+def test_main_withdata_run(system, system_config, system_file, random_id):
     if not system_config.get("telemetry", False):
         pytest.skip(f"{system} does not support telemetry run.")
     if not system_config.get("withdata", False):
@@ -28,7 +28,15 @@ def test_main_withdata_run(system, system_config, system_file):
         "python", "raps/telemetry.py",
         "--system", system,
         "-f", *file_list,
+        "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
+
+    subprocess.run(
+        f"rm {random_id}.npz ; rm {random_id}.png",
+        shell=True,
+        check=True
+    )
+
     del result
     gc.collect()

@@ -142,7 +142,7 @@ def main():
             accounts = job_accounts
         sc.accounts = accounts
 
-    if args.plot or args.output:
+    if args.plot or args.output is not None:
         try:
             os.makedirs(OPATH)
         except OSError as error:
@@ -228,7 +228,7 @@ def main():
             else:
                 print('Cooling model not enabled... skipping output of plot')
 
-    if args.output:
+    if args.output is not None:
 
         if args.uncertainties:
             # Parquet cannot handle annotated ufloat format AFAIK

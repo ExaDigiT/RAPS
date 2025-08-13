@@ -210,7 +210,7 @@ class Workload:
         print(args)
         total_jobs = args.numjobs
         orig_job_size_distribution = args.jobsize_distribution
-        orig_wall_time_distribution = args.jobsize_distribution
+        orig_wall_time_distribution = args.walltime_distribution
         orig_cpuutil_distribution = args.cpuutil_distribution
         orig_gpuutil_distribution = args.gpuutil_distribution
         jobs = []
