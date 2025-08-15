@@ -126,8 +126,8 @@ parser.add_argument("--layout", type=str, choices=ui_layout_choices,
 parser.add_argument('-o', '--output', type=str, nargs="?",
                     const="",  # Used if -o is given without a value
                     default=None,     # Used if -o is not provided at all
-                    help=("Output power, cooling, and loss models for later ",
-                          "analysis. Argumment specifies name."),
+                    help=("Output power, cooling, and loss models for later "
+                          "analysis. Argumment specifies name.")
                     )
 plot_choices = ["power", "loss", "pue", "temp", "util"]
 parser.add_argument("-p", "--plot", nargs="+", choices=plot_choices,
