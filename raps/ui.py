@@ -194,14 +194,6 @@ class LayoutManager:
                 nodes_display,
                 running_time_str
             ]
-            row.append(nodes_display)
-
-            #if show_nodes:
-            #    # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
-            #    row.append(col_nodelist)
-
-            # Finally, append the running‐time column
-            row.append(convert_seconds_to_hhmm(job.running_time))
 
             # If the job has been flagged as “dilated”, show its row in yellow
             if getattr(job, "dilated", False):

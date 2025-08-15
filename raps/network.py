@@ -73,7 +73,7 @@ class NetworkModel:
                 net_cong = worst_link_util(loads, max_throughput)
 
             else:  # capacity model: simple α+β or normalized overload
-                net_cong = network_congestion(ntx_util, nrx_util, max_throughput)
+                net_cong = network_congestion(net_tx, net_rx, max_throughput)
 
         return net_util, net_cong, net_tx, net_rx, max_throughput
 

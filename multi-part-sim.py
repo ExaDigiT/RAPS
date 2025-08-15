@@ -1,9 +1,9 @@
 """
 Main driver for simulating multi-partition (heterogeneous) systems in the RAPS
-module of ExaDigiT.  Supports replaying telemetry or generating synthetic 
+module of ExaDigiT.  Supports replaying telemetry or generating synthetic
 workloads across CPU-only, GPU, and mixed partitions.  Initializes per-
-partition power, FLOPS, and scheduling models, then advances simulations in 
-lockstep.  Outputs per-partition performance, utilization, and energy 
+partition power, FLOPS, and scheduling models, then advances simulations in
+lockstep.  Outputs per-partition performance, utilization, and energy
 statistics for systems such as MIT Supercloud, Setonix, Adastra, and LUMI.
 """
 
@@ -102,7 +102,7 @@ if args.replay:
             job.submit_time = next_arrival(1 / partition_config['JOB_ARRIVAL_TIME'])
 
 else:  # Synthetic workload
-    wl = Workload(*configs)
+    wl = Workload(args,*configs)
 
     total_initial_jobs = args.numjobs
 

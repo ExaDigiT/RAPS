@@ -49,10 +49,17 @@ from raps.utils import truncated_normalvariate_int, truncated_normalvariate_floa
 
 
 class Workload:
-    def __init__(self, *configs):
+    def __init__(self,args,*configs):
         """ Initialize Workload with multiple configurations.  """
         self.partitions = [config['system_name'] for config in configs]
         self.config_map = {config['system_name']: config for config in configs}
+        self.args = args
+
+    def generate_jobs(self):
+        # This function calls the job generation function as specified by the workload keyword.
+        # The respective funciton of this class is called.
+        jobs = getattr(self,self.args.workload)(args=self.args)
+        return jobs
 
     def compute_traces(self, cpu_util: float, gpu_util: float, wall_time: int, trace_quanta: int) -> tuple[np.ndarray, np.ndarray]:
         """ Compute CPU and GPU traces based on mean CPU & GPU utilizations and wall time. """
@@ -149,14 +156,14 @@ class Workload:
     def wall_time_distribution_draw_weibull(self,args,config):
         return truncated_weibull(args.walltime_weibull_scale, args.walltime_weibull_shape, config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
 
-    def generate_jobs(self, *,
-                      job_arrival_distribution_to_draw_from,
-                      job_size_distribution_to_draw_from,
-                      cpu_util_distribution_to_draw_from,
-                      gpu_util_distribution_to_draw_from,
-                      wall_time_distribution_to_draw_from,
-                      args
-                      ) -> list[list[any]]:
+    def generate_jobs_from_distribution(self, *,
+                                        job_arrival_distribution_to_draw_from,
+                                        job_size_distribution_to_draw_from,
+                                        cpu_util_distribution_to_draw_from,
+                                        gpu_util_distribution_to_draw_from,
+                                        wall_time_distribution_to_draw_from,
+                                        args
+                                        ) -> list[list[any]]:
         jobs = []
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
@@ -203,6 +210,25 @@ class Workload:
                                 )
             job = Job(job_info)
             jobs.append(job)
+        return jobs
+
+    # Test for random 'reasonable' AI jobs
+    def randomAI(self, **kwargs):
+        args = kwargs.get('args',None)
+        jobs = []
+        for i in range(args.numjobs):
+            draw = random.randint(0,10)
+            if draw == 0:
+                et = random.randint(7200,28800)
+                nr = random.choice([128,256,512,1024,1280,1792,2048])
+                new_job = Job(job_dict(nodes_required=nr,name="LLM",account="llmUser",end_state="Success",
+                                       id=random.randint(1,99999),cpu_trace=0.1,gpu_trace=(random.uniform(0.55,0.8) * self.config_map[self.args.system]['GPUS_PER_NODE']),ntx_trace=None,
+                                       nrx_trace=None,submit_time=0,time_limit=random.randint(43200,43200),start_time=0,end_time=et,wall_time=et))
+            else:
+                new_job = Job(job_dict(nodes_required=1,name="LLM",account="llmUser",end_state="Success",
+                                       id=random.randint(1,99999),cpu_trace=1,gpu_trace=(0.2 * self.config_map[self.args.system]['GPUS_PER_NODE']),ntx_trace=None,
+                                       nrx_trace=None,submit_time=0,time_limit=43200,start_time=0,end_time=7200,wall_time=random.randint(60,7200)))
+            jobs.append(new_job)
         return jobs
 
     def synthetic(self, **kwargs):
@@ -269,7 +295,7 @@ class Workload:
                 case _:
                     raise NotImplementedError(args.gpuutil_distribution)
 
-            new_jobs = self.generate_jobs(
+            new_jobs = self.generate_jobs_from_distribution(
                 job_arrival_distribution_to_draw_from=job_arrival_distribution_to_draw_from,
                 job_size_distribution_to_draw_from=job_size_distribution_to_draw_from,
                 cpu_util_distribution_to_draw_from=cpu_util_distribution_to_draw_from,
@@ -942,6 +968,15 @@ def run_workload():
                 raise ValueError(f"Unknown multitenant mode: {mode}")
 
         return jobs
+
+
+def continuous_job_generation(*,engine,timestep,jobs):
+    #print("if len(engine.queue) <= engine.continuous_workload.args.maxqueue:")
+    #print(f"if {len(engine.queue)} <= {engine.continuous_workload.args.maxqueue}:")
+    if len(engine.queue) <= engine.continuous_workload.args.maxqueue:
+        new_jobs = engine.continuous_workload.generate_jobs()
+        jobs.extend(new_jobs)
+    pass
 
 
 if __name__ == "__main__":
