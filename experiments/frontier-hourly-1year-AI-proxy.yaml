@@ -1,0 +1,12 @@
+system: frontier
+continuous-job-generation: True
+downtime-first: 8h
+downtime-interval: 7d
+downtime-length: 4h
+time: 356d
+time-delta: 1h
+numjobs: 1
+maxqueue: 30
+workload: randomAI
+policy: fcfs
+backfill: firstfit

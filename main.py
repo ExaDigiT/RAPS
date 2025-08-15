@@ -91,13 +91,12 @@ def main():
         # TODO: Merge args and args_from_files? see telemetry.py:97
 
     else:  # Synthetic jobs
-        wl = Workload(config)
-        jobs = getattr(wl, args.workload)(args=args)
+        wl = Workload(args,config)
+        jobs = wl.generate_jobs()
 
         if args.verbose:
-            for job_vector in jobs:
-                job = Job(job_vector)
-                print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
+            for job in jobs:
+                print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace) if isinstance(job.gpu_trace,list) else job.gpu_trace, '\twall_time(s):', job.wall_time)
             time.sleep(2)
 
         timestep_start = 0
@@ -120,10 +119,16 @@ def main():
     else:
         time_delta = 1
 
+    if args.continuous_job_generation:
+        continuous_workload = wl
+    else:
+        continuous_workload = None
+
     sc = Engine(
         power_manager=power_manager,
         flops_manager=flops_manager,
         cooling_model=cooling_model,
+        continuous_workload=continuous_workload,
         jobs=jobs,
         **args_dict,
     )
