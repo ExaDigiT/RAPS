@@ -1,6 +1,11 @@
 from typing import Optional, List
 import dataclasses
 import pandas as pd
+import threading
+import sys
+import tty
+import termios
+import time
 
 from raps.job import Job, JobState
 from raps.policy import PolicyType
@@ -40,6 +45,37 @@ class TickData:
     avg_net_util: float
     slowdown_per_job: float
     node_occupancy: dict[int, int]
+
+
+class SimulationState:
+    def __init__(self):
+        self.paused = False
+        self.lock = threading.Lock()
+
+    def toggle_pause(self):
+        with self.lock:
+            self.paused = not self.paused
+
+    def is_paused(self):
+        with self.lock:
+            return self.paused
+
+def keyboard_listener(state):
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(sys.stdin.fileno())
+        while True:
+            char = sys.stdin.read(1)
+            if char == ' ':
+                state.toggle_pause()
+                if state.is_paused():
+                    print("\n[PAUSED] Press space to resume.", file=sys.stderr)
+                else:
+                    print("\n[RESUMED]", file=sys.stderr)
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 class Engine:
@@ -102,8 +138,8 @@ class Engine:
             resource_manager=self.resource_manager,
             jobs=jobs
         )
-        print(f"Using scheduler: {str(self.scheduler.__class__).split('.')[2]}"\
-              f", with policy {self.scheduler.policy} "\
+        print(f"Using scheduler: {str(self.scheduler.__class__).split('.')[2]}"
+              f", with policy {self.scheduler.policy} "
               f"and backfill {self.scheduler.bfpolicy}")
 
         if self.simulate_network:
@@ -282,9 +318,9 @@ class Engine:
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if job.running_time > job.wall_time:
-                    raise Exception(f"Job should have ended already!\n\
-                                       {job.running_time} > {job.wall_time}\
-                                    ")
+                    raise Exception(f"""Job should have ended already!
+                                       {job.running_time} > {job.wall_time}
+                                    """)
                 # Aggregate scheduled nodes
                 scheduled_nodes.append(job.scheduled_nodes)
 
@@ -293,7 +329,7 @@ class Engine:
                 cpu_utils.append(cpu_util)
                 # Percentage Utilization!
 
-                # Get GPU utilizaiton
+                # Get GPU utilization
                 gpu_util = get_current_utilization(job.gpu_trace, job)
                 gpu_utils.append(gpu_util)
                 # Percentage Utilization!
@@ -301,7 +337,8 @@ class Engine:
                 # Simulate network utilization
                 if self.simulate_network:
 
-                    net_util, net_cong, net_tx, net_rx, max_throughput = self.network_model.simulate_network_utilization(job=job,debug=self.debug)
+                    net_util, net_cong, net_tx, net_rx, max_throughput = \
+                        self.network_model.simulate_network_utilization(job=job, debug=self.debug)
 
                     net_utils.append(net_util)
                     net_congs.append(net_cong)
@@ -309,7 +346,7 @@ class Engine:
                     net_rx_list.append(net_rx)
 
                 else:
-                    net_util, net_cong, net_tx, net_rx = 0.0,0.0,0.0,0.0
+                    net_util, net_cong, net_tx, net_rx = 0.0, 0.0, 0.0, 0.0
                     max_throughput = 0
                     net_utils.append(net_util)
                     net_congs.append(net_cong)
@@ -375,7 +412,7 @@ class Engine:
                                       avg_rx=avg_rx,
                                       avg_net=avg_net)
         else:
-            avg_tx, avg_rx, avg_net = None,None,None
+            avg_tx, avg_rx, avg_net = None, None, None
 
         # Continue with System Simulation
 
@@ -459,7 +496,16 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
         batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
 
-        for timestep in range(timestep_start, timestep_end):  # Runs every seconds!
+        sim_state = SimulationState()
+        listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
+        listener_thread.start()
+
+        timestep = timestep_start
+        while timestep < timestep_end:  # Runs every seconds!
+
+            if sim_state.is_paused():
+                time.sleep(0.1)
+                continue
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
@@ -495,6 +541,8 @@ class Engine:
             if simulation_done:
                 break
             yield tick_data
+            
+            timestep += 1
 
     def get_job_history_dict(self):
         return self.job_history_dict
