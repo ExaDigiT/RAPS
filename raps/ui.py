@@ -212,7 +212,7 @@ class LayoutManager:
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
-    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util, slowdown):
+    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util, slowdown, time_delta):
         """
         Updates the status information table with the provided system status data.
 
@@ -234,7 +234,7 @@ class LayoutManager:
         # Define columns with header styles
         columns = [
             "Time", "Jobs Running", "Jobs Queued",
-            "Active Nodes", "Free Nodes", "Down Nodes"]
+            "Active Nodes", "Free Nodes", "Down Nodes", "Speed"]
         if self.simulate_network:
             columns.extend(("Net Util (%)", "Slowdown per job"))
         table = Table(header_style="bold magenta", expand=True)
@@ -248,7 +248,8 @@ class LayoutManager:
             str(nqueue),
             str(active_nodes),
             str(free_nodes),
-            str(len(down_nodes))
+            str(len(down_nodes)),
+            f"{time_delta}x"
         ]
         if self.simulate_network:
             row.append(f"{avg_net_util * 100:.0f}%")
@@ -496,7 +497,8 @@ class LayoutManager:
         self.update_scheduled_jobs(data.running + data.queue)
         self.update_status(
             data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
-            data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job
+            data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job,
+            data.time_delta
         )
 
         self.update_scheduled_jobs(data.running + data.queue)
@@ -509,7 +511,8 @@ class LayoutManager:
             data.num_free_nodes,
             data.down_nodes,
             data.avg_net_util,
-            data.slowdown_per_job
+            data.slowdown_per_job,
+            data.time_delta
         )
 
         self.update_power_array(
@@ -527,7 +530,7 @@ class LayoutManager:
             #last_i = 0
             for i,data in enumerate(self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True)):
                 if data and (not self.debug and not self.noui):
-                    self.update_full_layout(data,time_delta)
+                    self.update_full_layout(data, time_delta)
                     #self.update_progress_bar(i-last_i)
                     #last_i=i
                 if not self.debug and not self.noui:

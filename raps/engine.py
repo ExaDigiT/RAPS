@@ -45,11 +45,13 @@ class TickData:
     avg_net_util: float
     slowdown_per_job: float
     node_occupancy: dict[int, int]
+    time_delta: int
 
 
 class SimulationState:
-    def __init__(self):
+    def __init__(self, time_delta):
         self.paused = False
+        self.time_delta = time_delta
         self.lock = threading.Lock()
 
     def toggle_pause(self):
@@ -60,6 +62,21 @@ class SimulationState:
         with self.lock:
             return self.paused
 
+    def speed_up(self):
+        with self.lock:
+            self.time_delta *= 2
+            print(f"\n[INFO] time_delta increased to {self.time_delta}", file=sys.stderr)
+
+    def slow_down(self):
+        with self.lock:
+            if self.time_delta > 1:
+                self.time_delta //= 2
+                print(f"\n[INFO] time_delta decreased to {self.time_delta}", file=sys.stderr)
+
+    def get_time_delta(self):
+        with self.lock:
+            return self.time_delta
+
 def keyboard_listener(state):
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -67,12 +84,16 @@ def keyboard_listener(state):
         tty.setcbreak(sys.stdin.fileno())
         while True:
             char = sys.stdin.read(1)
-            if char == ' ':
+            if char == ' ' or char == 'k':
                 state.toggle_pause()
                 if state.is_paused():
-                    print("\n[PAUSED] Press space to resume.", file=sys.stderr)
+                    print("\n[PAUSED] Press space or k to resume.", file=sys.stderr)
                 else:
                     print("\n[RESUMED]", file=sys.stderr)
+            elif char == '+':
+                state.speed_up()
+            elif char == '-' or char == '_':
+                state.slow_down()
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -443,7 +464,8 @@ class Engine:
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
             slowdown_per_job=0,
-            node_occupancy=node_occupancy
+            node_occupancy=node_occupancy,
+            time_delta=time_delta
         )
         return tick_data
 
@@ -496,7 +518,7 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
         batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
 
-        sim_state = SimulationState()
+        sim_state = SimulationState(time_delta)
         listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
         listener_thread.start()
 
@@ -506,6 +528,8 @@ class Engine:
             if sim_state.is_paused():
                 time.sleep(0.1)
                 continue
+
+            current_time_delta = sim_state.get_time_delta()
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
@@ -529,9 +553,9 @@ class Engine:
                 print(".", end="", flush=True)
 
             # 4. Run tick only at specified time_delta
-            if 0 == (timestep % time_delta) and \
-               ((time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or (time_delta != 1 or self.downscale != 1)):
-                tick_data = self.tick(time_delta=time_delta)
+            if 0 == (timestep % current_time_delta) and \
+               ((current_time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or (current_time_delta != 1 or self.downscale != 1)):
+                tick_data = self.tick(time_delta=current_time_delta)
                 tick_data.completed = completed_jobs
             else:
                 tick_data = None
