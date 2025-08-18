@@ -84,15 +84,15 @@ def keyboard_listener(state):
         tty.setcbreak(sys.stdin.fileno())
         while True:
             char = sys.stdin.read(1)
-            if char == ' ' or char == 'k':
+            if char == 'k' or char == ' ':
                 state.toggle_pause()
                 if state.is_paused():
                     print("\n[PAUSED] Press space or k to resume.", file=sys.stderr)
                 else:
                     print("\n[RESUMED]", file=sys.stderr)
-            elif char == '+':
+            elif char == 'l' or char == '+':
                 state.speed_up()
-            elif char == '-' or char == '_':
+            elif char == 'j' or char == '_':
                 state.slow_down()
 
     finally:
