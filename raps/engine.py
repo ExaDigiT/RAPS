@@ -5,6 +5,8 @@ import threading
 import sys
 import tty
 import termios
+import os
+import select
 import time
 
 from raps.job import Job, JobState
@@ -82,20 +84,22 @@ def keyboard_listener(state):
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
-        tty.setcbreak(sys.stdin.fileno())
+        tty.setcbreak(fd)  # or tty.setraw(fd)
         while True:
-            char = sys.stdin.read(1)
-            if char == 'k' or char == ' ':
-                state.toggle_pause()
-                if state.is_paused():
-                    print("\n[PAUSED] Press space or k to resume.", file=sys.stderr)
-                else:
-                    print("\n[RESUMED]", file=sys.stderr)
-            elif char == 'l' or char == '+':
-                state.speed_up()
-            elif char == 'j' or char == '_':
-                state.slow_down()
-
+            # Wait up to 0.1s for input
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if rlist:
+                char = os.read(fd, 1).decode()
+                if char == 'k' or char == ' ':
+                    state.toggle_pause()
+                    if state.is_paused():
+                        print("\n[PAUSED] Press space or k to resume.", file=sys.stderr)
+                    else:
+                        print("\n[RESUMED]", file=sys.stderr)
+                elif char == 'l' or char == '+':
+                    state.speed_up()
+                elif char == 'j' or char == '_':
+                    state.slow_down()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -547,7 +551,7 @@ class Engine:
                 all_jobs[:] = [job for job in all_jobs if job.submit_time > timestep + batch_window]
 
             # 1. Prepare Timestep:
-            completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
+            completed_jobs, newly_downed_nodes = self.prepare_timestep(replay=replay)
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
