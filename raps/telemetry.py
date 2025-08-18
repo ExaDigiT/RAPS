@@ -71,8 +71,9 @@ class Telemetry:
             self.dirname = outname
         try:
             self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
-        except FileNotFoundError:
-            print("WARNING: Failed to load dataloader")
+        except ImportError as e:
+            print(f"WARNING: Failed to load dataloader: {e}")
+            self.dataloader = None
 
     def save_snapshot(self, *, jobs: list, timestep_start: int, timestep_end: int, args: dict, filename: str):
         """Saves a snapshot of the jobs to a compressed file. """
