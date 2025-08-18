@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix as csr
 from tqdm import tqdm
 
 DEFAULT_START = "2021-05-21T00:00"
-DEFAULT_END   = "2021-05-22T00:00"
+DEFAULT_END = "2021-05-22T00:00"
 
 
 def to_epoch(s: str) -> int:
@@ -182,7 +182,7 @@ def proc_cpu_series(dfi):
 def proc_gpu_series(cpu_df, dfi, gpu_cnt):
     # 1) Build CPU time range
     t_cpu_start = int(cpu_df.utime.min())
-    t_cpu_end   = int(cpu_df.utime.max())
+    t_cpu_end = int(cpu_df.utime.max())
     t_cpu = np.array([t_cpu_start, t_cpu_end, t_cpu_end - t_cpu_start])
 
     # 2) Safely convert the GPU timestamps to integer seconds
@@ -203,7 +203,7 @@ def proc_gpu_series(cpu_df, dfi, gpu_cnt):
     dfi["t_fixed"] = ts_int - ts_int.min() + t_cpu_start
 
     # 5) Prepare output DataFrame with a utime column
-    #ugpus = dfi.gpu_index.unique()
+    # ugpus = dfi.gpu_index.unique()
     gpu_df = pd.DataFrame({"utime": cpu_df["utime"].values})
 
     # 6) Interpolate each GPU field onto the CPU utime grid
@@ -228,7 +228,7 @@ def proc_gpu_series(cpu_df, dfi, gpu_cnt):
     ren = {
         "gpu_index":            f"gpu_index_{gpu_cnt}",
         "utilization_gpu_pct":  f"gpu_util_{gpu_cnt}",
-        "utilization_memory_pct":f"gpu_mempct_{gpu_cnt}",
+        "utilization_memory_pct": f"gpu_mempct_{gpu_cnt}",
         "memory_free_MiB":      f"gpu_memfree_{gpu_cnt}",
         "memory_used_MiB":      f"gpu_memused_{gpu_cnt}",
         "temperature_gpu":      f"gpu_temp_{gpu_cnt}",

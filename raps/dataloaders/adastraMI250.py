@@ -1,7 +1,8 @@
 """
 
     # get the data
-    Download `AdastaJobsMI250_15days.parquet` from   https://zenodo.org/records/14007065/files/AdastaJobsMI250_15days.parquet
+    Download `AdastaJobsMI250_15days.parquet` from
+    https://zenodo.org/records/14007065/files/AdastaJobsMI250_15days.parquet
 
 
     # to simulate the dataset
@@ -23,7 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs
+from ..utils import next_arrival_byconfkwargs
 
 
 def load_data(jobs_path, **kwargs):
@@ -94,10 +95,10 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         wall_time = int(jobs_df.loc[jidx, 'run_time'])
         if wall_time <= 0:
-            print("error wall_time",wall_time)
+            print("error wall_time", wall_time)
             continue
         if nodes_required <= 0:
-            print("error nodes_required",nodes_required)
+            print("error nodes_required", nodes_required)
             continue
 
         if validate:
@@ -112,11 +113,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             cpu_power = jobs_df.loc[jidx, 'cpu_power_consumption']
             cpu_power_array = cpu_power.tolist()
             cpu_watts = sum(cpu_power_array) / (wall_time * nodes_required)
-            cpu_min_power = config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
-            cpu_max_power = config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
+            # cpu_min_power = config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']  # Unused
+            # cpu_max_power = config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']  # Unused
 
             cpu_util = (cpu_watts / float(config['POWER_CPU_IDLE']) - config['CPUS_PER_NODE']) \
-                     / ((float(config['POWER_CPU_MAX']) / float(config['POWER_CPU_IDLE'])) - 1.0)
+                / ((float(config['POWER_CPU_MAX']) / float(config['POWER_CPU_IDLE'])) - 1.0)
             # power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)
             # print("cpu_watts",cpu_watts,"cpu_util",cpu_util)
 
@@ -131,14 +132,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             cpu_power = cpu_power[:min_length]
             mem_power = mem_power[:min_length]
 
-            gpu_power = (node_power - cpu_power - mem_power \
+            gpu_power = (node_power - cpu_power - mem_power
                          - ([config['NICS_PER_NODE'] * config['POWER_NIC']]))
             gpu_power_array = gpu_power.tolist()
             gpu_watts = sum(gpu_power_array) / (wall_time * nodes_required)
-            gpu_min_power = config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
-            gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
+            # gpu_min_power = config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']  # Unused
+            # gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']  # Unused
             gpu_util = (gpu_watts / float(config['POWER_GPU_IDLE']) - config['GPUS_PER_NODE']) \
-                     / ((float(config['POWER_GPU_MAX']) / float(config['POWER_GPU_IDLE'])) - 1.0)
+                / ((float(config['POWER_GPU_MAX']) / float(config['POWER_GPU_IDLE'])) - 1.0)
             # power_to_utilization(gpu_power_array, gpu_min_power, gpu_max_power)
             # print("gpu_watts",gpu_watts,"gpu_util",gpu_util)
             gpu_trace = np.maximum(0, gpu_util)
@@ -163,7 +164,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         diff = start_timestamp - telemetry_start_timestamp
         start_time = int(diff.total_seconds())
 
-        end_timestamp = jobs_df.loc[jidx,'end_time']
+        end_timestamp = jobs_df.loc[jidx, 'end_time']
         diff = end_timestamp - telemetry_start_timestamp
         end_time = int(diff.total_seconds())
 
@@ -206,6 +207,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     print("jobs not added: ", count_jobs_notOK)
     return jobs, telemetry_start_time, telemetry_end_time
 
+
 def xname_to_index(xname: str, config: dict):
     """
     Converts an xname string to an index value based on system configuration.
@@ -225,7 +227,8 @@ def xname_to_index(xname: str, config: dict):
     if row == 6:
         col -= 9
     rack_index = row * 12 + col
-    node_index = chassis * config['BLADES_PER_CHASSIS'] * config['NODES_PER_BLADE'] + slot * config['NODES_PER_BLADE'] + node
+    node_index = chassis * config['BLADES_PER_CHASSIS'] * \
+        config['NODES_PER_BLADE'] + slot * config['NODES_PER_BLADE'] + node
     return rack_index * config['SC_SHAPE'][2] + node_index
 
 
@@ -265,6 +268,7 @@ CDU_NAMES = [
     'x2402c1', 'x2403c1', 'x2406c1', 'x2409c1', 'x2502c1', 'x2503c1', 'x2506c1', 'x2509c1',
     'x2609c1',
 ]
+
 
 def cdu_index_to_name(index: int, config: dict):
     return CDU_NAMES[index - 1]

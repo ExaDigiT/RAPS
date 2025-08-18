@@ -1,20 +1,20 @@
+from raps.utils import convert_to_seconds
+from raps.workload import Workload
+from raps.scheduler import Scheduler
+from raps.power import PowerManager, compute_node_power
+from raps.flops import FLOPSManager
+from raps.ui import LayoutManager
+from raps.config import ConfigManager
+import copy
+from args import args
 from raps.helpers import check_python_version
 check_python_version()
 
-from args import args
-import copy
 args_dict1 = copy.deepcopy(vars(args))
 args_dict2 = copy.deepcopy(vars(args))
 print(args_dict1)
 print(args_dict2)
 
-from raps.config import ConfigManager
-from raps.ui import LayoutManager
-from raps.flops import FLOPSManager
-from raps.power import PowerManager, compute_node_power
-from raps.scheduler import Scheduler
-from raps.workload import Workload
-from raps.utils import convert_to_seconds
 
 config1 = ConfigManager(system_name='setonix-cpu').get_config()
 config2 = ConfigManager(system_name='setonix-gpu').get_config()
@@ -53,16 +53,17 @@ print(f"Jobs for setonix-gpu: {len(jobs2)}")
 if args.time:
     timesteps = convert_to_seconds(args.time)
 else:
-    timesteps = 88200 # 24 hours
+    timesteps = 88200  # 24 hours
 
-if args.verbose: print(jobs)
+if args.verbose:
+    print(jobs)
 
 # Create generator objects for both partitions
 gen1 = layout_manager1.run_stepwise(jobs1, timesteps=timesteps)
 gen2 = layout_manager2.run_stepwise(jobs2, timesteps=timesteps)
 
 # Step through both generators in lockstep
-#for _ in range(timesteps):
+# for _ in range(timesteps):
 #    next(gen1)  # Advance first scheduler
 #    next(gen2)  # Advance second scheduler
 

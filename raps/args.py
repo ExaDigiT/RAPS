@@ -1,4 +1,7 @@
-import argparse, os, sys, yaml
+import argparse
+import os
+import sys
+import yaml
 from raps.schedulers.default import PolicyType, BackfillType
 
 from raps.workload import add_workload_to_parser, check_workload_args
@@ -30,7 +33,7 @@ def apply_config_to_args(cfg, args):
         else:
             # Enter the commandline argument, but _underscores as the -dashes
             # are replaced when reading from the commandline, but not in the yaml.
-            merged[k.replace('-','_')] = v
+            merged[k.replace('-', '_')] = v
 
     # Apply to argparse namespace
     for k, v in merged.items():
@@ -198,7 +201,6 @@ parser.add_argument("--continuous-job-generation", action="store_true",
                     help="Activate continuous job generation.")
 parser.add_argument("--maxqueue", type=int, default=50,
                     help="Specify the max queue length for continuous job generation.")
-
 
 
 def post_process_args(args):

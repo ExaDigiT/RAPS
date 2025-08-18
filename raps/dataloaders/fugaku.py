@@ -17,7 +17,6 @@
 import pandas as pd
 from tqdm import tqdm
 from ..job import job_dict, Job
-from ..utils import next_arrival
 
 
 def load_data(path, **kwargs):
@@ -51,10 +50,10 @@ def load_data_from_df(df, **kwargs):
     int: Telemetry Start (in seconds 0)
     int: Telemetry End (in seconds)
     """
-    encrypt_bool = kwargs.get('encrypt')
-    arrival = kwargs.get('arrival')
+    # encrypt_bool = kwargs.get('encrypt')  # Unused
+    # arrival = kwargs.get('arrival')  # Unused
     validate = kwargs.get('validate')
-    jid = kwargs.get('jid', '*')
+    # jid = kwargs.get('jid', '*')  # Unused
     config = kwargs.get('config')
 
     job_list = []
@@ -86,7 +85,8 @@ def load_data_from_df(df, **kwargs):
 
         else:
             # cpu_trace = row['perf1'] if 'perf1' in df.columns else 0  # Assuming some performance metric as cpu_trace
-            cpu_trace = row['perf1'] / (row['perf1'] + row['perf6']) if 'perf1' in df.columns else 0  # Total Opts / Total Ops + Idle Ops
+            # Total Opts / Total Ops + Idle Ops
+            cpu_trace = row['perf1'] / (row['perf1'] + row['perf6']) if 'perf1' in df.columns else 0
             gpu_trace = 0  # Set to 0 as GPU trace is not explicitly provided
 
         # No network trace
@@ -98,7 +98,8 @@ def load_data_from_df(df, **kwargs):
 
         priority = row['pri'] if 'pri' in df.columns else 0
 
-        submit_timestamp = pd.to_datetime(row['adt']) if 'adt' in df.columns else -1  # Else job was submitted in the past
+        submit_timestamp = pd.to_datetime(row['adt']) if 'adt' in df.columns else - \
+            1  # Else job was submitted in the past
         diff = submit_timestamp - telemetry_start_timestamp
         submit_time = int(diff.total_seconds())
 
@@ -113,8 +114,8 @@ def load_data_from_df(df, **kwargs):
         end_time = int(diff.total_seconds())
 
         wall_time = end_time - start_time
-        #duration = int(row['duration']) if 'duration' in df.columns else 0  # in seconds Recorded duration and wall_time do not match!
-        #if (wall_time != duration):
+        # duration = int(row['duration']) if 'duration' in df.columns else 0
+        # if (wall_time != duration):
         #    if abs(wall_time - duration) <= 1:  # offset is often 1
         #        wall_time = min(wall_time,duration)
         #    else:
@@ -174,4 +175,4 @@ def cdu_index_to_name(index: int, config: dict):
 
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
-    return (0, index) # TODO
+    return (0, index)  # TODO

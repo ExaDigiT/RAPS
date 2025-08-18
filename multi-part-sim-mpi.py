@@ -6,27 +6,23 @@ power, FLOPS, and scheduling models. Outputs debug and summary
 stats for heterogeneous systems (e.g., LUMI, Setonix, Adastra).
 """
 
+from tqdm import tqdm
+from mpi4py import MPI
+from raps.utils import convert_to_seconds, next_arrival
+from raps.workload import Workload
+from raps.telemetry import Telemetry
+from raps.power import PowerManager, compute_node_power
+from raps.flops import FLOPSManager
+from raps.engine import Engine
+from raps.ui import LayoutManager
+from raps.config import ConfigManager, CONFIG_PATH
+from args import args
+import random
+import os
+import glob
 from raps.helpers import check_python_version
 check_python_version()
 
-import glob
-import os
-import random
-import sys
-
-from args import args
-from raps.config import ConfigManager, CONFIG_PATH
-from raps.schedulers.default import PolicyType
-from raps.ui import LayoutManager
-from raps.engine import Engine
-from raps.flops import FLOPSManager
-from raps.power import PowerManager, compute_node_power
-from raps.telemetry import Telemetry
-from raps.workload import Workload
-from raps.utils import convert_to_seconds, next_arrival
-
-from mpi4py import MPI
-from tqdm import tqdm
 
 def main():
     comm = MPI.COMM_WORLD
@@ -51,9 +47,9 @@ def main():
 
     # 4) Each rank decides which partition‐indices it owns (round-robin):
     local_partition_indices = [i for i in range(len(partition_names)) if (i % size) == rank]
-    local_partition_names   = [partition_names[i]  for i in local_partition_indices]
-    local_configs           = [configs[i]          for i in local_partition_indices]
-    local_args_dicts        = [args_dicts[i]       for i in local_partition_indices]
+    local_partition_names = [partition_names[i] for i in local_partition_indices]
+    # local_configs = [configs[i] for i in local_partition_indices]   # Unused
+    # local_args_dicts = [args_dicts[i] for i in local_partition_indices]  # Unused
 
     # 5) Rank 0 builds (or loads) the entire job list, assigns partitions, groups by partition,
     #    then scatters exactly those jobs to each rank. Other ranks just sit in the scatter:
@@ -73,7 +69,7 @@ def main():
             if args.arrival == 'poisson':
                 for job in tqdm(jobs_full, desc="[rank 0] Rescheduling arrivals…"):
                     p_name = job['partition']
-                    p_cfg  = configs[partition_names.index(p_name)]
+                    p_cfg = configs[partition_names.index(p_name)]
                     job['requested_nodes'] = None
                     job['submit_time'] = next_arrival(1 / p_cfg['JOB_ARRIVAL_TIME'])
 
@@ -86,7 +82,7 @@ def main():
                 job['partition'] = random.choices(partition_names, weights=available_nodes, k=1)[0]
 
         # --- c) Group “jobs_full” by partition name:
-        jobs_by_partition = { p: [] for p in partition_names }
+        jobs_by_partition = {p: [] for p in partition_names}
         for job in jobs_full:
             jobs_by_partition[job['partition']].append(job)
 
@@ -103,7 +99,7 @@ def main():
     local_jobs = comm.scatter(jobs_for_rank, root=0)
 
     # 7) Re‐group each rank’s “local_jobs” into a dict keyed by its local_partition_names:
-    local_jobs_by_partition = { p: [] for p in local_partition_names }
+    local_jobs_by_partition = {p: [] for p in local_partition_names}
     for job in local_jobs:
         local_jobs_by_partition[job['partition']].append(job)
 
@@ -136,7 +132,7 @@ def main():
         timesteps = 88200   # default 24 hours
 
     timestep_start = fastforward
-    timestep_end   = timestep_start + timesteps
+    timestep_end = timestep_start + timesteps
 
     # 10) Build a generator for each partition that this rank owns:
     local_generators = {}
