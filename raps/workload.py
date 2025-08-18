@@ -24,51 +24,69 @@ JOB_END_PROBS : list
     List of probabilities for different job end states.
 
 """
+from raps.utils import (
+    truncated_normalvariate_int,
+    truncated_normalvariate_float,
+    determine_state, next_arrival,
+    next_arrival_byconfargs,
+    truncated_weibull,
+    truncated_weibull_float
+)
 import math
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
-from raps.utils import create_file_indexed, create_dir_indexed, convert_to_seconds
+from raps.utils import create_file_indexed
 
 
-JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",\
-             "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",\
-             "ABINIT", "Cactus", "Charm++", "NWChem", "STAR-CCM+",\
-             "Gaussian", "ANSYS", "COMSOL", "PLUMED", "nekrs",\
-             "TensorFlow", "PyTorch", "BLAST", "Spark", "GAMESS",\
+JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",
+             "OpenFOAM", "WRF", "AMBER", "CP2K", "nek5000", "CHARMM",
+             "ABINIT", "Cactus", "Charm++", "NWChem", "STAR-CCM+",
+             "Gaussian", "ANSYS", "COMSOL", "PLUMED", "nekrs",
+             "TensorFlow", "PyTorch", "BLAST", "Spark", "GAMESS",
              "ORCA", "Simulink", "MOOSE", "ELK"]
 
-ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",\
+ACCT_NAMES = ["ACT01", "ACT02", "ACT03", "ACT04", "ACT05", "ACT06", "ACT07",
               "ACT08", "ACT09", "ACT10", "ACT11", "ACT12", "ACT13", "ACT14"]
 
 MAX_PRIORITY = 500000
 
-from raps.utils import truncated_normalvariate_int, truncated_normalvariate_float, determine_state, next_arrival, next_arrival_byconfargs, truncated_weibull, truncated_weibull_float
-
 
 class Workload:
-    def __init__(self, *configs):
+    def __init__(self, args, *configs):
         """ Initialize Workload with multiple configurations.  """
         self.partitions = [config['system_name'] for config in configs]
         self.config_map = {config['system_name']: config for config in configs}
+        self.args = args
 
-    def compute_traces(self, cpu_util: float, gpu_util: float, wall_time: int, trace_quanta: int) -> tuple[np.ndarray, np.ndarray]:
+    def generate_jobs(self):
+        # This function calls the job generation function as specified by the workload keyword.
+        # The respective funciton of this class is called.
+        jobs = getattr(self, self.args.workload)(args=self.args)
+        return jobs
+
+    def compute_traces(self,
+                       cpu_util: float,
+                       gpu_util: float,
+                       wall_time: int,
+                       trace_quanta: int
+                       ) -> tuple[np.ndarray, np.ndarray]:
         """ Compute CPU and GPU traces based on mean CPU & GPU utilizations and wall time. """
         cpu_trace = cpu_util * np.ones(int(wall_time) // trace_quanta)
         gpu_trace = gpu_util * np.ones(int(wall_time) // trace_quanta)
         return (cpu_trace, gpu_trace)
 
-    def job_arrival_distribution_draw_poisson(self,args,config):
-        return next_arrival_byconfargs(config,args)
+    def job_arrival_distribution_draw_poisson(self, args, config):
+        return next_arrival_byconfargs(config, args)
 
-    def job_size_distribution_draw_uniform(self,args,config):
+    def job_size_distribution_draw_uniform(self, args, config):
         min_v = 1
         max_v = config['MAX_NODES_PER_JOB']
         if (args.jobsize_is_power_of is not None):
             base = args.jobsize_is_power_of
-            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v, base))))]
             selection = random.randint(0, len(possible_jobsizes) - 1)
             number = possible_jobsizes[selection]
         elif (args.jobsize_is_of_degree is not None):
@@ -80,14 +98,14 @@ class Workload:
             number = random.randint(1, config['MAX_NODES_PER_JOB'])
         return number
 
-    def job_size_distribution_draw_weibull(self,args,config):
+    def job_size_distribution_draw_weibull(self, args, config):
         min_v = 1
         max_v = config['MAX_NODES_PER_JOB']
         if (args.jobsize_is_power_of is not None):
             base = args.jobsize_is_power_of
-            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
-            scale = math.log(args.jobsize_weibull_scale,base)
-            shape = math.log(args.jobsize_weibull_shape,base)
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v, base))))]
+            scale = math.log(args.jobsize_weibull_scale, base)
+            shape = math.log(args.jobsize_weibull_shape, base)
             selection = truncated_weibull(scale, shape, 0, len(possible_jobsizes) - 1)
             number = possible_jobsizes[selection]
         elif (args.jobsize_is_of_degree is not None):
@@ -98,17 +116,18 @@ class Workload:
             selection = truncated_weibull(scale, shape, 0, len(possible_jobsizes) - 1)
             number = possible_jobsizes[selection]
         else:
-            number = truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape, 1, config['MAX_NODES_PER_JOB'])
+            number = truncated_weibull(args.jobsize_weibull_scale, args.jobsize_weibull_shape,
+                                       1, config['MAX_NODES_PER_JOB'])
         return number
 
-    def job_size_distribution_draw_normal(self,args,config):
+    def job_size_distribution_draw_normal(self, args, config):
         min_v = 1
         max_v = config['MAX_NODES_PER_JOB']
         if (args.jobsize_is_power_of is not None):
             base = args.jobsize_is_power_of
-            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v,base))))]
-            mean = math.log(args.jobsize_normal_mean,base)
-            stddev = math.log(args.jobsize_normal_stddev,base)  # (len(possible_jobsizes) / (max_v - min_v))
+            possible_jobsizes = [base ** exp for exp in range(min_v, int(math.floor(math.log(max_v, base))))]
+            mean = math.log(args.jobsize_normal_mean, base)
+            stddev = math.log(args.jobsize_normal_stddev, base)  # (len(possible_jobsizes) / (max_v - min_v))
             selection = truncated_normalvariate_int(mean, stddev, 0, len(possible_jobsizes) - 1)
             number = possible_jobsizes[selection - 1]
         elif (args.jobsize_is_of_degree is not None):
@@ -119,67 +138,80 @@ class Workload:
             selection = truncated_weibull(mean, stddev, 0, len(possible_jobsizes) - 1)
             number = possible_jobsizes[selection]
         else:
-            number = truncated_normalvariate_int(args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
+            number = truncated_normalvariate_int(
+                args.jobsize_normal_mean, args.jobsize_normal_stddev, 1, config['MAX_NODES_PER_JOB'])
         return number
 
-    def cpu_utilization_distribution_draw_uniform(self,args,config):
+    def cpu_utilization_distribution_draw_uniform(self, args, config):
         return random.uniform(0.0, config['CPUS_PER_NODE'])
 
-    def cpu_utilization_distribution_draw_normal(self,args,config):
-        return truncated_normalvariate_float(args.cpuutil_normal_mean, args.cpuutil_normal_stddev,0.0, config['CPUS_PER_NODE'])
+    def cpu_utilization_distribution_draw_normal(self, args, config):
+        return truncated_normalvariate_float(args.cpuutil_normal_mean,
+                                             args.cpuutil_normal_stddev,
+                                             0.0, config['CPUS_PER_NODE'])
 
-    def cpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull_float(args.cpuutil_weibull_scale, args.cpuutil_weibull_shape,0.0, config['CPUS_PER_NODE'])
+    def cpu_utilization_distribution_draw_weibull(self, args, config):
+        return truncated_weibull_float(args.cpuutil_weibull_scale,
+                                       args.cpuutil_weibull_shape,
+                                       0.0, config['CPUS_PER_NODE'])
 
-    def gpu_utilization_distribution_draw_uniform(self,args,config):
+    def gpu_utilization_distribution_draw_uniform(self, args, config):
         return random.uniform(0.0, config['GPUS_PER_NODE'])
 
-    def gpu_utilization_distribution_draw_normal(self,args,config):
-        return truncated_normalvariate_float(args.gpuutil_normal_mean, args.gpuutil_normal_stddev,0.0, config['GPUS_PER_NODE'])
+    def gpu_utilization_distribution_draw_normal(self, args, config):
+        return truncated_normalvariate_float(args.gpuutil_normal_mean,
+                                             args.gpuutil_normal_stddev,
+                                             0.0, config['GPUS_PER_NODE'])
 
-    def gpu_utilization_distribution_draw_weibull(self,args,config):
-        return truncated_weibull_float(args.gpuutil_weibull_scale, args.gpuutil_weibull_shape,0.0 , config['GPUS_PER_NODE'])
+    def gpu_utilization_distribution_draw_weibull(self, args, config):
+        return truncated_weibull_float(args.gpuutil_weibull_scale,
+                                       args.gpuutil_weibull_shape,
+                                       0.0, config['GPUS_PER_NODE'])
 
-    def wall_time_distribution_draw_uniform(self,args,config):
-        return random.uniform(config['MIN_WALL_TIME'],config['MAX_WALL_TIME'])
+    def wall_time_distribution_draw_uniform(self, args, config):
+        return random.uniform(config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
 
-    def wall_time_distribution_draw_normal(self,args,config):
-        return max(1,truncated_normalvariate_int(float(args.walltime_normal_mean), float(args.walltime_normal_stddev), config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) / 3600 * 3600)
+    def wall_time_distribution_draw_normal(self, args, config):
+        return max(1, truncated_normalvariate_int(float(args.walltime_normal_mean),
+                   float(args.walltime_normal_stddev), config['MIN_WALL_TIME'],
+                   config['MAX_WALL_TIME']) / 3600 * 3600)
 
-    def wall_time_distribution_draw_weibull(self,args,config):
-        return truncated_weibull(args.walltime_weibull_scale, args.walltime_weibull_shape, config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
+    def wall_time_distribution_draw_weibull(self, args, config):
+        return truncated_weibull(args.walltime_weibull_scale,
+                                 args.walltime_weibull_shape,
+                                 config['MIN_WALL_TIME'], config['MAX_WALL_TIME'])
 
-    def generate_jobs(self, *,
-                      job_arrival_distribution_to_draw_from,
-                      job_size_distribution_to_draw_from,
-                      cpu_util_distribution_to_draw_from,
-                      gpu_util_distribution_to_draw_from,
-                      wall_time_distribution_to_draw_from,
-                      args
-                      ) -> list[list[any]]:
+    def generate_jobs_from_distribution(self, *,
+                                        job_arrival_distribution_to_draw_from,
+                                        job_size_distribution_to_draw_from,
+                                        cpu_util_distribution_to_draw_from,
+                                        gpu_util_distribution_to_draw_from,
+                                        wall_time_distribution_to_draw_from,
+                                        args
+                                        ) -> list[list[any]]:
         jobs = []
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
         for job_index in range(args.numjobs):
-            submit_time = int(job_arrival_distribution_to_draw_from(args,config))
+            submit_time = int(job_arrival_distribution_to_draw_from(args, config))
             start_time = submit_time
-            nodes_required = job_size_distribution_to_draw_from(args,config)
+            nodes_required = job_size_distribution_to_draw_from(args, config)
             name = random.choice(JOB_NAMES)
             account = random.choice(ACCT_NAMES)
-            cpu_util = cpu_util_distribution_to_draw_from(args,config)
+            cpu_util = cpu_util_distribution_to_draw_from(args, config)
             if "CORES_PER_CPU" in config:
                 cpu_cores_required = random.randint(0, config["CORES_PER_CPU"])
             else:
                 cpu_cores_required = None
-            gpu_util = gpu_util_distribution_to_draw_from(args,config)
+            gpu_util = gpu_util_distribution_to_draw_from(args, config)
             if "GPUS_PER_NODE" in config:
-                if isinstance(gpu_util,list):
-                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(max(gpu_util))))
+                if isinstance(gpu_util, list):
+                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"], math.ceil(max(gpu_util))))
                 else:
-                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"],math.ceil(gpu_util)))
-            wall_time = wall_time_distribution_to_draw_from(args,config)
+                    gpu_units_required = random.randint(0, max(config["GPUS_PER_NODE"], math.ceil(gpu_util)))
+            wall_time = wall_time_distribution_to_draw_from(args, config)
             end_time = start_time + wall_time
-            time_limit = max(wall_time,wall_time_distribution_to_draw_from(args,config))
+            time_limit = max(wall_time, wall_time_distribution_to_draw_from(args, config))
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace = cpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             gpu_trace = gpu_util  # self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
@@ -205,8 +237,50 @@ class Workload:
             jobs.append(job)
         return jobs
 
+    # Test for random 'reasonable' AI jobs
+    def randomAI(self, **kwargs):
+        args = kwargs.get('args', None)
+        jobs = []
+        for i in range(args.numjobs):
+            draw = random.randint(0, 10)
+            if draw == 0:
+                et = random.randint(7200, 28800)
+                nr = random.choice([128, 256, 512, 1024, 1280, 1792, 2048])
+                new_job = Job(job_dict(nodes_required=nr,
+                                       name="LLM",
+                                       account="llmUser",
+                                       end_state="Success",
+                                       id=random.randint(1, 99999),
+                                       cpu_trace=0.1,
+                                       gpu_trace=(random.uniform(0.55, 0.8) *
+                                                  self.config_map[self.args.system]['GPUS_PER_NODE']),
+                                       ntx_trace=None,
+                                       nrx_trace=None,
+                                       submit_time=0,
+                                       time_limit=random.randint(43200, 43200),
+                                       start_time=0,
+                                       end_time=et,
+                                       wall_time=et))
+            else:
+                new_job = Job(job_dict(nodes_required=1,
+                                       name="LLM",
+                                       account="llmUser",
+                                       end_state="Success",
+                                       id=random.randint(1, 99999),
+                                       cpu_trace=1,
+                                       gpu_trace=(0.2 * self.config_map[self.args.system]['GPUS_PER_NODE']),
+                                       ntx_trace=None,
+                                       nrx_trace=None,
+                                       submit_time=0,
+                                       time_limit=43200,
+                                       start_time=0,
+                                       end_time=7200,
+                                       wall_time=random.randint(60, 7200)))
+            jobs.append(new_job)
+        return jobs
+
     def synthetic(self, **kwargs):
-        args = kwargs.get('args',None)
+        args = kwargs.get('args', None)
         print(args)
         total_jobs = args.numjobs
         orig_job_size_distribution = args.jobsize_distribution
@@ -216,11 +290,11 @@ class Workload:
         jobs = []
         if len(args.jobsize_distribution) != 1 and sum(args.multimodal) != 1.0:
             raise Exception(f"Sum of --multimodal != 1.0 : {args.multimodal} == {sum(args.multimodal)}")
-        for i,(jsdist,wtdist,cudist,gudist,percentage) in enumerate(zip(args.jobsize_distribution,
-                                                                        args.walltime_distribution,
-                                                                        args.cpuutil_distribution,
-                                                                        args.gpuutil_distribution,
-                                                                        args.multimodal)):
+        for i, (jsdist, wtdist, cudist, gudist, percentage) in enumerate(zip(args.jobsize_distribution,
+                                                                             args.walltime_distribution,
+                                                                             args.cpuutil_distribution,
+                                                                             args.gpuutil_distribution,
+                                                                             args.multimodal)):
 
             args.numjobs = math.floor(total_jobs * percentage)
             args.jobsize_distribution = jsdist
@@ -269,14 +343,14 @@ class Workload:
                 case _:
                     raise NotImplementedError(args.gpuutil_distribution)
 
-            new_jobs = self.generate_jobs(
+            new_jobs = self.generate_jobs_from_distribution(
                 job_arrival_distribution_to_draw_from=job_arrival_distribution_to_draw_from,
                 job_size_distribution_to_draw_from=job_size_distribution_to_draw_from,
                 cpu_util_distribution_to_draw_from=cpu_util_distribution_to_draw_from,
                 gpu_util_distribution_to_draw_from=gpu_util_distribution_to_draw_from,
                 wall_time_distribution_to_draw_from=wall_time_distribution_to_draw_from,
                 args=args)
-            next_arrival(0,reset=True)
+            next_arrival(0, reset=True)
             jobs.extend(new_jobs)
         args.numjobs = total_jobs
         args.jobsize_distribution = orig_job_size_distribution
@@ -291,7 +365,7 @@ class Workload:
         partition = random.choice(self.partitions)
         config = self.config_map[partition]
 
-        time_delta = args.time_delta
+        # time_delta = args.time_delta  # Unused
         downscale = args.downscale
 
         config['MIN_WALL_TIME'] = config['MIN_WALL_TIME'] * downscale
@@ -307,34 +381,36 @@ class Workload:
             gpu_util = random.random() * config['GPUS_PER_NODE']
             mu = (config['MAX_WALL_TIME'] + config['MIN_WALL_TIME']) / 2
             sigma = (config['MAX_WALL_TIME'] - config['MIN_WALL_TIME']) / 6
-            wall_time = (truncated_normalvariate_int(mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
-            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time, config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
-            #print(f"wall_time: {wall_time//downscale}")
-           # print(f"time_limit: {time_limit//downscale}")
+            wall_time = (truncated_normalvariate_int(
+                mu, sigma, config['MIN_WALL_TIME'], config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
+            time_limit = (truncated_normalvariate_int(mu, sigma, wall_time,
+                          config['MAX_WALL_TIME']) // (3600 * downscale) * (3600 * downscale))
+            # print(f"wall_time: {wall_time//downscale}")
+            # print(f"time_limit: {time_limit//downscale}")
             end_state = determine_state(config['JOB_END_PROBS'])
             cpu_trace, gpu_trace = self.compute_traces(cpu_util, gpu_util, wall_time, config['TRACE_QUANTA'])
             priority = random.randint(0, MAX_PRIORITY)
             net_tx, net_rx = None, None
 
             # Jobs arrive according to Poisson process
-            time_to_next_job = int(next_arrival_byconfargs(config,args))
-            #wall_time = wall_time * downscale
-            #time_limit = time_limit * downscale
+            time_to_next_job = int(next_arrival_byconfargs(config, args))
+            # wall_time = wall_time * downscale
+            # time_limit = time_limit * downscale
 
             job_info = job_dict(nodes_required=nodes_required, name=name,
-                                 account=account, cpu_trace=cpu_trace,
-                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
-                                 nrx_trace=net_rx, end_state=end_state,
-                                 id=job_index, priority=priority,
-                                 partition=partition,
-                                 submit_time=time_to_next_job - 100,
-                                 time_limit=time_limit,
-                                 start_time=time_to_next_job,
-                                 end_time=time_to_next_job + wall_time,
-                                 wall_time=wall_time, trace_time=wall_time,
-                                 trace_start_time=0, trace_end_time=wall_time,
-                                 trace_quanta=config['TRACE_QUANTA'] * downscale,
-                                 downscale=downscale
+                                account=account, cpu_trace=cpu_trace,
+                                gpu_trace=gpu_trace, ntx_trace=net_tx,
+                                nrx_trace=net_rx, end_state=end_state,
+                                id=job_index, priority=priority,
+                                partition=partition,
+                                submit_time=time_to_next_job - 100,
+                                time_limit=time_limit,
+                                start_time=time_to_next_job,
+                                end_time=time_to_next_job + wall_time,
+                                wall_time=wall_time, trace_time=wall_time,
+                                trace_start_time=0, trace_end_time=wall_time,
+                                trace_quanta=config['TRACE_QUANTA'] * downscale,
+                                downscale=downscale
                                 )
             job = Job(job_info)
             jobs.append(job)
@@ -342,7 +418,7 @@ class Workload:
 
     def random(self, **kwargs):
         """ Generate random workload """
-        args = kwargs.get('args',None)
+        args = kwargs.get('args', None)
         return self.generate_random_jobs(args=args)
 
     def peak(self, **kwargs):
@@ -363,7 +439,8 @@ class Workload:
             job_time = len(gpu_trace) * config['TRACE_QUANTA']
             # Create job info for this partition
             job_info = job_dict(nodes_required=config['AVAILABLE_NODES'],
-                                scheduled_nodes=[],  # Down nodes, therefore doesnt work list(range(config['AVAILABLE_NODES'])),
+                                # Down nodes, therefore doesnt work list(range(config['AVAILABLE_NODES'])),
+                                scheduled_nodes=[],
                                 name=f"Max Test {partition}",
                                 account=ACCT_NAMES[0],
                                 cpu_trace=cpu_trace,
@@ -566,7 +643,7 @@ class Workload:
         return jobs
 
 
-def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
+def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
     # put args.multimodal in dist_split!
     split = [1.0]
     num_dist = 1
@@ -579,8 +656,8 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     x2 = [x.time_limit for x in jobs]
     fig_m = plt.figure()
     gs = fig_m.add_gridspec(30, 1)
-    gs0 = gs[0:20].subgridspec(500,500,hspace=0,wspace=0)
-    gs1 = gs[24:].subgridspec(1,1)
+    gs0 = gs[0:20].subgridspec(500, 500, hspace=0, wspace=0)
+    gs1 = gs[24:].subgridspec(1, 1)
 
     ax_top = fig_m.add_subplot(gs0[:])
     ax_top.axis('off')
@@ -590,28 +667,28 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     ax_bot.axis('off')
     ax_bot.set_title('Submit Time + Wall Time')
 
-    #ax0 = fig_m.add_subplot(gs[:2,:])
-    #ax1 = fig_m.add_subplot(gs[2:,:])
+    # ax0 = fig_m.add_subplot(gs[:2,:])
+    # ax1 = fig_m.add_subplot(gs[2:,:])
 
-    #gss = gridspec.GridSpec(5, 5, figure=ax0)
-    #fig, axs = plt.subplots(2, 2, gridspec_kw={'width_ratios': (4, 1), 'height_ratios': (1, 4)})
+    # gss = gridspec.GridSpec(5, 5, figure=ax0)
+    # fig, axs = plt.subplots(2, 2, gridspec_kw={'width_ratios': (4, 1), 'height_ratios': (1, 4)})
     axs = []
     col = []
-    col.append(fig_m.add_subplot(gs0[:100,:433]))
-    col.append(fig_m.add_subplot(gs0[:100,433:]))
+    col.append(fig_m.add_subplot(gs0[:100, :433]))
+    col.append(fig_m.add_subplot(gs0[:100, 433:]))
     axs.append(col.copy())
     col = []
-    col.append(fig_m.add_subplot(gs0[100:,:433]))
-    col.append(fig_m.add_subplot(gs0[100:,433:]))
+    col.append(fig_m.add_subplot(gs0[100:, :433]))
+    col.append(fig_m.add_subplot(gs0[100:, 433:]))
     axs.append(col.copy())
 
-    ax_b = fig_m.add_subplot(gs1[:,:])
+    ax_b = fig_m.add_subplot(gs1[:, :])
 
     # Create scatter plot
     for i in range(len(x)):
-        axs[1][0].plot([x[i],x2[i]],[y[i],y[i]],color='lightblue',zorder=1)
-    axs[1][0].scatter(x2, y,marker='.',c='lightblue',zorder=2)
-    axs[1][0].scatter(x, y,zorder=3)
+        axs[1][0].plot([x[i], x2[i]], [y[i], y[i]], color='lightblue', zorder=1)
+    axs[1][0].scatter(x2, y, marker='.', c='lightblue', zorder=2)
+    axs[1][0].scatter(x, y, zorder=3)
 
     cpu_util = [x.cpu_trace for x in jobs]
     if isinstance(cpu_util[0], np.ndarray):
@@ -624,10 +701,10 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     elif isinstance(gpu_util[0], list):
         gpu_util = [sum(part) / len(part) for part in gpu_util]
     if not all([x == 0 for x in gpu_util]):
-        axs[0][1].scatter(cpu_util,gpu_util,zorder=2,marker='.',s=0.2)
-        axs[0][1].hist(gpu_util,bins=100,orientation='horizontal',zorder=1, density=True,color='tab:purple')
-        axs[0][1].axhline(np.mean(gpu_util), color='r', linewidth=1,zorder=3)
-        axs[0][1].set(ylim=[0,config['GPUS_PER_NODE']])
+        axs[0][1].scatter(cpu_util, gpu_util, zorder=2, marker='.', s=0.2)
+        axs[0][1].hist(gpu_util, bins=100, orientation='horizontal', zorder=1, density=True, color='tab:purple')
+        axs[0][1].axhline(np.mean(gpu_util), color='r', linewidth=1, zorder=3)
+        axs[0][1].set(ylim=[0, config['GPUS_PER_NODE']])
         axs[0][1].set_ylabel("gpu util")
         axs[0][1].yaxis.set_label_coords(1.15, 0.5)
         axs[0][1].yaxis.set_label_position("right")
@@ -635,17 +712,17 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     else:
         axs[0][1].set_yticks([])
         pass
-    axs[0][1].hist(cpu_util,bins=100,orientation='vertical',zorder=1, density=True,color='tab:cyan')
-    axs[0][1].axvline(np.mean(cpu_util), color='r', linewidth=1,zorder=3)
-    axs[0][1].set(xlim=[0,config['CPUS_PER_NODE']])
+    axs[0][1].hist(cpu_util, bins=100, orientation='vertical', zorder=1, density=True, color='tab:cyan')
+    axs[0][1].axvline(np.mean(cpu_util), color='r', linewidth=1, zorder=3)
+    axs[0][1].set(xlim=[0, config['CPUS_PER_NODE']])
     axs[0][1].set_xlabel("cpu util")
-    axs[0][1].xaxis.set_label_coords(0.5,1.30)
+    axs[0][1].xaxis.set_label_coords(0.5, 1.30)
     axs[0][1].xaxis.set_label_position("top")
     axs[0][1].xaxis.tick_top()
-    axs[0][0].hist(x2,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical',color='lightblue')
-    axs[0][0].hist(x,bins=max(1,math.ceil(min(100,(max(x2) - min(x))))), orientation='vertical')
+    axs[0][0].hist(x2, bins=max(1, math.ceil(min(100, (max(x2) - min(x))))), orientation='vertical', color='lightblue')
+    axs[0][0].hist(x, bins=max(1, math.ceil(min(100, (max(x2) - min(x))))), orientation='vertical')
     axs[1][0].sharex(axs[0][0])
-    axs[1][1].hist(y,bins=max(1,min(100,(max(y) - min(y)))), orientation='horizontal')
+    axs[1][1].hist(y, bins=max(1, min(100, (max(y) - min(y)))), orientation='horizontal')
     axs[1][0].sharey(axs[1][1])
 
     # Remove ticks
@@ -660,12 +737,12 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
-    axs[1][0].set_xticks(x_label_ticks,x_label_str)
+                   (x1, x2) in [(n // 60, n % 60) for
+                                n in x_label_mins[0::60]]]
+    axs[1][0].set_xticks(x_label_ticks, x_label_str)
     miny = min(y)
     maxy = max(y)
-    interval = max(1,maxy // 10)
+    interval = max(1, maxy // 10)
     y_ticks = np.arange(0, maxy, interval)
     y_ticks[0] = miny
     axs[1][0].set_yticks(y_ticks)
@@ -683,41 +760,41 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
     split_offset = math.floor(len(x) * split[split_index])
     if gantt_nodes:
         if split[0] == 0.0:
-            ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+            ax_b.axhline(y=offset, color='red', linestyle='--', lw=0.5)
             split_index += 1
         for i in range(len(x)):
-            #ax_b.barh(i,duration[i], height=1.0, left=submit_t[i])
-            ax_b.barh(offset + nodes_required[i] / 2,duration[i], height=nodes_required[i], left=submit_t[i])
+            # ax_b.barh(i,duration[i], height=1.0, left=submit_t[i])
+            ax_b.barh(offset + nodes_required[i] / 2, duration[i], height=nodes_required[i], left=submit_t[i])
             offset += nodes_required[i]
             if i != len(x) - 1 and i == split_offset - 1 and split_index < len(split):
-                ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+                ax_b.axhline(y=offset, color='red', linestyle='--', lw=0.5)
                 split_index += 1
                 split_offset += math.floor(len(x) * split[split_index])
-                #ax_b.axhline(y=(len(x)/num_dist * i)-0.5, color='red', linestyle='--',lw=0.5)
+                # ax_b.axhline(y=(len(x)/num_dist * i)-0.5, color='red', linestyle='--',lw=0.5)
         if split[-1] == 0.0:
-            ax_b.axhline(y=offset, color='red', linestyle='--',lw=0.5)
+            ax_b.axhline(y=offset, color='red', linestyle='--', lw=0.5)
             split_index += 1
         ax_b.set_ylabel("Jobs' acc. nodes")
     else:
         for i in range(len(x)):
-            ax_b.barh(i,duration[i], height=1.0, left=submit_t[i])
-        for i in range(1,num_dist):
+            ax_b.barh(i, duration[i], height=1.0, left=submit_t[i])
+        for i in range(1, num_dist):
             if num_dist == 1:
                 break
-            ax_b.axhline(y=(len(x) * split[split_index]) - 0.5, color='red', linestyle='--',lw=0.5)
+            ax_b.axhline(y=(len(x) * split[split_index]) - 0.5, color='red', linestyle='--', lw=0.5)
             split_index += 1
         ax_b.set_ylabel("Job ID")
-        #ax_b labels:
+        # ax_b labels:
     ax_b.set_xlabel("time [hh:mm]")
     minx_s = 0
     maxx_s = math.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
+                   (x1, x2) in [(n // 60, n % 60) for
+                                n in x_label_mins[0::60]]]
 
-    ax_b.set_xticks(x_label_ticks,x_label_str)
+    ax_b.set_xticks(x_label_ticks, x_label_str)
     ax_b.yaxis.set_inverted(True)
 
     plt.show()
@@ -725,50 +802,68 @@ def plot_job_hist(jobs,config=None,dist_split=None, gantt_nodes=False):
 
 def add_workload_to_parser(parser):
 
-    choices = ['random', 'benchmark', 'peak', 'idle','synthetic', 'multitenant']
-    parser.add_argument('-w', '--workload', type=str, choices=choices, default=choices[0], help='Type of synthetic workload')
+    choices = ['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant']
+    parser.add_argument('-w', '--workload', type=str, choices=choices,
+                        default=choices[0], help='Type of synthetic workload')
 
-    parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+", help="Percentage to draw from each distribution (list of floats)e.g. '0.2 0.8' percentages apply in order to the list of the  --distribution argument list.")
+    parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+",
+                        help="Percentage to draw from each distribution "
+                             "(list of floats)e.g. '0.2 0.8' percentages apply"
+                             " in order to the list of the  --distribution argument list.")
 
     # Jobsize:
-    parser.add_argument("--jobsize-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
+    parser.add_argument("--jobsize-distribution", type=str, nargs="+",
+                        choices=['uniform', 'weibull', 'normal'], default=None, help='Distribution type')
 
     parser.add_argument("--jobsize-normal-mean", type=float, required=False, help="Mean (mu) for Normal distribution")
-    parser.add_argument("--jobsize-normal-stddev", type=float, required=False, help="Standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--jobsize-normal-stddev", type=float, required=False,
+                        help="Standard deviation (sigma) for Normal distribution")
 
     parser.add_argument("--jobsize-weibull-shape", type=float, required=False, help="Jobsize shape of weibull")
     parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
 
-    parser.add_argument("--jobsize-is-of-degree", default=None, type=int,required=False,help="Draw jobsizes from distribution of degree N (squared,cubed).")
-    parser.add_argument("--jobsize-is-power-of", default=None, type=int,required=False,help="Draw jobsizes from distribution of power of N (2->2^x,3->3^x).")
+    parser.add_argument("--jobsize-is-of-degree", default=None, type=int, required=False,
+                        help="Draw jobsizes from distribution of degree N (squared,cubed).")
+    parser.add_argument("--jobsize-is-power-of", default=None, type=int, required=False,
+                        help="Draw jobsizes from distribution of power of N (2->2^x,3->3^x).")
 
     # Walltime:
-    parser.add_argument("--walltime-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=None, help='Distribution type')
+    parser.add_argument("--walltime-distribution", type=str, nargs="+",
+                        choices=['uniform', 'weibull', 'normal'], default=None, help='Distribution type')
 
-    parser.add_argument("--walltime-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--walltime-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--walltime-normal-mean", type=float, required=False,
+                        help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--walltime-normal-stddev", type=float, required=False,
+                        help="Walltime standard deviation (sigma) for Normal distribution")
 
     parser.add_argument("--walltime-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
     parser.add_argument("--walltime-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
 
     # Utilizations
-    parser.add_argument("--cpuutil-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=['uniform'], help='Distribution type')
+    parser.add_argument("--cpuutil-distribution", type=str, nargs="+",
+                        choices=['uniform', 'weibull', 'normal'], default=['uniform'], help='Distribution type')
 
-    parser.add_argument("--cpuutil-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--cpuutil-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--cpuutil-normal-mean", type=float, required=False,
+                        help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--cpuutil-normal-stddev", type=float, required=False,
+                        help="Walltime standard deviation (sigma) for Normal distribution")
 
     parser.add_argument("--cpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
     parser.add_argument("--cpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
 
-    parser.add_argument("--gpuutil-distribution", type=str, nargs="+", choices=['uniform','weibull','normal'], default=['uniform'], help='Distribution type')
+    parser.add_argument("--gpuutil-distribution", type=str, nargs="+",
+                        choices=['uniform', 'weibull', 'normal'], default=['uniform'], help='Distribution type')
 
-    parser.add_argument("--gpuutil-normal-mean", type=float, required=False, help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--gpuutil-normal-stddev", type=float, required=False, help="Walltime standard deviation (sigma) for Normal distribution")
+    parser.add_argument("--gpuutil-normal-mean", type=float, required=False,
+                        help="Walltime mean (mu) for Normal distribution")
+    parser.add_argument("--gpuutil-normal-stddev", type=float, required=False,
+                        help="Walltime standard deviation (sigma) for Normal distribution")
 
     parser.add_argument("--gpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
     parser.add_argument("--gpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
 
-    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False, help="Print Gannt with nodes required as line thickness (default false)")
+    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False,
+                        help="Print Gannt with nodes required as line thickness (default false)")
 
     return parser
 
@@ -785,7 +880,7 @@ def run_workload():
     config = ConfigManager(system_name=args.system).get_config()
     if args.replay:
         td = Telemetry(**args_dict)
-        jobs,_,_,_ = td.load_jobs_times_args_from_files(files=args.replay,args=args)
+        jobs, _, _, _ = td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
     else:
         workload = Workload(config)
         jobs = getattr(workload, args.workload)(args=args)
@@ -793,9 +888,9 @@ def run_workload():
     if args.output:
         timestep_start = min([x.submit_time for x in jobs])
         timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.wall_time for x in jobs]))
-        filename = create_file_indexed('wl',create=False,ending="npz").split(".npz")[0]
+        filename = create_file_indexed('wl', create=False, ending="npz").split(".npz")[0]
         # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
-        np.savez_compressed(filename,jobs=jobs,timestep_start=timestep_start, timestep_end=timestep_end, args=args)
+        np.savez_compressed(filename, jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
         print(filename + ".npz")  # To std-out to show which npz was created.
 
     def multitenant(self, **kwargs):
@@ -819,19 +914,19 @@ def run_workload():
         list[dict]
             List of job_dict entries.
         """
-        mode         = kwargs.get('mode', 'TWO_JOBS_PER_NODE_SPLIT')
-        wall_time    = kwargs.get('wall_time', 3600)
+        mode = kwargs.get('mode', 'TWO_JOBS_PER_NODE_SPLIT')
+        wall_time = kwargs.get('wall_time', 3600)
 
         jobs = []
 
         for partition in self.partitions:
-            cfg           = self.config_map[partition]
-            trace_quanta  = kwargs.get('trace_quanta', cfg['TRACE_QUANTA'])
+            cfg = self.config_map[partition]
+            trace_quanta = kwargs.get('trace_quanta', cfg['TRACE_QUANTA'])
 
             cores_per_cpu = cfg.get('CORES_PER_CPU', 1)
             cpus_per_node = cfg.get('CPUS_PER_NODE', 1)
             cores_per_node = cores_per_cpu * cpus_per_node
-            gpus_per_node  = cfg.get('GPUS_PER_NODE', 0)
+            gpus_per_node = cfg.get('GPUS_PER_NODE', 0)
 
             n_nodes = cfg['AVAILABLE_NODES']
 
@@ -942,6 +1037,15 @@ def run_workload():
                 raise ValueError(f"Unknown multitenant mode: {mode}")
 
         return jobs
+
+
+def continuous_job_generation(*, engine, timestep, jobs):
+    # print("if len(engine.queue) <= engine.continuous_workload.args.maxqueue:")
+    # print(f"if {len(engine.queue)} <= {engine.continuous_workload.args.maxqueue}:")
+    if len(engine.queue) <= engine.continuous_workload.args.maxqueue:
+        new_jobs = engine.continuous_workload.generate_jobs()
+        jobs.extend(new_jobs)
+    pass
 
 
 if __name__ == "__main__":

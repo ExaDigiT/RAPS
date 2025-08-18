@@ -3,6 +3,7 @@ from .download import download
 from .loader import load_data
 from .utils import DEFAULT_START, DEFAULT_END
 
+
 def main():
     p = argparse.ArgumentParser(prog="mit_supercloud")
     subs = p.add_subparsers(dest="cmd", required=True)
@@ -18,7 +19,7 @@ def main():
         default=DEFAULT_END,
         help="End datetime, in ISO format (e.g. '2021-05-21T16:45')."
     )
-    common.add_argument("--partition", choices=["all","part-cpu","part-gpu"], default="all")
+    common.add_argument("--partition", choices=["all", "part-cpu", "part-gpu"], default="all")
     common.add_argument("--outdir",    default="source_data")
     common.add_argument("--bucket",    default="mit-supercloud-dataset")
     common.add_argument("--prefix",    default="datacenter-challenge/202201/")
@@ -31,12 +32,13 @@ def main():
     pl = subs.add_parser("load", parents=[common], help="Load local data into RAPS")
     pl.add_argument("path", help="Local data root")
     pl.set_defaults(func=lambda args: load_data(args.path,
-                                                 start_date=args.start,
-                                                 end_date=args.end,
-                                                 partition=args.partition))
+                                                start_date=args.start,
+                                                end_date=args.end,
+                                                partition=args.partition))
 
     args = p.parse_args()
     return args.func(args)
+
 
 if __name__ == "__main__":
     main()

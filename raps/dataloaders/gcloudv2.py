@@ -41,7 +41,7 @@ Downloading Google Cluster Traces v2:
     gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.json.gz ./google_cluster_data_sample/
     gsutil cp gs://clusterdata_2019_a/collection_events-000000000000.parquet.gz ./google_cluster_data_sample/
 
-    # Download the first JSON and Parquet file for instance_events 
+    # Download the first JSON and Parquet file for instance_events
     gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.json.gz ./google_cluster_data_sample/
     gsutil cp gs://clusterdata_2019_a/instance_events-000000000000.parquet.gz ./google_cluster_data_sample/
 
@@ -61,32 +61,32 @@ Following explanation from Gemini-CLI on how the job nodes required is being com
 
    1. Machine Capacity Determination:
        * The machine_events data is loaded to get information about the cluster's machines.
-       * The CPU_capacity and memory_capacity of a typical machine are determined by taking 
-         the mode() (most frequent value) of these columns from the machine_df. This gives 
+       * The CPU_capacity and memory_capacity of a typical machine are determined by taking
+         the mode() (most frequent value) of these columns from the machine_df. This gives
          us the standard CPU and memory capacity of a single node in the cluster.
 
    2. Task Resource Request Aggregation:
-       * The task_events data is loaded, which contains CPU_request and memory_request for 
+       * The task_events data is loaded, which contains CPU_request and memory_request for
          individual tasks.
-       * These task requests are then grouped by job_ID, and the CPU_request and memory_request 
-         are summed up for all tasks belonging to the same job. This gives us the total CPU and 
+       * These task requests are then grouped by job_ID, and the CPU_request and memory_request
+         are summed up for all tasks belonging to the same job. This gives us the total CPU and
          memory requested by each job.
 
    3. Nodes Required Calculation (CPU and Memory):
-       * For each job, the total CPU_request is divided by the cpu_capacity of a single machine. 
-         The np.ceil() function is used to round up to the nearest whole number, ensuring that 
+       * For each job, the total CPU_request is divided by the cpu_capacity of a single machine.
+         The np.ceil() function is used to round up to the nearest whole number, ensuring that
          enough nodes are allocated to satisfy the CPU demand. This result is stored as
          nodes_required_cpu.
-       * Similarly, the total memory_request is divided by the mem_capacity of a single machine, 
+       * Similarly, the total memory_request is divided by the mem_capacity of a single machine,
          and np.ceil() is applied. This result is stored as nodes_required_mem.
 
    4. Final `nodes_required`:
-       * The final nodes_required for a job is determined by taking the np.maximum() of nodes_required_cpu 
-         and nodes_required_mem. This ensures that the job is allocated enough nodes to satisfy both its CPU 
+       * The final nodes_required for a job is determined by taking the np.maximum() of nodes_required_cpu
+         and nodes_required_mem. This ensures that the job is allocated enough nodes to satisfy both its CPU
          and memory requirements. The result is then cast to an integer (.astype(int)).
 
    5. Filtering:
-       * Finally, any jobs for which the calculated nodes_required is 0 (meaning they requested no CPU or memory) 
+       * Finally, any jobs for which the calculated nodes_required is 0 (meaning they requested no CPU or memory)
          are filtered out, as these jobs would not require any nodes in the simulation.
 """
 
@@ -150,12 +150,14 @@ V2_COLUMN_NAMES = {
 }
 SUPPORTED_EVENT_TYPES = list(V2_COLUMN_NAMES.keys())
 
+
 class GoogleClusterV2DataLoader:
     """
     Loader for Google Cluster V2 CSV.GZ files.
     """
-    def __init__(self, base_path: str, event_type: str="job_events",
-                 file_indices: Optional[List[int]]=None, concatenate: bool=True):
+
+    def __init__(self, base_path: str, event_type: str = "job_events",
+                 file_indices: Optional[List[int]] = None, concatenate: bool = True):
         self.base_path = os.path.expanduser(base_path)
         if event_type not in SUPPORTED_EVENT_TYPES:
             raise ValueError(f"Unsupported event type: '{event_type}'")
@@ -202,8 +204,8 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
     config = kwargs.get('config')
     # Unpack list
     if isinstance(data_path, list):
-        if len(data_path)==1:
-            data_path=data_path[0]
+        if len(data_path) == 1:
+            data_path = data_path[0]
         else:
             raise ValueError(f"Expected single path, got {data_path}")
     base_path = os.path.expanduser(data_path)
@@ -233,7 +235,8 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
     job_resources['nodes_required_cpu'] = np.ceil(job_resources['CPU_request'] / cpu_capacity)
     job_resources['nodes_required_mem'] = np.ceil(job_resources['memory_request'] / mem_capacity)
     # The final nodes_required is the maximum of CPU-driven and memory-driven node requirements
-    job_resources['nodes_required'] = np.maximum(job_resources['nodes_required_cpu'], job_resources['nodes_required_mem']).astype(int)
+    job_resources['nodes_required'] = np.maximum(
+        job_resources['nodes_required_cpu'], job_resources['nodes_required_mem']).astype(int)
 
     # Create a dictionary for quick lookup of nodes_required by job_ID
     nodes_required_map = job_resources.set_index('job_ID')['nodes_required'].to_dict()
@@ -250,13 +253,13 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
     # Load submit events
     loader = GoogleClusterV2DataLoader(base_path, event_type="job_events", concatenate=True)
     df = next(iter(loader))
-    for col in ("timestamp","job_ID","event_type"):
+    for col in ("timestamp", "job_ID", "event_type"):
         if col not in df.columns:
             raise ValueError(f"Missing column {col}")
-    df = df[df["event_type"]==0]
-    df["timestamp"] = df["timestamp"].astype(float) / 1e6 # convert from microseconds → seconds
+    df = df[df["event_type"] == 0]
+    df["timestamp"] = df["timestamp"].astype(float) / 1e6  # convert from microseconds → seconds
     t0 = df["timestamp"].min()
-    t1 = df["timestamp"] - t0
+    # t1 = df["timestamp"] - t0  # Unused
 
     # Get trace quanta
     trace_quanta = config['TRACE_QUANTA']
@@ -267,37 +270,38 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
 
     # Convert microseconds → seconds for task usage
     usage_df["start_time"] = usage_df["start_time"].astype(float) / 1e6
-    usage_df["end_time"]   = usage_df["end_time"  ].astype(float) / 1e6
+    usage_df["end_time"] = usage_df["end_time"].astype(float) / 1e6
 
     # Build per-job start and end times (seconds since trace-start)
     usage_map_start = usage_df.groupby("job_ID")["start_time"].min().to_dict()
-    usage_map_end   = usage_df.groupby("job_ID")["end_time"  ].max().to_dict()
+    usage_map_end = usage_df.groupby("job_ID")["end_time"].max().to_dict()
 
     # rename to avg
     if "CPU_usage_rate" in usage_df.columns:
-        usage_df.rename(columns={"CPU_usage_rate":"CPU_usage_avg"}, inplace=True)
-    usage_df["job_ID"]       = usage_df["job_ID"].astype(int)
+        usage_df.rename(columns={"CPU_usage_rate": "CPU_usage_avg"}, inplace=True)
+    usage_df["job_ID"] = usage_df["job_ID"].astype(int)
     usage_df["CPU_usage_avg"] = usage_df["CPU_usage_avg"].astype(float)
     usage_map = usage_df.groupby("job_ID")["CPU_usage_avg"].apply(lambda s: s.to_numpy()).to_dict()
 
-    #print(usage_map)
+    # print(usage_map)
 
     # Filter to jobs with usage data AND valid resource requests
     df = df[df["job_ID"].isin(usage_map) & df["job_ID"].isin(job_resources['job_ID'])]
 
     jobs: List[Any] = []
-    jid_f = kwargs.get('jid','*')
+    jid_f = kwargs.get('jid', '*')
     for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Loading jobs"):
 
         jid = int(row["job_ID"])
         start = usage_map_start[jid] - t0
-        end   = usage_map_end  [jid] - t0
-        wall  = end - start
+        end = usage_map_end[jid] - t0
+        wall = end - start
 
-        #nodes_required = int(nodes_required_map.get(jid, 1)) # Default to 1 if not found
-        nodes_required = int(nodes_required_map.get(jid))
+        # nodes_required = int(nodes_required_map.get(jid, 1)) # Default to 1 if not found
+        # nodes_required = int(nodes_required_map.get(jid))  # Unused
 
-        if jid_f!='*' and str(jid)!=str(jid_f): continue
+        if jid_f != '*' and str(jid) != str(jid_f):
+            continue
         trace = usage_map[jid]
         # ensure gpu_trace is same length as cpu_trace
         gpu_trace = np.zeros_like(trace, dtype=float)
@@ -310,23 +314,23 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
         job_d = job_dict(
             nodes_required=nr,
             name=f"job_{jid}",
-            account=f"user_{row.get('user_name','unknown')}",
+            account=f"user_{row.get('user_name', 'unknown')}",
             cpu_trace=trace,
             gpu_trace=gpu_trace,
             nrx_trace=[], ntx_trace=[],
             end_state="UNKNOWN", scheduled_nodes=[],
-            id=jid, priority=int(row.get('scheduling_class',0)),
-            #submit_time=row["timestamp"], time_limit=0,
+            id=jid, priority=int(row.get('scheduling_class', 0)),
+            # submit_time=row["timestamp"], time_limit=0,
             submit_time=start, time_limit=0,
             start_time=start, end_time=end,
             wall_time=wall, trace_time=row["timestamp"],
             trace_start_time=start, trace_end_time=end, trace_quanta=trace_quanta
         )
         # Wrap dict in a real Job so telemetry.save_snapshot() can use __dict__
-        #if nodes_required > 0:
+        # if nodes_required > 0:
         jobs.append(Job(job_d))
 
     # Compute simulation span: start at t=0, end at the latest job finish
     simulation_start = 0
-    simulation_end   = int(max(usage_map_end.values()) - t0)
+    simulation_end = int(max(usage_map_end.values()) - t0)
     return jobs, simulation_start, simulation_end

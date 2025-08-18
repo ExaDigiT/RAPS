@@ -6,7 +6,6 @@ conversion losses), and optional coupling to a thermo-fluids cooling
 model. Produces performance, utilization, and energy metrics, with
 optional plots and output files for analysis and validation.
 """
-
 import json
 import numpy as np
 import random
@@ -14,10 +13,9 @@ import pandas as pd
 import os
 import time
 import math
-
+#
 from raps.helpers import check_python_version
-check_python_version()
-
+#
 from raps.config import ConfigManager
 from raps.constants import OUTPUT_PATH, SEED
 from raps.cooling import ThermoFluidsModel
@@ -34,7 +32,6 @@ from raps.power import (
     compute_node_power_validate_uncertainties
 )
 from raps.engine import Engine
-from raps.job import Job
 from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.account import Accounts
@@ -49,6 +46,8 @@ from raps.stats import (
 )
 
 from raps.args import args, args_dict
+
+check_python_version()
 
 
 def main():
@@ -87,27 +86,31 @@ def main():
     if args.replay:
 
         td = Telemetry(**args_dict)
-        jobs, timestep_start, timestep_end, args_from_file = td.load_jobs_times_args_from_files(files=args.replay, args=args)
+        jobs, timestep_start, timestep_end, args_from_file = \
+            td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
         # TODO: Merge args and args_from_files? see telemetry.py:97
 
     else:  # Synthetic jobs
-        wl = Workload(config)
-        jobs = getattr(wl, args.workload)(args=args)
+        wl = Workload(args, config)
+        jobs = wl.generate_jobs()
 
         if args.verbose:
-            for job_vector in jobs:
-                job = Job(job_vector)
-                print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
+            for job in jobs:
+                print('jobid:', job.id, '\tlen(gpu_trace):',
+                      len(job.gpu_trace) if isinstance(job.gpu_trace, list)
+                      else job.gpu_trace, '\twall_time(s):',
+                      job.wall_time)
             time.sleep(2)
 
         timestep_start = 0
-        if hasattr(jobs[0],'end_time'):
+        if hasattr(jobs[0], 'end_time'):
             timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
         else:
             timestep_end = 88200  # 24 hours
 
         td = Telemetry(**args_dict)
-        td.save_snapshot(jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args, filename=td.dirname)
+        td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
+                         timestep_end=timestep_end, args=args, filename=td.dirname)
 
     if args.fastforward is not None:
         timestep_start = args.fastforward
@@ -120,10 +123,16 @@ def main():
     else:
         time_delta = 1
 
+    if args.continuous_job_generation:
+        continuous_workload = wl
+    else:
+        continuous_workload = None
+
     sc = Engine(
         power_manager=power_manager,
         flops_manager=flops_manager,
         cooling_model=cooling_model,
+        continuous_workload=continuous_workload,
         jobs=jobs,
         **args_dict,
     )
@@ -155,11 +164,14 @@ def main():
 
     downscale = args.downscale
     downscale_str = ""if downscale == 1 else f"/{downscale}"
-    print(f'Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str} seconds from {timestep_start} to {timestep_end}.')
-    print(f'Simulation time delta: {time_delta}{downscale_str} s, Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.')
-    layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, total_timesteps=total_timesteps, args_dict=args_dict, **config)
+    print(f"Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str}"
+          f" seconds from {timestep_start} to {timestep_end}.")
+    print(f"Simulation time delta: {time_delta}{downscale_str} s,"
+          f"Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.")
+    layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug,
+                                   total_timesteps=total_timesteps,
+                                   args_dict=args_dict, **config)
     layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
-
 
     engine_stats = get_engine_stats(sc)
     job_stats = get_job_stats(sc)
@@ -180,27 +192,27 @@ def main():
 
     if args.plot:
         if 'power' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power (kW)', 'Power History', \
-                         OPATH / f'power.{args.imtype}', \
+            pl = Plotter(f"Time ({downscale_str}s)", 'Power (kW)', 'Power History',
+                         OPATH / f'power.{args.imtype}',
                          uncertainties=args.uncertainties)
             x, y = zip(*power_manager.history)
             pl.plot_history(x, y)
 
         if 'util' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'System Utilization (%)', \
+            pl = Plotter(f"Time ({downscale_str}s)", 'System Utilization (%)',
                          'System Utilization History', OPATH / f'util.{args.imtype}')
             x, y = zip(*sc.sys_util_history)
             pl.plot_history(x, y)
 
         if 'loss' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (kW)', 'Power Loss History', \
-                         OPATH / f'loss.{args.imtype}', \
+            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (kW)', 'Power Loss History',
+                         OPATH / f'loss.{args.imtype}',
                          uncertainties=args.uncertainties)
             x, y = zip(*power_manager.loss_history)
             pl.plot_history(x, y)
 
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (%)', 'Power Loss History', \
-                         OPATH / f'loss_pct.{args.imtype}', \
+            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (%)', 'Power Loss History',
+                         OPATH / f'loss_pct.{args.imtype}',
                          uncertainties=args.uncertainties)
             x, y = zip(*power_manager.loss_history_percentage)
             pl.plot_history(x, y)
@@ -209,7 +221,7 @@ def main():
             if cooling_model:
                 ylabel = 'pue'
                 title = 'FMU ' + ylabel + 'History'
-                pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / f'pue.{args.imtype}', \
+                pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / f'pue.{args.imtype}',
                              uncertainties=args.uncertainties)
                 df = pd.DataFrame(cooling_model.fmu_history)
                 df.to_parquet('cooling_model.parquet', engine='pyarrow')

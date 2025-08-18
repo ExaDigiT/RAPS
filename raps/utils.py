@@ -21,6 +21,7 @@ import json
 
 from raps.job import Job
 
+
 def sum_values(values):
     return sum(x[1] for x in values) if values else 0
 
@@ -116,6 +117,7 @@ def truncated_weibull(scale, shape, min, max):
         if min < number <= max:
             return int(number)
 
+
 def truncated_weibull_float(scale, shape, min, max):
     while True:
         number = random.weibullvariate(scale, shape)
@@ -123,13 +125,12 @@ def truncated_weibull_float(scale, shape, min, max):
             return float(number)
 
 
-
-def return_nearest_power_of(*,number,base):
+def return_nearest_power_of(*, number, base):
     if base == 1:
         return number
     else:
-        next_num = base ** math.ceil(math.log(number,base))
-        prev_num = base ** math.floor(math.log(number,base))
+        next_num = base ** math.ceil(math.log(number, base))
+        prev_num = base ** math.floor(math.log(number, base))
         if next_num - number < number - prev_num:
             return next_num
         else:
@@ -346,7 +347,7 @@ def resampledf(df, time_resampled):
         @ In, None
         @ Out, CDU_names, list, list of CDU names
     """
-    df.set_index('time',inplace=True)
+    df.set_index('time', inplace=True)
     df = df.reindex(df.index.union(time_resampled)).interpolate('values').loc[time_resampled]
     df = df.reset_index()
     return df
@@ -388,7 +389,7 @@ def create_casename(prefix=''):
     return prefix + str(uuid.uuid4())[:7]
 
 
-def create_file_indexed(prefix:str, path:str = None, ending:str = None, create=True) -> str:
+def create_file_indexed(prefix: str, path: str = None, ending: str = None, create=True) -> str:
     if path is not None:
         os.makedirs(path, exist_ok=True)
     else:
@@ -407,7 +408,7 @@ def create_file_indexed(prefix:str, path:str = None, ending:str = None, create=T
         index += 1
 
 
-def create_dir_indexed(dir:str, path:str = None) -> str:
+def create_dir_indexed(dir: str, path: str = None) -> str:
     if dir is None:
         raise ValueError("'dir' cannot be none")
     if path is None:
@@ -415,14 +416,14 @@ def create_dir_indexed(dir:str, path:str = None) -> str:
     index = 1
     while True:
         dirname = f"{dir}_{index:03d}"
-        fullpath = os.path.join(path,dirname)
+        fullpath = os.path.join(path, dirname)
         if not os.path.exists(fullpath):
-            os.makedirs(fullpath,exist_ok=False)
+            os.makedirs(fullpath, exist_ok=False)
             return fullpath
         index += 1
 
 
-def next_arrival_byconfargs(config,args,reset=False):
+def next_arrival_byconfargs(config, args, reset=False):
     arrival_rate = 1
     arrival_time = config['JOB_ARRIVAL_TIME']
     downscale = args.downscale
@@ -434,7 +435,7 @@ def next_arrival_byconfargs(config,args,reset=False):
     return next_arrival(arrival_rate / (arrival_time * downscale), reset)
 
 
-def next_arrival_byconfkwargs(config,kwargs,reset=False):
+def next_arrival_byconfkwargs(config, kwargs, reset=False):
     arrival_rate = 1
     arrival_time = config['JOB_ARRIVAL_TIME']
     if kwargs['job_arrival_rate']:
@@ -444,7 +445,7 @@ def next_arrival_byconfkwargs(config,kwargs,reset=False):
     return next_arrival(arrival_rate / arrival_time, reset)
 
 
-def next_arrival(lambda_rate,reset=False, start_time=0):
+def next_arrival(lambda_rate, reset=False, start_time=0):
     if not hasattr(next_arrival, 'next_time') or reset is True:
         # Initialize the first time it's called
         next_arrival.next_time = start_time
@@ -455,7 +456,7 @@ def next_arrival(lambda_rate,reset=False, start_time=0):
 
 
 def convert_to_seconds(time_str):
-    if isinstance(time_str, (int,float)):
+    if isinstance(time_str, (int, float)):
         return time_str  # this happens....
     # Define the conversion factors
     time_factors = {
@@ -535,7 +536,7 @@ def toJSON(obj):
     """Function to dump a json string from object"""
     return json.dumps(
         obj,
-        default=lambda o:o.__dict__,
+        default=lambda o: o.__dict__,
         sort_keys=True,
         indent=4)
 
@@ -543,7 +544,7 @@ def toJSON(obj):
 def convert_numpy_to_builtin(obj):
     if isinstance(obj, dict):
         tmp_obj = dict()
-        for k,v in obj.items():
+        for k, v in obj.items():
             tmp_obj[k] = convert_numpy_to_builtin(v)
         return tmp_obj
     elif isinstance(obj, list):
@@ -571,13 +572,13 @@ def get_current_utilization(trace, job: Job):
         if time_quanta_index < 0:
             time_quanta_index = 0
 
-    if (isinstance(trace,list) and trace != []) or \
+    if (isinstance(trace, list) and trace != []) or \
        (isinstance(trace, np.ndarray) and trace.size != 0):
         if time_quanta_index < len(trace):
             util = get_utilization(trace, time_quanta_index)
         else:
-            util = get_utilization(trace, max(0,len(trace) - 1))
-    elif isinstance(trace,float) or isinstance(trace,int):
+            util = get_utilization(trace, max(0, len(trace) - 1))
+    elif isinstance(trace, float) or isinstance(trace, int):
         util = trace
     else:
         util = 0.0

@@ -94,7 +94,7 @@ class Account:
         return acct
 
     @classmethod
-    def merge(cls,account1:'Account', account2:'Account') -> 'Account':
+    def merge(cls, account1: 'Account', account2: 'Account') -> 'Account':
         """
         Destructive merge
 
@@ -140,7 +140,7 @@ class Accounts:
         self.average_user.energy_allocated = self.all_users.energy_allocated / total_accounts
         self.average_user.avg_power = self.all_users.avg_power / total_accounts
         if self.average_user.jobs_completed != 0.0:
-            self.average_user.update_fugaku_points(self.average_user.energy_allocated,self.average_user.avg_power)
+            self.average_user.update_fugaku_points(self.average_user.energy_allocated, self.average_user.avg_power)
         return self
 
     def __init__(self, jobs=None):
@@ -148,10 +148,10 @@ class Accounts:
         self.all_users = Account(-2, "All_Users")
         self.average_user = Account(-1, "Avg_User")
         if jobs:
-            if not isinstance(jobs,list):
+            if not isinstance(jobs, list):
                 raise TypeError
             for job_dict in jobs:
-                if not isinstance(job_dict,dict):
+                if not isinstance(job_dict, dict):
                     raise TypeError
                 if job_dict["account"] not in self.account_dict:
                     self.account_dict[job_dict["account"]] = Account(job_dict["account"], jobs_enqueued=0)
@@ -160,7 +160,7 @@ class Accounts:
             self.update_average_user()
         pass
 
-    def updates_all_users_by_account(self,account:Account):
+    def updates_all_users_by_account(self, account: Account):
         self.all_users.jobs_enqueued += account.jobs_enqueued
         self.all_users.jobs_completed += account.jobs_completed
         self.all_users.time_allocated += account.time_allocated
@@ -168,15 +168,12 @@ class Accounts:
         self.all_users.avg_power = self.energy_allocated / self.time_allocated
         self.update_average_user()  # Only necessary if averag_user was not updated before calling update all users.
         # Therefore As this is needed for fugaku points this should always be called.
-        self.all_users.update_fugaku_points(self.average_user.energy_allocated,self.average_user.avg_power)
+        self.all_users.update_fugaku_points(self.average_user.energy_allocated, self.average_user.avg_power)
 
-
-
-    def add_account(self, account:Account):
+    def add_account(self, account: Account):
         self.account_dict[account.name] = account
         self.add_user_stats_to_all_users(account)
         # update_average_user() is already called
-
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -219,12 +216,12 @@ class Accounts:
             account.update_statistics(jobstats, self.average_user)
             self.account_dict[jobstats.account] = account
             # Update the  summary account (all_users) and the average_user account
-            self.all_users.update_statistics(jobstats,self.average_user)
+            self.all_users.update_statistics(jobstats, self.average_user)
             self.update_average_user()
 
     def to_dict(self):
         acct_dict = {}
-        for account_name,account in self.account_dict.items():
+        for account_name, account in self.account_dict.items():
             acct_dict[account_name] = account.to_dict()
         ret_dict = {}
         ret_dict['account_dict'] = acct_dict
@@ -233,7 +230,7 @@ class Accounts:
         return ret_dict
 
     @classmethod
-    def merge(cls, accounts1:'Accounts', accounts2:'Accounts') -> 'Accounts':
+    def merge(cls, accounts1: 'Accounts', accounts2: 'Accounts') -> 'Accounts':
         """
         Destructive merge of accounts
         """
@@ -242,7 +239,8 @@ class Accounts:
 
         for ac2_k, ac2_v in accounts2.account_dict.items():
             if ac2_k in accounts1.account_dict:
-                merged_accounts.account_dict[ac2_k] = Account.merge(accounts1.account_dict[ac2_k], accounts2.account_dict[ac2_k])
+                merged_accounts.account_dict[ac2_k] = Account.merge(
+                    accounts1.account_dict[ac2_k], accounts2.account_dict[ac2_k])
             else:
                 merged_accounts.account_dict[ac2_k] = ac2_v
         for ac1_k, ac1_v in accounts1.account_dict.items():
@@ -253,15 +251,17 @@ class Accounts:
                 pass
 
         # Update all users -> then update average user -> then fugagku points for all users (order is important!)
-        merged_accounts.all_users = Account.merge(accounts1.all_users,accounts2.all_users)
+        merged_accounts.all_users = Account.merge(accounts1.all_users, accounts2.all_users)
         merged_accounts.update_average_user()
         # Update to average user is needed before fugaku points can be caluculated.
         if merged_accounts.all_users.jobs_completed != 0:
-            merged_accounts.all_users.update_fugaku_points(merged_accounts.average_user.energy_allocated, merged_accounts.average_user.avg_power)
+            merged_accounts.all_users.update_fugaku_points(
+                merged_accounts.average_user.energy_allocated, merged_accounts.average_user.avg_power)
 
         for ac_k, ac_v in merged_accounts.account_dict.items():
             if merged_accounts.account_dict[ac_k].jobs_completed != 0:
-                merged_accounts.account_dict[ac_k].update_fugaku_points(merged_accounts.average_user.energy_allocated, merged_accounts.average_user.avg_power)
+                merged_accounts.account_dict[ac_k].update_fugaku_points(
+                    merged_accounts.average_user.energy_allocated, merged_accounts.average_user.avg_power)
 
         accounts1 = None
         accounts2 = None

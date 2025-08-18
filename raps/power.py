@@ -8,14 +8,14 @@ Classes:
 Functions:
 - compute_loss: Linear loss model
 - compute_node_power: Calculate the total power consumption for given CPU and GPU utilization.
-- compute_node_power_validate: Calculate the total power consumption for a given mean and standard deviation of node power.
+- compute_node_power_validate: Calculate the total power consumption for
+    a given mean and standard deviation of node power.
 """
 
 import numpy as np
 import pandas as pd
 import uncertainties as uf
 from .utils import linear_to_3d_index
-from .validators import recompute_power
 
 
 def custom_str_uncertainties(self):
@@ -30,7 +30,7 @@ def custom_format_uncertainties(self, fmt_spec):
     return f"{self.nominal_value:{fmt_spec}} ±{self.std_dev:{fmt_spec}}"
 
 
-#In stats unicode is printed as unocde abbreviation! To be fixed!
+# In stats unicode is printed as unocde abbreviation! To be fixed!
 uf.Variable.__str__ = custom_str_uncertainties
 uf.Variable.__repr__ = custom_repr_uncertainties
 uf.Variable.__format__ = custom_format_uncertainties
@@ -50,26 +50,26 @@ def compute_node_power(cpu_util, gpu_util, net_util, config):
     :return: Total power consumption after accounting for power loss.
     """
     power_cpu = cpu_util * config['POWER_CPU_MAX'] + \
-                (config['CPUS_PER_NODE'] - cpu_util) * config['POWER_CPU_IDLE']
+        (config['CPUS_PER_NODE'] - cpu_util) * config['POWER_CPU_IDLE']
 
     power_gpu = gpu_util * config['POWER_GPU_MAX'] + \
-                (config['GPUS_PER_NODE'] - gpu_util) * config['POWER_GPU_IDLE']
+        (config['GPUS_PER_NODE'] - gpu_util) * config['POWER_GPU_IDLE']
 
     try:
         power_nic = config['POWER_NIC_IDLE'] + \
-                    (config['POWER_NIC_MAX'] - config['POWER_NIC_IDLE']) * net_util
-    except:
+            (config['POWER_NIC_MAX'] - config['POWER_NIC_IDLE']) * net_util
+    except KeyError:
         if isinstance(net_util, np.ndarray):
             power_nic = config['POWER_NIC'] * np.ones(net_util.shape)
         else:
             power_nic = config['POWER_NIC']
 
     power_total = power_cpu + power_gpu + config['POWER_MEM'] + \
-                  config['NICS_PER_NODE'] * power_nic + config['POWER_NVME']
+        config['NICS_PER_NODE'] * power_nic + config['POWER_NVME']
 
     # Apply power loss due to Sivoc and Rectifier
-    power_with_sivoc_loss = compute_loss(power_total, config['SIVOC_LOSS_CONSTANT'], \
-                                                      config['SIVOC_EFFICIENCY'])
+    power_with_sivoc_loss = compute_loss(power_total, config['SIVOC_LOSS_CONSTANT'],
+                                         config['SIVOC_EFFICIENCY'])
     power_sivoc_loss_only = power_with_sivoc_loss - power_total
 
     return power_with_sivoc_loss, power_sivoc_loss_only
@@ -85,18 +85,19 @@ def compute_node_power_uncertainties(cpu_util, gpu_util, net_util, config):
     :return: Total power consumption after accounting for power loss.
     """
     power_cpu = cpu_util \
-                * uf.ufloat(config['POWER_CPU_MAX'], config['POWER_CPU_MAX'] * config['POWER_CPU_UNCERTAINTY']) \
-                + (config['CPUS_PER_NODE'] - cpu_util) \
-                * uf.ufloat(config['POWER_CPU_IDLE'], config['POWER_CPU_IDLE'] * config['POWER_CPU_UNCERTAINTY'])
+        * uf.ufloat(config['POWER_CPU_MAX'], config['POWER_CPU_MAX'] * config['POWER_CPU_UNCERTAINTY']) \
+        + (config['CPUS_PER_NODE'] - cpu_util) \
+        * uf.ufloat(config['POWER_CPU_IDLE'], config['POWER_CPU_IDLE'] * config['POWER_CPU_UNCERTAINTY'])
     power_gpu = gpu_util \
-                * uf.ufloat(config['POWER_GPU_MAX'], config['POWER_GPU_MAX'] * config['POWER_GPU_UNCERTAINTY']) \
-                + (config['GPUS_PER_NODE'] - gpu_util) \
-                * uf.ufloat(config['POWER_GPU_IDLE'], config['POWER_GPU_IDLE'] * config['POWER_GPU_UNCERTAINTY'])
+        * uf.ufloat(config['POWER_GPU_MAX'], config['POWER_GPU_MAX'] * config['POWER_GPU_UNCERTAINTY']) \
+        + (config['GPUS_PER_NODE'] - gpu_util) \
+        * uf.ufloat(config['POWER_GPU_IDLE'], config['POWER_GPU_IDLE'] * config['POWER_GPU_UNCERTAINTY'])
 
     power_total = power_cpu + power_gpu \
-                  + uf.ufloat(config['POWER_MEM'], config['POWER_MEM'] * config['POWER_MEM_UNCERTAINTY']) \
-                  + config['NICS_PER_NODE'] * uf.ufloat(config['POWER_NIC'], config['POWER_NIC'] * config['POWER_NIC_UNCERTAINTY']) \
-                  + uf.ufloat(config['POWER_NVME'], config['POWER_NVME'] * config['POWER_NVME_UNCERTAINTY'])
+        + uf.ufloat(config['POWER_MEM'], config['POWER_MEM'] * config['POWER_MEM_UNCERTAINTY']) \
+        + config['NICS_PER_NODE'] \
+        * uf.ufloat(config['POWER_NIC'], config['POWER_NIC'] * config['POWER_NIC_UNCERTAINTY']) \
+        + uf.ufloat(config['POWER_NVME'], config['POWER_NVME'] * config['POWER_NVME_UNCERTAINTY'])
 
     # Apply power loss due to Sivoc and Rectifier
     power_with_sivoc_loss = compute_loss(power_total, config['SIVOC_LOSS_CONSTANT'], config['SIVOC_EFFICIENCY'])
@@ -188,7 +189,7 @@ class PowerManager:
         self.history = []
         self.loss_history = []
         self.uncertainties = False
-        if power_func in [compute_node_power_uncertainties, \
+        if power_func in [compute_node_power_uncertainties,
                           compute_node_power_validate_uncertainties]:
             self.uncertainties = True
         if self.down_nodes:
@@ -196,13 +197,14 @@ class PowerManager:
 
     def get_peak_power(self):
         """Estimate peak power of system for setting max value of gauges in dashboard"""
-        node_power = compute_node_power(self.config['CPUS_PER_NODE'], self.config['GPUS_PER_NODE'], net_util=0, config=self.config)[0]
+        node_power = compute_node_power(self.config['CPUS_PER_NODE'],
+                                        self.config['GPUS_PER_NODE'], net_util=0, config=self.config)[0]
         blades_per_rectifier = self.config['BLADES_PER_CHASSIS'] / self.config['RECTIFIERS_PER_CHASSIS']
         rectifier_load = blades_per_rectifier * self.config['NODES_PER_BLADE'] * node_power
-        rectifier_power = compute_loss(rectifier_load, self.config['RECTIFIER_LOSS_CONSTANT'], \
+        rectifier_power = compute_loss(rectifier_load, self.config['RECTIFIER_LOSS_CONSTANT'],
                                        self.config['RECTIFIER_EFFICIENCY'])  # with AC-DC conversion losses
         chassis_power = self.config['BLADES_PER_CHASSIS'] * rectifier_power / blades_per_rectifier \
-                      + self.config['SWITCHES_PER_CHASSIS'] * self.config['POWER_SWITCH']
+            + self.config['SWITCHES_PER_CHASSIS'] * self.config['POWER_SWITCH']
         rack_power = chassis_power * self.config['CHASSIS_PER_RACK']
         total_power = rack_power * self.config['NUM_RACKS'] + self.config['POWER_CDU'] * self.config['NUM_CDUS']
         return total_power
@@ -224,10 +226,10 @@ class PowerManager:
         # approximate by scaling up to number of rectifiers, applying loss
         # and then dividing by number of rectifiers.
         # For Frontier there are four nodes per rectifier.
-        power_with_loss = compute_loss(initial_power * self.config['NODES_PER_RECTIFIER'], \
-                                       self.config['RECTIFIER_LOSS_CONSTANT'], \
+        power_with_loss = compute_loss(initial_power * self.config['NODES_PER_RECTIFIER'],
+                                       self.config['RECTIFIER_LOSS_CONSTANT'],
                                        self.config['RECTIFIER_EFFICIENCY']) \
-                                     / self.config['NODES_PER_RECTIFIER']
+            / self.config['NODES_PER_RECTIFIER']
         return np.full(self.sc_shape, power_with_loss)
 
     def apply_down_nodes(self):
@@ -284,7 +286,6 @@ class PowerManager:
         self.sivoc_loss[node_indices] = sivoc_loss
         return power_value[np.cumsum(job_lengths) - 1]
 
-
     def calculate_rectifiers_needed(self, power_state_summed):
         """
         Calculate the number of rectifiers needed based on the total power consumption.
@@ -338,9 +339,10 @@ class PowerManager:
                         num_rectifiers = num_rectifiers_array[i, j, k]
                         power_per_rectifier = chassis_power[i, j, k] / num_rectifiers
                         rectifier_power[i, j, k, :num_rectifiers] = power_per_rectifier
-                        power_with_losses[i, j, k, :num_rectifiers] = compute_loss(power_per_rectifier, \
-                                                                                   self.config['RECTIFIER_LOSS_CONSTANT'], \
-                                                                                   self.config['RECTIFIER_EFFICIENCY'])
+                        power_with_losses[i, j, k, :num_rectifiers] = \
+                            compute_loss(power_per_rectifier,
+                                         self.config['RECTIFIER_LOSS_CONSTANT'],
+                                         self.config['RECTIFIER_EFFICIENCY'])
 
             rectifier_power = np.nan_to_num(rectifier_power)
             power_with_losses = np.nan_to_num(power_with_losses)
@@ -348,8 +350,8 @@ class PowerManager:
         else:
             divisor = np.array([4, 4, 4, 4]).reshape(1, 1, 1, 4)
             rectifier_power = chassis_power[:, :, :, np.newaxis] / divisor
-            power_with_losses = compute_loss(rectifier_power, \
-                                             self.config['RECTIFIER_LOSS_CONSTANT'], \
+            power_with_losses = compute_loss(rectifier_power,
+                                             self.config['RECTIFIER_LOSS_CONSTANT'],
                                              self.config['RECTIFIER_EFFICIENCY'])
 
         # Compute just the losses
@@ -379,7 +381,6 @@ class PowerManager:
 
         # Return rectifier losses summed at CDU level
         return power_with_rows, rect_loss_with_rows
-
 
     def compute_sivoc_losses(self):
         """
@@ -422,16 +423,16 @@ class PowerManager:
         return power_df
 
     def simulate_power(self, *,
-                          running_jobs,
-                          scheduled_nodes,
-                          cpu_utils,
-                          gpu_utils,
-                          net_utils
+                       running_jobs,
+                       scheduled_nodes,
+                       cpu_utils,
+                       gpu_utils,
+                       net_utils
                        ):
         jobs_power = self.update_power_state(scheduled_nodes, cpu_utils, gpu_utils, net_utils)
 
         for i, job in enumerate(running_jobs):
-            #if job.running_time % self.config['TRACE_QUANTA'] == 0:
+            # if job.running_time % self.config['TRACE_QUANTA'] == 0:
             job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
 
         # Update the power array UI component
@@ -440,7 +441,8 @@ class PowerManager:
         rack_loss = rect_losses + sivoc_losses
         power_df = self.get_power_df(rack_power, rack_loss)
 
-        total_power_kw = sum(row[-1] for row in rack_power) + self.config['NUM_CDUS'] * self.config['POWER_CDU'] / 1000.0
+        total_power_kw = sum(row[-1] for row in rack_power) + \
+            self.config['NUM_CDUS'] * self.config['POWER_CDU'] / 1000.0
         total_loss_kw = sum(row[-1] for row in rack_loss)
 
         # Primary return value:
@@ -452,10 +454,10 @@ class PowerManager:
         #    jobs_power         # For statistics
         # ===
         return power_df, \
-               rack_power, \
-               total_power_kw, \
-               total_loss_kw, \
-               jobs_power
+            rack_power, \
+            total_power_kw, \
+            total_loss_kw, \
+            jobs_power
 
 
 def record_power_stats_foreach_job(*, running_jobs, jobs_power):

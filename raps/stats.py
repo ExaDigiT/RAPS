@@ -4,7 +4,8 @@ These are statistics on
 the engine
 the jobs
 
-Both could be part of the engine or jobs class, but as the are very verbose, try to keep statistics consolidated in this file.
+Both could be part of the engine or jobs class, but as the are very verbose,
+try to keep statistics consolidated in this file.
 """
 import sys
 from .utils import sum_values, min_value, max_value, convert_seconds_to_hhmmss
@@ -42,7 +43,7 @@ def get_engine_stats(engine: Engine):
 
     if engine.config['multitenant']:
         # Multitenancy Stats
-        total_jobs_loaded = engine.total_initial_jobs # Assuming this is passed to __init__
+        total_jobs_loaded = engine.total_initial_jobs  # Assuming this is passed to __init__
         stats['total jobs loaded'] = total_jobs_loaded
         stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
 
@@ -50,8 +51,8 @@ def get_engine_stats(engine: Engine):
         # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
         total_jobs_running_timesteps = 0
         max_concurrent_jobs_per_node = 0
-        sum_jobs_per_active_node = 0 # New: Sum of (jobs / active_nodes) for each timestep
-        count_active_timesteps_for_avg_active = 0 # New: Count of timesteps with active nodes
+        sum_jobs_per_active_node = 0  # New: Sum of (jobs / active_nodes) for each timestep
+        count_active_timesteps_for_avg_active = 0  # New: Count of timesteps with active nodes
 
         for occupancy_dict in engine.node_occupancy_history:
             current_timestep_total_occupancy = sum(occupancy_dict.values())
@@ -77,13 +78,13 @@ def get_engine_stats(engine: Engine):
         stats['avg concurrent jobs per node'] = "N/A"
         stats['max concurrent jobs per node'] = "N/A"
 
-    #network_stats = get_network_stats()
-    #stats.update(network_stats)
+    # network_stats = get_network_stats()
+    # stats.update(network_stats)
 
     return stats
 
 
-def min_max_sum(value,min,max,sum):
+def min_max_sum(value, min, max, sum):
     if value < 0:
         value = 0
     if value < min:
@@ -91,7 +92,7 @@ def min_max_sum(value,min,max,sum):
     if value > max:
         max = value
     sum += value
-    return min,max,sum
+    return min, max, sum
 
 
 def get_scheduler_stats(engine: Engine):
@@ -170,7 +171,7 @@ def get_job_stats(engine: Engine):
     # Information on Job-Mix
     for job in engine.job_history_dict:
         job_size = job['num_nodes']
-        min_job_size,max_job_size,sum_job_size = \
+        min_job_size, max_job_size, sum_job_size = \
             min_max_sum(job_size, min_job_size, max_job_size, sum_job_size)
 
         runtime = job['end_time'] - job['start_time']
@@ -194,7 +195,7 @@ def get_job_stats(engine: Engine):
 
         # Completion statistics
         wait_time = job["start_time"] - job["submit_time"]
-        min_wait_time,max_wait_time,sum_wait_time = \
+        min_wait_time, max_wait_time, sum_wait_time = \
             min_max_sum(wait_time, min_wait_time, max_wait_time, sum_wait_time)
 
         turnaround_time = job["end_time"] - job["submit_time"]
@@ -214,10 +215,10 @@ def get_job_stats(engine: Engine):
         min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = \
             min_max_sum(psf_partial_den, min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den)
 
-        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(job['avg_cpu_usage'],min_cpu_u, max_cpu_u, sum_cpu_u)
-        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(job['avg_gpu_usage'],min_gpu_u, max_gpu_u, sum_gpu_u)
-        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(job['avg_ntx_usage'],min_ntx_u, max_ntx_u, sum_ntx_u)
-        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(job['avg_nrx_usage'],min_nrx_u, max_nrx_u, sum_nrx_u)
+        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(job['avg_cpu_usage'], min_cpu_u, max_cpu_u, sum_cpu_u)
+        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(job['avg_gpu_usage'], min_gpu_u, max_gpu_u, sum_gpu_u)
+        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(job['avg_ntx_usage'], min_ntx_u, max_ntx_u, sum_ntx_u)
+        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(job['avg_nrx_usage'], min_nrx_u, max_nrx_u, sum_nrx_u)
 
         if job['num_nodes'] <= 5:
             jobsSmall += 1
@@ -255,21 +256,21 @@ def get_job_stats(engine: Engine):
             psf = 0
     else:
         # Set these to -1 to indicate nothing ran
-        min_job_size, max_job_size, avg_job_size = -1,-1,-1
-        min_runtime, max_runtime, avg_runtime = -1,-1,-1
-        min_energy, max_energy, avg_energy = -1,-1,-1
-        min_edp, max_edp, avg_edp = -1,-1,-1
-        min_edp2, max_edp2, avg_edp2 = -1,-1,-1
-        min_agg_node_hours, max_agg_node_hours, avg_agg_node_hours = -1,-1,-1
-        min_wait_time, max_wait_time, avg_wait_time = -1,-1,-1
-        min_turnaround_time, max_turnaround_time, avg_turnaround_time = -1,-1,-1
-        min_awrt, max_awrt, avg_awrt = -1,-1,-1
+        min_job_size, max_job_size, avg_job_size = -1, -1, -1
+        min_runtime, max_runtime, avg_runtime = -1, -1, -1
+        min_energy, max_energy, avg_energy = -1, -1, -1
+        min_edp, max_edp, avg_edp = -1, -1, -1
+        min_edp2, max_edp2, avg_edp2 = -1, -1, -1
+        min_agg_node_hours, max_agg_node_hours, avg_agg_node_hours = -1, -1, -1
+        min_wait_time, max_wait_time, avg_wait_time = -1, -1, -1
+        min_turnaround_time, max_turnaround_time, avg_turnaround_time = -1, -1, -1
+        min_awrt, max_awrt, avg_awrt = -1, -1, -1
         psf = -1
 
-        min_cpu_u, max_cpu_u, avg_cpu_u = -1,-1,-1
-        min_gpu_u, max_gpu_u, avg_gpu_u = -1,-1,-1
-        min_ntx_u, max_ntx_u, avg_ntx_u = -1,-1,-1
-        min_nrx_u, max_nrx_u, avg_nrx_u = -1,-1,-1
+        min_cpu_u, max_cpu_u, avg_cpu_u = -1, -1, -1
+        min_gpu_u, max_gpu_u, avg_gpu_u = -1, -1, -1
+        min_ntx_u, max_ntx_u, avg_ntx_u = -1, -1, -1
+        min_nrx_u, max_nrx_u, avg_nrx_u = -1, -1, -1
 
     job_stats = {
         'jobs completed': engine.jobs_completed,

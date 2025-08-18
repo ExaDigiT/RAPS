@@ -110,12 +110,10 @@ Note: To locate the pruning logic, search for the keyword "prune" in the code.
 import ast
 import os
 import math
-import numpy as np
 import pandas as pd
 import re
 
 from tqdm import tqdm
-from types import SimpleNamespace
 from typing import Dict, Union, Optional
 from collections import Counter
 
@@ -123,7 +121,6 @@ from raps.job import job_dict, Job
 from raps.utils import summarize_ranges
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
-from .utils import validate_job_traces
 
 TRES_ID_MAP = {
     1: "cpu",
@@ -134,8 +131,8 @@ TRES_ID_MAP = {
 }
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
-RED    = "\033[31m"
-RESET  = "\033[0m"
+RED = "\033[31m"
+RESET = "\033[0m"
 
 
 def parse_tres_alloc(tres_str: Union[str, None],
@@ -238,7 +235,7 @@ def load_data(local_dataset_path, **kwargs):
 
     # date window
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
-    end_ts   = to_epoch(kwargs.get("end",   DEFAULT_END))
+    end_ts = to_epoch(kwargs.get("end",   DEFAULT_END))
 
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
@@ -254,11 +251,11 @@ def load_data(local_dataset_path, **kwargs):
     # load list of underutilized nodes to ignore
     pruned = set()
     with open(os.path.join(NL_PATH, "prune_list.txt")) as pf:
-        pruned = {l.strip() for l in pf if l.strip()}
+        pruned = {l_.strip() for l_ in pf if l_.strip()}
 
     before_prune = len(sl)
     # only keep jobs requesting <= 480 nodes
-    sl = sl[ sl.nodes_alloc <= 480 ]
+    sl = sl[sl.nodes_alloc <= 480]
     after_alloc_filter = len(sl)
     skip_counts['nodes_alloc > 480'] += (before_prune - after_alloc_filter)
 
@@ -299,26 +296,26 @@ def load_data(local_dataset_path, **kwargs):
     ])
 
     # partition mode
-    part = kwargs.get("partition","").split("/")[-1].lower()
-    cpu_only = (part=="part-cpu")
-    mixed    = (part=="part-gpu")
+    part = kwargs.get("partition", "").split("/")[-1].lower()
+    cpu_only = (part == "part-cpu")
+    mixed = (part == "part-gpu")
 
     # create nodelist mapping
     if cpu_only:
         with open(os.path.join(NL_PATH, "cpu_nodes.txt")) as f:
-            cpu_nodes = [l.strip() for l in f if l.strip()]
+            cpu_nodes = [l_.strip() for l_ in f if l_.strip()]
         cpu_node_to_idx = {h: i for i, h in enumerate(cpu_nodes)}
-    else: # cpu + gpu
+    else:  # cpu + gpu
         with open(os.path.join(NL_PATH, "gpu_nodes.txt")) as f:
-            gpu_nodes = [l.strip() for l in f if l.strip()]
+            gpu_nodes = [l_.strip() for l_ in f if l_.strip()]
         gpu_node_to_idx = {h: i for i, h in enumerate(gpu_nodes)}
 
     if cpu_only:
         job_ids = set(sl.id_job) - gpu_jobs
-        #skip_counts['gpu_job_in_cpu_mode'] += len(set(sl.id_job) & gpu_jobs)
+        # skip_counts['gpu_job_in_cpu_mode'] += len(set(sl.id_job) & gpu_jobs)
     elif mixed:
         job_ids = gpu_jobs & set(sl.id_job)
-        #skip_counts['cpu_job_in_gpu_mode'] += len(set(sl.id_job) - gpu_jobs)
+        # skip_counts['cpu_job_in_gpu_mode'] += len(set(sl.id_job) - gpu_jobs)
     else:
         job_ids = set(sl.id_job)
 
@@ -328,33 +325,33 @@ def load_data(local_dataset_path, **kwargs):
     cpu_files = []
     cpu_root = os.path.join(data_root, "cpu")
     if os.path.exists(cpu_root):
-        for R,_,fs in os.walk(cpu_root):
+        for R, _, fs in os.walk(cpu_root):
             for f in fs:
                 if not f.endswith("-timeseries.csv"):
                     continue
                 try:
-                    jid = int(f.split("-",1)[0])
+                    jid = int(f.split("-", 1)[0])
                     if jid in job_ids:
-                        cpu_files.append(os.path.join(R,f))
+                        cpu_files.append(os.path.join(R, f))
                 except (ValueError, IndexError):
                     continue
 
     gpu_files = []
     gpu_root = os.path.join(data_root, "gpu")
     if os.path.exists(gpu_root):
-        for R,_,fs in os.walk(gpu_root):
+        for R, _, fs in os.walk(gpu_root):
             for f in fs:
                 if not f.endswith(".csv"):
                     continue
                 try:
-                    jid = int(f.split("-",1)[0])
+                    jid = int(f.split("-", 1)[0])
                     if jid in job_ids:
-                        gpu_files.append(os.path.join(R,f))
+                        gpu_files.append(os.path.join(R, f))
                 except (ValueError, IndexError):
                     continue
 
-    cpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in cpu_files}
-    gpu_ids = {int(os.path.basename(p).split('-',1)[0]) for p in gpu_files}
+    cpu_ids = {int(os.path.basename(p).split('-', 1)[0]) for p in cpu_files}
+    gpu_ids = {int(os.path.basename(p).split('-', 1)[0]) for p in gpu_files}
     all_trace_ids = cpu_ids | gpu_ids
 
     print(f"→ {len(cpu_files)} CPU files, {len(gpu_files)} GPU files → {len(all_trace_ids)} jobs with traces")
@@ -378,13 +375,11 @@ def load_data(local_dataset_path, **kwargs):
             print(f"   * {overlap_count} jobs have BOTH CPU and GPU traces.")
         print("----------------------------------------------------\n")
 
-
     data = {}
 
     traced_jobs = all_trace_ids
     untraced_jobs = job_ids - traced_jobs
     skip_counts['no_trace_file'] += len(untraced_jobs)
-
 
     # CPU first
     for fp in tqdm(cpu_files, desc="Loading CPU traces"):
@@ -407,7 +402,7 @@ def load_data(local_dataset_path, **kwargs):
             tres_alloc = job_row.get('tres_alloc', 'N/A')
             tres_alloc_dict = parse_tres_alloc(tres_alloc)
             rec["tres_alloc_dict"] = tres_alloc_dict
-            gres_used = job_row.get('gres_used', 'N/A')
+            #  gres_used = job_row.get('gres_used', 'N/A')  # Unused
 
             tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid}")
             tqdm.write(f"  Start Time: {start_time}, Wall Time: {wall_time}s")
@@ -433,7 +428,7 @@ def load_data(local_dataset_path, **kwargs):
 
         rec["nodes_alloc"] = int(job_row["nodes_alloc"])
         rec["cpu"] = proc_cpu_series(df)
-        #print(f'{RED}{rec["cpu"]}{RESET}')
+        # print(f'{RED}{rec["cpu"]}{RESET}')
 
     if debug:
         print(f"GPU candidate files ({len(gpu_files)}):")
@@ -442,35 +437,39 @@ def load_data(local_dataset_path, **kwargs):
 
     # data from the cpu processes are all stored under the `data` dictionary
     # according to their respective jid key
-    #print("******", data.keys())
+    # print("******", data.keys())
 
     for fp in tqdm(gpu_files, desc="Loading GPU traces"):
 
         if not os.path.exists(fp):
-            if debug: print(f"{YELLOW}[WARNING] gpu path {fp!r} doesn't exist skipping{RESET}")
+            if debug:
+                print(f"{YELLOW}[WARNING] gpu path {fp!r} doesn't exist skipping{RESET}")
             skip_counts['gpu_path_does_not_exist'] += 1
             continue
 
-        if debug: tqdm.write(f"Reading GPU {os.path.basename(fp)}")
+        if debug:
+            tqdm.write(f"Reading GPU {os.path.basename(fp)}")
         dfi = pd.read_csv(fp, dtype={0: str})
         if "gpu_index" not in dfi.columns:
-            if debug: tqdm.write("[WARNING] → no gpu_index column!  SKIPPING")
+            if debug:
+                tqdm.write("[WARNING] → no gpu_index column!  SKIPPING")
             skip_counts['no_gpu_index_column'] += 1
             continue
 
         jid = int(os.path.basename(fp).split("-", 1)[0])
         rec = data.setdefault(jid, {})
         cpu_df = rec.get("cpu")
-        #print(f"{YELLOW}jid={jid} {cpu_df}{RESET}")
+        # print(f"{YELLOW}jid={jid} {cpu_df}{RESET}")
         if cpu_df is None:
-            if debug: tqdm.write(f"{YELLOW}[WARNING] → no cpu trace for gpu! (jid={jid}) SKIPPING{RESET}")
+            if debug:
+                tqdm.write(f"{YELLOW}[WARNING] → no cpu trace for gpu! (jid={jid}) SKIPPING{RESET}")
             skip_counts['no_cpu_trace_for_gpu_job'] += 1
             continue
 
         gpu_cnt = rec.get("gpu_cnt", 0)
         gpu_ser, gpu_cnt = proc_gpu_series(cpu_df, dfi, gpu_cnt)
 
-        gpu_cnt  = data[jid].get("gpu_cnt", 0)
+        gpu_cnt = data[jid].get("gpu_cnt", 0)
         prev_gpu = data[jid].get("gpu")
         gpu_ser, gpu_cnt = proc_gpu_series(cpu_df, dfi, gpu_cnt)
         if prev_gpu is None:
@@ -520,7 +519,7 @@ def load_data(local_dataset_path, **kwargs):
     config = kwargs.get('config', {})
     cpus_per_node = config.get('CPUS_PER_NODE')
     cores_per_cpu = config.get('CORES_PER_CPU')
-    gpus_per_node = config.get('GPUS_PER_NODE')
+    # gpus_per_node = config.get('GPUS_PER_NODE')  # Unused
 
     quanta = config.get('TRACE_QUANTA')
 
@@ -542,7 +541,7 @@ def load_data(local_dataset_path, **kwargs):
                 skip_counts['final_cpu_none_cpu_only'] += 1
                 continue
             cpu_tr = cpu.cpu_utilisation.tolist()
-            gpu_tr = [0] # Ensure gpu_tr is a list for max() operation
+            gpu_tr = [0]  # Ensure gpu_tr is a list for max() operation
             t0, t1 = cpu.utime.min(), cpu.utime.max()
         elif mixed:
             if cpu is None:
@@ -554,7 +553,7 @@ def load_data(local_dataset_path, **kwargs):
             cpu_tr = cpu.cpu_utilisation.tolist()
             gpu_tr = gpu
             t0, t1 = cpu.utime.min(), cpu.utime.max()
-        else: # not cpu_only or mixed
+        else:  # not cpu_only or mixed
             skip_counts['final_unhandled_partition'] += 1
             continue
 
@@ -577,28 +576,28 @@ def load_data(local_dataset_path, **kwargs):
         submit_time = rec.get("time_submit", t0) - start_ts
 
         current_job_dict = job_dict(
-            nodes_required   = nr,
-            cpu_cores_required = cpu_cores_req,
-            gpu_units_required = gpu_units_req,
-            name             = rec.get("name_job", "unknown"),
-            account          = rec.get("id_user", "unknown"),
-            cpu_trace        = cpu_tr,
-            gpu_trace        = gpu_tr,
-            ntx_trace        = [],
-            nrx_trace        = [],
-            end_state        = rec.get("state_end", "unknown"),
-            id               = jid,
-            scheduled_nodes  = rec.get("scheduled_nodes"),
-            priority         = rec.get("priority", 0),
-            submit_time      = submit_time,
-            time_limit       = rec.get("time_limit", 0),
-            start_time       = t0 - start_ts,
-            end_time         = t1 - start_ts,
-            wall_time        = max(0, t1-t0),
-            trace_time       = len(cpu_tr)*quanta,
-            trace_start_time = 0,
-            trace_end_time   = len(cpu_tr)*quanta,
-            trace_quanta = quanta
+            nodes_required=nr,
+            cpu_cores_required=cpu_cores_req,
+            gpu_units_required=gpu_units_req,
+            name=rec.get("name_job", "unknown"),
+            account=rec.get("id_user", "unknown"),
+            cpu_trace=cpu_tr,
+            gpu_trace=gpu_tr,
+            ntx_trace=[],
+            nrx_trace=[],
+            end_state=rec.get("state_end", "unknown"),
+            id=jid,
+            scheduled_nodes=rec.get("scheduled_nodes"),
+            priority=rec.get("priority", 0),
+            submit_time=submit_time,
+            time_limit=rec.get("time_limit", 0),
+            start_time=t0 - start_ts,
+            end_time=t1 - start_ts,
+            wall_time=max(0, t1-t0),
+            trace_time=len(cpu_tr)*quanta,
+            trace_start_time=0,
+            trace_end_time=len(cpu_tr)*quanta,
+            trace_quanta=quanta
         )
         job = Job(current_job_dict)
         jobs_list.append(job)
@@ -606,14 +605,14 @@ def load_data(local_dataset_path, **kwargs):
     # Calculate min_overall_utime and max_overall_utime
     telemetry_start = int(sl.time_start.min())
     telemetry_end = int(sl.time_end.max())
-    #min_overall_utime = int(sl.time_submit.min())
-    #max_overall_utime = int(sl.time_submit.max())
+    # min_overall_utime = int(sl.time_submit.min())
+    # max_overall_utime = int(sl.time_submit.max())
 
-    #args_namespace = SimpleNamespace(
+    # args_namespace = SimpleNamespace(
     #    fastforward=min_overall_utime,
     #    system='mit_supercloud',
     #    time=max_overall_utime
-    #)
+    # )
 
     print("\nSkipped jobs summary:")
     for reason, count in skip_counts.items():

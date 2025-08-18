@@ -1,4 +1,7 @@
-import argparse, os, sys, yaml
+import argparse
+import os
+import sys
+import yaml
 from raps.schedulers.default import PolicyType, BackfillType
 
 from raps.workload import add_workload_to_parser, check_workload_args
@@ -28,7 +31,9 @@ def apply_config_to_args(cfg, args):
         }:
             merged.update(v)
         else:
-            merged[k] = v
+            # Enter the commandline argument, but _underscores as the -dashes
+            # are replaced when reading from the commandline, but not in the yaml.
+            merged[k.replace('-', '_')] = v
 
     # Apply to argparse namespace
     for k, v in merged.items():
@@ -126,8 +131,8 @@ parser.add_argument("--layout", type=str, choices=ui_layout_choices,
 parser.add_argument('-o', '--output', type=str, nargs="?",
                     const="",  # Used if -o is given without a value
                     default=None,     # Used if -o is not provided at all
-                    help=("Output power, cooling, and loss models for later ",
-                          "analysis. Argumment specifies name."),
+                    help=("Output power, cooling, and loss models for later "
+                          "analysis. Argumment specifies name.")
                     )
 plot_choices = ["power", "loss", "pue", "temp", "util"]
 parser.add_argument("-p", "--plot", nargs="+", choices=plot_choices,
@@ -183,6 +188,20 @@ parser.add_argument("--accounts", action="store_true",
 parser.add_argument("--accounts-json", type=str,
                     help="Accounts JSON from previous run")
 
+# Downtime
+parser.add_argument("--downtime-first", type=str, default=None,
+                    help="First downtime, e.g., after 123, 27m, 3h, 7d")
+parser.add_argument("--downtime-interval", type=str, default=None,
+                    help="Interval between downtimes, e.g., every 123, 27m, 3h, 7d")
+parser.add_argument("--downtime-length", type=str, default=None,
+                    help="Downtime length, e.g., 123, 27m, 3h, 7d")
+
+# Continous Job Generation
+parser.add_argument("--continuous-job-generation", action="store_true",
+                    help="Activate continuous job generation.")
+parser.add_argument("--maxqueue", type=int, default=50,
+                    help="Specify the max queue length for continuous job generation.")
+
 
 def post_process_args(args):
     if args.time_delta:
@@ -200,6 +219,13 @@ def post_process_args(args):
     else:
         ff_raw, ff_down = None, 1
 
+    if args.downtime_first:
+        dtf_raw, dtf_down = convert_to_seconds(args.downtime_first)
+    if args.downtime_interval:
+        dti_raw, dti_down = convert_to_seconds(args.downtime_interval)
+    if args.downtime_length:
+        dtl_raw, dtl_down = convert_to_seconds(args.downtime_length)
+
     max_down = max(tdelta_down, time_down, ff_down)
     args.downscale = max_down
 
@@ -209,6 +235,13 @@ def post_process_args(args):
         args.time = int((time_raw / time_down) * max_down)
     if args.fastforward:
         args.fastforward = int((ff_raw / ff_down) * max_down)
+
+    if args.downtime_first:
+        args.downtime_first = int((dtf_raw / dtf_down) * max_down)
+    if args.downtime_interval:
+        args.downtime_interval = int((dti_raw / dti_down) * max_down)
+    if args.downtime_length:
+        args.downtime_length = int((dtl_raw / dtl_down) * max_down)
 
     return args
 

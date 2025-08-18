@@ -1,10 +1,10 @@
 # ExaDigiT/RAPS
 
-ExaDigiT's Resource Allocator and Power Simulator (RAPS) schedules workloads and 
-estimates dynamic system power at specified time intervals. RAPS either schedules 
+ExaDigiT's Resource Allocator and Power Simulator (RAPS) schedules workloads and
+estimates dynamic system power at specified time intervals. RAPS either schedules
 synthetic workloads or replays system telemetry workloads,
 provides system monitoring during simulation, and an outputs a report of scheduling
-and power statistics at the end of the simulation. RAPS also can interface with 
+and power statistics at the end of the simulation. RAPS also can interface with
 the FMU cooling model by providing CDU-level power inputs to the cooling model,
 and reporting the statistics back to the user. RAPS also has built-in plotting
 capabilities to generate plots of power and cooling at the end of simulation runs.
@@ -27,7 +27,7 @@ Note: Requires python3.11 or greater.
 
 ## Run simulator with telemetry replay
 
-    # Frontier 
+    # Frontier
     DATEDIR="date=2024-01-18"
     DPATH=~/data/frontier-sample-2024-01-18
     python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR
@@ -37,12 +37,12 @@ Note: Requires python3.11 or greater.
 For Marconi supercomputer, download `job_table.parquet` from https://zenodo.org/records/10127767
 
     # Marconi100
-    python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet 
+    python main.py --system marconi100 -f ~/data/marconi100/job_table.parquet
 
 For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from https://zenodo.org/records/14007065
 
     # Adastra MI250
-    python main.py --system adastraMI250 -f AdastaJobsMI250_15days.parquet 
+    python main.py --system adastraMI250 -f AdastaJobsMI250_15days.parquet
 
 For Google cluster trace v2
 
@@ -80,7 +80,7 @@ For Lumi
 
 ## Perform Network Simulation
 
-Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to 
+Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to
 get the datasets. To run a network simulation, use the following command:
 
     python main.py -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -ff 365d -t 12h --arrival poisson -net
@@ -127,7 +127,7 @@ To run this in parallel use:
 
 *Note: first install `mpi4py` via pip or conda.*
 
-This will simulate synthetic workloads on two partitions as defined in `config/setonix-cpu` and `config/setonix-gpu`. To replay telemetry workloads from another system, e.g., Marconi100's PM100 dataset, first create a .npz snapshot of the telemetry data, e.g., 
+This will simulate synthetic workloads on two partitions as defined in `config/setonix-cpu` and `config/setonix-gpu`. To replay telemetry workloads from another system, e.g., Marconi100's PM100 dataset, first create a .npz snapshot of the telemetry data, e.g.,
 
     python main.py --system marconi100 -f /path/to/marconi100/job_table.parquet
 
@@ -175,17 +175,25 @@ See instructions in [server/README.md](https://code.ornl.gov/exadigit/simulation
 
 See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulation-dashboard)
 
+### Contributing Code
+
+Install pre-commit hooks as set by the project:
+```
+pip install pre-commit
+pre-commit install
+'''
+
 ## Authors
 
-Many thanks to the contributors of ExaDigiT/RAPS.  
-The full list of contributors and organizations involved are found in CONTRIBUTORS.txt.  
+Many thanks to the contributors of ExaDigiT/RAPS.
+The full list of contributors and organizations involved are found in CONTRIBUTORS.txt.
 
 ## Citation
 
 If you use ExaDigiT or RAPS in your research, please cite our work:
 
     @inproceedings{inproceedings,
-      title={A Digital Twin Framework for Liquid-cooled Supercomputers as Demonstrated at Exascale}, 
+      title={A Digital Twin Framework for Liquid-cooled Supercomputers as Demonstrated at Exascale},
       author={Brewer, Wesley and Maiterth, Matthias and Kumar, Vineet and Wojda, Rafal and Bouknight, Sedrick and Hines, Jesse and Shin, Woong and Greenwood, Scott and Grant, David and Williams, Wesley and Wang, Feiyi},
       booktitle={SC24: International Conference for High Performance Computing, Networking, Storage and Analysis},
       pages={1--18},
@@ -207,17 +215,16 @@ Thank you for your support!
 
 ## License
 
-ExaDigiT/RAPS is distributed under the terms of both the MIT license and the Apache License (Version 2.0).  
-Users may choose either license, at their option.  
+ExaDigiT/RAPS is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
+Users may choose either license, at their option.
 
-All new contributions must be made under both the MIT and Apache-2.0 licenses.  
-See LICENSE-MIT, LICENSE-APACHE, COPYRIGHT, NOTICE, and CONTRIBUTORS.txt for details.  
+All new contributions must be made under both the MIT and Apache-2.0 licenses.
+See LICENSE-MIT, LICENSE-APACHE, COPYRIGHT, NOTICE, and CONTRIBUTORS.txt for details.
 
-SPDX-License-Identifier: (Apache-2.0 OR MIT)  
+SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
 ## Attributions
 
 Map data used in this project is provided by [OpenStreetMap](https://www.openstreetmap.org/copyright) and is available under the Open Database License (ODbL). © OpenStreetMap contributors.
 
 Weather data used in this project is provided by the [Open-Meteo API](https://open-meteo.com/en/docs). Open-Meteo offers free weather forecast data for various applications, and their API provides easy access to weather information without requiring user authentication.
-

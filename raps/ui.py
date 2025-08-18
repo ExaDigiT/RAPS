@@ -8,8 +8,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
 from rich.progress import (
-    Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn,
-    track, TimeElapsedColumn, MofNCompleteColumn
+    Progress,
+    TextColumn,
+    BarColumn,
+    TimeRemainingColumn,
+    TimeElapsedColumn,
+    MofNCompleteColumn
 )
 
 from contextlib import nullcontext
@@ -53,11 +57,11 @@ class LayoutManager:
             TextColumn("•"),
             TimeRemainingColumn()
         )
-        self.progress_task = self.progress.add_task("Progress",total=total_timesteps, name="Progress")
+        self.progress_task = self.progress.add_task("Progress", total=total_timesteps, name="Progress")
 
     def setup_layout(self, layout_type):
         if not self.debug:
-            self.layout.split_column(Layout(name="main"),Layout(name="progress",size=1))
+            self.layout.split_column(Layout(name="main"), Layout(name="progress", size=1))
             if layout_type == "layout2":
                 self.layout["main"].split_row(Layout(name="left", ratio=3), Layout(name="right", ratio=2))
                 self.layout["main"]["left"].split_column(
@@ -69,7 +73,8 @@ class LayoutManager:
             else:
                 self.layout["main"].split_row(Layout(name="left", ratio=1), Layout(name="right", ratio=1))
                 self.layout["main"]["left"].split_column(Layout(name="upper", ratio=8), Layout(name="lower", ratio=2))
-                self.layout["main"]["right"].split_column(Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
+                self.layout["main"]["right"].split_column(
+                    Layout(name="scheduled", ratio=8), Layout(name="status", ratio=2))
 
     def create_table(self, title, columns, header_style="bold green"):
         """
@@ -105,7 +110,11 @@ class LayoutManager:
         total_power_mw = total_power_kw / 1000.0
         total_loss_kw = df[self.loss_column].sum()
         total_loss_mw = total_loss_kw / 1000.0
-        return total_power_mw, total_loss_mw, f"{total_loss_mw / total_power_mw * 100:.2f}%", total_power_kw, total_loss_kw
+        return \
+            total_power_mw, \
+            total_loss_mw, \
+            f"{total_loss_mw / total_power_mw * 100:.2f}%", \
+            total_power_kw, total_loss_kw
 
     def update_scheduled_jobs(self, jobs, show_nodes=False):
         """
@@ -120,11 +129,11 @@ class LayoutManager:
         """
 
         # Decide whether to show "SLOWDOWN" (if real topology) or "NODE SEGMENTS" (if capacity/none)
-        #show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
+        # show_slowdown = (self.topology in ("fat-tree", "dragonfly", "capacity"))
         show_slowdown = self.simulate_network
 
         # Build the column headers
-        #columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
+        # columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
         columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
         if show_slowdown:
             columns.append("SLOW DOWN")
@@ -144,7 +153,7 @@ class LayoutManager:
         # Add data rows
         for job in jobs:
             # Number of requested nodes as a string
-            n_nodes = str(job.nodes_required)
+            # n_nodes = str(job.nodes_required)  # Unused
 
             if show_slowdown:
                 # Each Job should have job.net_congestion set in Engine.tick()
@@ -162,7 +171,7 @@ class LayoutManager:
                         nodes_display = ", ".join(node_segments)
                     col_slow = nodes_display  # reused variable name for simplicity
                 else:
-                    #col_slow = str(len(node_segments))
+                    # col_slow = str(len(node_segments))
                     col_slow = str(len(node_segments))
 
             # If show_nodes is True, we need to append NODELIST as well
@@ -186,7 +195,7 @@ class LayoutManager:
             row = [
                 str(job.id).zfill(5),
                 convert_seconds_to_hhmm(job.wall_time // self.engine.downscale),
-                ##str(job.wall_time),
+                # str(job.wall_time),
                 str(job.name),
                 str(job.account),
                 job.state.value,
@@ -194,14 +203,6 @@ class LayoutManager:
                 nodes_display,
                 running_time_str
             ]
-            row.append(nodes_display)
-
-            #if show_nodes:
-            #    # Insert NODELIST immediately after col_slow (whether NODELIST or SLOWDOWN)
-            #    row.append(col_nodelist)
-
-            # Finally, append the running‐time column
-            row.append(convert_seconds_to_hhmm(job.running_time))
 
             # If the job has been flagged as “dilated”, show its row in yellow
             if getattr(job, "dilated", False):
@@ -212,7 +213,16 @@ class LayoutManager:
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
-    def update_status(self, time, nrun, nqueue, active_nodes, free_nodes, down_nodes, avg_net_util, slowdown, time_delta):
+    def update_status(self,
+                      time,
+                      nrun,
+                      nqueue,
+                      active_nodes,
+                      free_nodes,
+                      down_nodes,
+                      avg_net_util,
+                      slowdown,
+                      time_delta):
         """
         Updates the status information table with the provided system status data.
 
@@ -310,7 +320,13 @@ class LayoutManager:
 
         return df
 
-    def update_powertemp_array(self, power_df, cooling_outputs, pflops, gflop_per_watt, system_util, uncertainties=False):
+    def update_powertemp_array(self,
+                               power_df,
+                               cooling_outputs,
+                               pflops,
+                               gflop_per_watt,
+                               system_util,
+                               uncertainties=False):
         """
         Updates the displayed power and temperature table with the provided data.
 
@@ -322,8 +338,9 @@ class LayoutManager:
             DataFrame containing temperature and cooling data.
         """
         # Define the specific columns for power
-        #power_columns = POWER_DF_HEADER[0:RACKS_PER_CDU + 2] + [POWER_DF_HEADER[-1]]  # "CDU", "Rack 1", "Rack 2", "Rack 3", "Sum", "Loss"
-        power_columns = self.power_df_header[0:self.racks_per_cdu + 2] + [self.power_df_header[-1]]  # "CDU", "Rack 1", "Rack 2", "Rack 3", "Sum", "Loss"
+        # power_columns = POWER_DF_HEADER[0:RACKS_PER_CDU + 2] + [POWER_DF_HEADER[-1]]
+        # "CDU", "Rack 1", "Rack 2", "Rack 3", "Sum", "Loss"
+        power_columns = self.power_df_header[0:self.racks_per_cdu + 2] + [self.power_df_header[-1]]
         fmu_cols = self.config['FMU_COLUMN_MAPPING']
 
         # Updated cooling keys to include temperature instead of pressure
@@ -350,8 +367,8 @@ class LayoutManager:
         if uncertainties:
             pass
         else:
-            power_df = power_df.replace([np.nan],0.0)
-            power_df = power_df.replace([np.inf],sys.maxsize)
+            power_df = power_df.replace([np.nan], 0.0)
+            power_df = power_df.replace([np.inf], sys.maxsize)
             power_df = power_df.replace([-np.inf], -sys.maxsize - 1)
             power_df = power_df[power_columns].astype(int)
 
@@ -362,7 +379,8 @@ class LayoutManager:
             ]
 
             cooling_values = [
-                f"[{data_styles[i + len(power_columns)]}]{cooling_row[1][key]:.1f}[/]" for i, key in enumerate(cooling_keys)
+                f"[{data_styles[i + len(power_columns)]}]{cooling_row[1][key]:.1f}[/]" for
+                i, key in enumerate(cooling_keys)
             ]
             table.add_row(*(power_values + cooling_values))
 
@@ -418,8 +436,8 @@ class LayoutManager:
         if uncertainties:
             pass
         else:
-            power_df = power_df.replace([np.nan],0.0)
-            power_df = power_df.replace([np.inf],sys.maxsize)
+            power_df = power_df.replace([np.nan], 0.0)
+            power_df = power_df.replace([np.inf], sys.maxsize)
             power_df = power_df.replace([-np.inf], -sys.maxsize - 1)
             power_df = power_df[display_columns].round().astype(int)
 
@@ -448,7 +466,8 @@ class LayoutManager:
         percent_loss_str = f"{total_loss_mw / total_power_mw * 100:.2f}%"
 
         if not self.hascooling:
-            self.layout["upper"].update(Panel(Align(table, align="center"),title=self.engine.config["system_name"].capitalize()))
+            self.layout["upper"].update(Panel(Align(table, align="center"),
+                                        title=self.engine.config["system_name"].capitalize()))
 
             # Create Total Power table with green headers and white data
             total_table = Table(show_header=True, header_style="bold green")
@@ -478,7 +497,7 @@ class LayoutManager:
             self.layout["lower"].update(Panel(Align(total_table, align="center"), title="Power and Performance"))
 
     def update_progress_bar(self, timestamp):
-        self.progress.update(self.progress_task, description=f"{timestamp}",advance=timestamp,transient=True)
+        self.progress.update(self.progress_task, description=f"{timestamp}", advance=timestamp, transient=True)
         self.layout["progress"].update(self.progress.get_renderable())
 
     def update_full_layout(self, data: TickData, time_delta=1):
@@ -486,7 +505,7 @@ class LayoutManager:
             return
         uncertainties = self.engine.power_manager.uncertainties
 
-        #if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
+        # if data.current_time % self.config['UI_UPDATE_FREQ'] == 0:
         if self.engine.cooling_model:
             self.update_powertemp_array(
                 data.power_df, data.fmu_outputs, data.p_flops, data.g_flops_w, data.system_util,
@@ -527,12 +546,16 @@ class LayoutManager:
         else:
             context = nullcontext()
         with context:
-            #last_i = 0
-            for i,data in enumerate(self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta, autoshutdown=True)):
+            # last_i = 0
+            for i, data in enumerate(self.engine.run_simulation(jobs,
+                                                                timestep_start,
+                                                                timestep_end,
+                                                                time_delta,
+                                                                autoshutdown=True)):
                 if data and (not self.debug and not self.noui):
                     self.update_full_layout(data, time_delta)
-                    #self.update_progress_bar(i-last_i)
-                    #last_i=i
+                    # self.update_progress_bar(i-last_i)
+                    # last_i=i
                 if not self.debug and not self.noui:
                     self.update_progress_bar(1)
 

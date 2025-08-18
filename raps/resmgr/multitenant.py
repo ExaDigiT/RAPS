@@ -12,15 +12,16 @@ class MultiTenantResourceManager:
     """
     Resource manager for per-node CPU/GPU multitenancy.
     """
+
     def __init__(self, total_nodes, down_nodes, config):
-        self.total_nodes         = total_nodes
-        self.config              = config
-        self.down_nodes          = set(down_nodes)
-        self.nodes               = []
+        self.total_nodes = total_nodes
+        self.config = config
+        self.down_nodes = set(down_nodes)
+        self.nodes = []
         # Track total allocations for reporting
         self.allocated_cpu_cores = 0
         self.allocated_gpu_units = 0
-        self.sys_util_history    = []
+        self.sys_util_history = []
 
         # Determine per-node capacities
         total_cpu = self.config['CPUS_PER_NODE'] * self.config['CORES_PER_CPU']
@@ -49,7 +50,7 @@ class MultiTenantResourceManager:
             candidate = self.nodes[node_id]
             if (not candidate['is_down'] and
                 candidate['available_cpu_cores'] >= job.cpu_cores_required and
-                candidate['available_gpu_units'] >= job.gpu_units_required):
+                    candidate['available_gpu_units'] >= job.gpu_units_required):
                 found = candidate
 
         # Fallback: first-fit
@@ -57,7 +58,7 @@ class MultiTenantResourceManager:
             for candidate in self.nodes:
                 if (not candidate['is_down'] and
                     candidate['available_cpu_cores'] >= job.cpu_cores_required and
-                    candidate['available_gpu_units'] >= job.gpu_units_required):
+                        candidate['available_gpu_units'] >= job.gpu_units_required):
                     found = candidate
                     break
 
@@ -67,23 +68,23 @@ class MultiTenantResourceManager:
         # Allocate resources
         found['available_cpu_cores'] -= job.cpu_cores_required
         found['available_gpu_units'] -= job.gpu_units_required
-        self.allocated_cpu_cores    += job.cpu_cores_required
-        self.allocated_gpu_units    += job.gpu_units_required
+        self.allocated_cpu_cores += job.cpu_cores_required
+        self.allocated_gpu_units += job.gpu_units_required
 
         # ---- Invariant checks (after mutating node/RM state) ----
         assert_node_accounting_ok(found)  # no negatives left
         assert self.allocated_cpu_cores >= 0 and self.allocated_gpu_units >= 0
         # Optional: global sanity vs. totals
         assert self.allocated_cpu_cores <= sum(n['total_cpu_cores'] for n in self.nodes)
-        assert self.allocated_gpu_units <= sum(n['total_gpu_units']  for n in self.nodes)
+        assert self.allocated_gpu_units <= sum(n['total_gpu_units'] for n in self.nodes)
 
         # Record on job
-        job.scheduled_nodes      = [found['id']]
-        job.allocated_cpu_cores  = job.cpu_cores_required
-        job.allocated_gpu_units  = job.gpu_units_required
-        job.start_time           = current_time
-        job.end_time             = current_time + job.wall_time
-        job.state                = JobState.RUNNING
+        job.scheduled_nodes = [found['id']]
+        job.allocated_cpu_cores = job.cpu_cores_required
+        job.allocated_gpu_units = job.gpu_units_required
+        job.start_time = current_time
+        job.end_time = current_time + job.wall_time
+        job.state = JobState.RUNNING
 
     def free_nodes_from_job(self, job):
         """Releases cores/GPUs from a completed job."""
@@ -93,8 +94,8 @@ class MultiTenantResourceManager:
                 node = self.nodes[nid]
                 node['available_cpu_cores'] += getattr(job, 'allocated_cpu_cores', 0)
                 node['available_gpu_units'] += getattr(job, 'allocated_gpu_units', 0)
-                self.allocated_cpu_cores    -= getattr(job, 'allocated_cpu_cores', 0)
-                self.allocated_gpu_units    -= getattr(job, 'allocated_gpu_units', 0)
+                self.allocated_cpu_cores -= getattr(job, 'allocated_cpu_cores', 0)
+                self.allocated_gpu_units -= getattr(job, 'allocated_gpu_units', 0)
             else:
                 print(f"Warning: Job {job.id} had invalid node {nid} during free.")
 
@@ -103,9 +104,9 @@ class MultiTenantResourceManager:
         Computes and records utilization based on allocated CPU/GPU across all nodes.
         """
         total_cpu = sum(n['total_cpu_cores'] for n in self.nodes)
-        total_gpu = sum(n['total_gpu_units']   for n in self.nodes)
-        used_cpu  = self.allocated_cpu_cores
-        used_gpu  = self.allocated_gpu_units
+        total_gpu = sum(n['total_gpu_units'] for n in self.nodes)
+        used_cpu = self.allocated_cpu_cores
+        used_gpu = self.allocated_gpu_units
 
         cpu_util = (used_cpu / total_cpu) * 100 if total_cpu else 0
         gpu_util = (used_gpu / total_gpu) * 100 if total_gpu else 0
@@ -121,15 +122,15 @@ class MultiTenantResourceManager:
         """
         shape = 1.5
         scale = mtbf * 3600
-        ops   = np.array([n['id'] for n in self.nodes if not n['is_down']])
+        ops = np.array([n['id'] for n in self.nodes if not n['is_down']])
         if ops.size == 0:
             return []
 
-        vals   = weibull_min.rvs(shape, scale=scale, size=ops.size)
+        vals = weibull_min.rvs(shape, scale=scale, size=ops.size)
         failed = ops[vals < 0.001]
         for nid in failed:
             node = self.nodes[nid]
-            node['is_down']             = True
+            node['is_down'] = True
             node['available_cpu_cores'] = 0
             node['available_gpu_units'] = 0
             self.down_nodes.add(nid)

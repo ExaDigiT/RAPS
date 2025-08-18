@@ -21,7 +21,7 @@ class Scheduler:
         """Sort jobs based on the selected scheduling policy."""
         return sorted(queue, key=lambda job: job.start_time)
 
-    def prepare_system_state(self,queue,running):
+    def prepare_system_state(self, queue, running):
         return queue
 
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
@@ -44,7 +44,7 @@ class Scheduler:
                     nodes_available = True  # Checked above
                     if job.nodes_required == 0:
                         raise ValueError(f"Job Requested zero nodes: {job}")
-                    #clear scheduled nodes
+                    # clear scheduled nodes
                     job.scheduled_nodes = []
             else:
                 pass  # not enough nodes available
@@ -55,4 +55,7 @@ class Scheduler:
                 queue.remove(job)
             else:
                 # This is a replay so this should not happen
-                raise ValueError(f"Nodes not available!\nRequested:{job.scheduled_nodes}\nAvailable:{self.resource_manager.available_nodes}\n{job.__dict__}; Policy: {self.policy}")
+                raise ValueError(
+                    f"Nodes not available!\nRequested:{job.scheduled_nodes}\n"
+                    f"Available:{self.resource_manager.available_nodes}\n{job.__dict__}; "
+                    f"Policy: {self.policy}")

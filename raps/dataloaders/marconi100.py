@@ -23,7 +23,6 @@
 
 """
 import uuid
-import random
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -60,14 +59,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         The list of parsed jobs.
     """
     config = kwargs.get('config')
-    min_time = kwargs.get('min_time', None)
+    # min_time = kwargs.get('min_time', None)  # Unused
     arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     debug = kwargs.get('debug')
 
-    #fastforward = kwargs.get('fastforward')
-    #if fastforward:
+    # fastforward = kwargs.get('fastforward')
+    # if fastforward:
     #    print(f"fast-forwarding {fastforward} seconds")
 
     # Sort jobs dataframe based on values in time_start column, adjust indices after sorting
@@ -91,8 +90,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     if debug:
         print("num_jobs:", num_jobs)
         print("telemetry_start:", telemetry_start, "simulation_fin", telemetry_end)
-        print("telemetry_start_timestamp:", telemetry_start_timestamp, "telemetry_end_timestamp", telemetry_end_timestamp)
-        print("first_start_timestamp:",first_start_timestamp, "last start timestamp:", jobs_df['time_start'].max())
+        print("telemetry_start_timestamp:", telemetry_start_timestamp,
+              "telemetry_end_timestamp", telemetry_end_timestamp)
+        print("first_start_timestamp:", first_start_timestamp, "last start timestamp:", jobs_df['time_start'].max())
 
     jobs = []
 
@@ -137,8 +137,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             mem_power = mem_power[:min_length]
 
             gpu_power = (node_power - cpu_power - mem_power
-                - ([nodes_required * config['NICS_PER_NODE'] * config['POWER_NIC']] * len(node_power))
-                - ([nodes_required * config['POWER_NVME']] * len(node_power)))
+                         - ([nodes_required * config['NICS_PER_NODE'] * config['POWER_NIC']] * len(node_power))
+                         - ([nodes_required * config['POWER_NVME']] * len(node_power)))
             gpu_power_array = gpu_power.tolist()
             gpu_min_power = nodes_required * config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
             gpu_max_power = nodes_required * config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
@@ -167,7 +167,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         if arrival == 'poisson':  # Modify the arrival times according to Poisson distribution
             scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config,kwargs)
+            submit_time = next_arrival_byconfkwargs(config, kwargs)
             start_time = None
             end_time = None
         else:  # Prescribed replay
@@ -195,26 +195,24 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
                 trace_missing_values = True
 
         # What does this do?
-        #if jid == '*':
+        # if jid == '*':
         #    # submit_time = max(submit_time.total_seconds(), 0)
         #    submit_timestamp = jobs_df.loc[jidx, 'submit_time']
         #    diff = submit_timestamp - telemetry_start_timestamp
         #    submit_time = diff.total_seconds()
 
-
-        #else:
+        # else:
         #    # When extracting out a single job, run one iteration past the end of the job
         #    submit_time = config['UI_UPDATE_FREQ']
-
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
 
             job_info = job_dict(nodes_required=nodes_required, name=name,
                                 account=account, cpu_trace=cpu_trace,
-                                gpu_trace=gpu_trace, nrx_trace=[],ntx_trace=[],
+                                gpu_trace=gpu_trace, nrx_trace=[], ntx_trace=[],
                                 end_state=end_state,
                                 scheduled_nodes=scheduled_nodes,
-                                id=job_id, priority=priority,partition=partition,
+                                id=job_id, priority=priority, partition=partition,
                                 submit_time=submit_time, time_limit=time_limit,
                                 start_time=start_time, end_time=end_time,
                                 wall_time=wall_time, trace_time=trace_time,
@@ -239,4 +237,4 @@ def cdu_index_to_name(index: int, config: dict):
 
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
-    return (0, index) # TODO
+    return (0, index)  # TODO

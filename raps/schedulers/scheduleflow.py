@@ -1,9 +1,6 @@
-from raps.job import JobState
-from raps.utils import summarize_ranges
 from third_party.ScheduleFlow import ScheduleFlow
 from third_party.ScheduleFlow import _intScheduleFlow
 from third_party.ScheduleFlow._intScheduleFlow import EventType
-from ..job import job_dict
 
 
 class Scheduler:
@@ -36,12 +33,10 @@ class Scheduler:
         # self.sf_end_list = []  # list as returned from sf_scheduler.start_job
         # self.sf_action_list = []  # list as returned from sf_scheduler.stop_job
 
-
     def gif(self):
-        logs = self._sf_runtime.get_stats()
-        #vis_hanlder = _intScheduleFlow.VizualizationEngine(self.sf_scheduler.
+        # logs = self._sf_runtime.get_stats()  # Unused
+        # vis_hanlder = _intScheduleFlow.VizualizationEngine(self.sf_scheduler.
         self._sf_runtime._Runtime__generate_gif()
-
 
     def sort_jobs(self, queue, accounts=None):
         """
@@ -59,9 +54,9 @@ class Scheduler:
 
     def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
 
-        #self._sf_runtim
+        # self._sf_runtim
         pass
-        #### SECOND TRY
+        # SECOND TRY
         new_queue_items = list(filter(lambda x: x not in self.queue, queue))
         if new_queue_items:
             self.queue += new_queue_items
@@ -93,14 +88,12 @@ class Scheduler:
                 if len(start_jobs) > 0:
                     self._sf_runtime._Runtime__job_start_event(start_jobs)
                     for sf_app in start_jobs:
-                        job = _match_sf_app_and_job(sf_app,queue,start_jobs)
+                        job = _match_sf_app_and_job(sf_app, queue, start_jobs)
                         queue.remove(job)
                         self.resource_manager.assign_nodes_to_job(job, current_time, self.policy)
                         running.append(job)
 
-
             # Keep track of:  All jobs have been submitted empty the queue!
-
 
         #    remove_list = []
         #    job_list = []
@@ -123,8 +116,8 @@ class Scheduler:
         #    for x in remove_list:
         #        self.sf_start_list.remove(x)
 
-        #### First TRY
-        #if self.sf_end_list:
+        # First TRY
+        # if self.sf_end_list:
         #    remove_list = []
         #    job_list = []
         #    for x in self.sf_end_list:
@@ -140,13 +133,13 @@ class Scheduler:
         # We need to flect this on the raps side.
 
         # March the sf_scheduler forward based on the jobs
-        #end_jobs = self.sf_scheduler.start_job(current_time,sf_schedule[1])
-        #self.sf_scheduler.end_job(current_time,end_jobs)
+        # end_jobs = self.sf_scheduler.start_job(current_time,sf_schedule[1])
+        # self.sf_scheduler.end_job(current_time,end_jobs)
 
         # Add to running
 
         # Process the actions (each action is assumed to be (start_time, job_info))
-        #for act in actions:
+        # for act in actions:
         #    start_time, sf_job = act
         #    # Find the corresponding RAPS job using its ID
         #    job = self._find_job(queue, sf_job['job_id'])
@@ -160,9 +153,7 @@ class Scheduler:
         #        if debug:
         #            print(f"t={current_time}: Scheduled job {job.id} on nodes {summarize_ranges(job.scheduled_nodes)}")
 
-
-
-    def _find_sf_in_queue(self,queue,sf_app):
+    def _find_sf_in_queue(self, queue, sf_app):
         # Remember we added four digits and an underscore in _convert_to_sf:
         match = [x for x in queue if x.id == sf_app.name]
         if len(match != 1):
@@ -182,7 +173,13 @@ class Scheduler:
         priority = sf_prio
         resubmit_factor = -1
         name = job.id  # We use the ID as name to be able to match when unpacking!
-        return ScheduleFlow.Application(nodes,submission_time,walltime,requested_walltimes,priority,resubmit_factor,name)
+        return ScheduleFlow.Application(nodes,
+                                        submission_time,
+                                        walltime,
+                                        requested_walltimes,
+                                        priority,
+                                        resubmit_factor,
+                                        name)
 
     def _find_job(self, queue, job_id):
         """
@@ -202,7 +199,7 @@ class Scheduler:
         return None
 
 
-def _match_sf_app_and_job(sf_app,queue,sf_queue):
+def _match_sf_app_and_job(sf_app, queue, sf_queue):
     match = [x for x in sf_queue if x.name == sf_app.name]
     if len(match) != 1:
         print("Multiple Matches")
