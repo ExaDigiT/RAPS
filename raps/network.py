@@ -34,7 +34,8 @@ class NetworkModel:
         net_cong = 0
         net_tx = 0
         net_rx = 0
-        max_throughput = self.max_link_bw * job.trace_quanta  # self.config.get('TRACE_QUANTA')  # Why? What should this be?
+        # self.config.get('TRACE_QUANTA')  # Why? What should this be?
+        max_throughput = self.max_link_bw * job.trace_quanta
 
         if job.nodes_required <= 1:
             # single node, no network utilization or congestion.
@@ -66,9 +67,9 @@ class NetworkModel:
                     host_list.append(dragonfly_node_id_to_host_name(fat_idx, D, A, P))
                 if debug:
                     print("  dragonfly hosts:", host_list)
-                ##if len(host_list) <= 1:
+                # if len(host_list) <= 1:
                 #    net_cong = 0.0
-                #else:
+                # else:
                 loads = link_loads_for_job(self.net_graph, host_list, net_tx)  # ? Only tx not rx or total net_util)
                 net_cong = worst_link_util(loads, max_throughput)
 
@@ -78,7 +79,7 @@ class NetworkModel:
         return net_util, net_cong, net_tx, net_rx, max_throughput
 
 
-def apply_job_slowdown(*,job, max_throughput, net_util, net_cong, net_tx, net_rx, debug: bool = False):
+def apply_job_slowdown(*, job, max_throughput, net_util, net_cong, net_tx, net_rx, debug: bool = False):
     # Get the maximum allowed bandwidth from the configuration.
     if net_cong > 1:
         if debug:
@@ -105,17 +106,17 @@ def apply_job_slowdown(*,job, max_throughput, net_util, net_cong, net_tx, net_rx
     return slowdown_factor
 
 
-def compute_system_network_stats(net_utils,net_tx_list,net_rx_list,slowdown_factors):
+def compute_system_network_stats(net_utils, net_tx_list, net_rx_list, slowdown_factors):
 
     # Compute network averages
     n = len(net_utils) or 1
     avg_tx = sum(net_tx_list) / n
     avg_rx = sum(net_rx_list) / n
     avg_net = sum(net_utils) / n
-    #avg_slowdown_per_job = sum(slowdown_factors) / n
-    #self.avg_slowdown_history.append(avg_slowdown_per_job)
-    #max_slowdown_per_job = max(slowdown_factors)
-    #self.max_slowdown_history.append(max_slowdown_per_job)
+    # avg_slowdown_per_job = sum(slowdown_factors) / n
+    # self.avg_slowdown_history.append(avg_slowdown_per_job)
+    # max_slowdown_per_job = max(slowdown_factors)
+    # self.max_slowdown_history.append(max_slowdown_per_job)
 
     return avg_tx, avg_rx, avg_net
 
@@ -167,7 +168,7 @@ def build_fattree(k):
     """
     G = nx.Graph()
     # core
-    num_core = (k//2)**2
+    # num_core = (k//2)**2  # Unused!
     for i in range(k//2):
         for j in range(k//2):
             core = f"c_{i}_{j}"
@@ -226,7 +227,8 @@ def link_loads_for_job(G, job_hosts, tx_volume_bytes):
             per_peer = 0
         # find paths where src is the sender
         for (s, d, p) in paths:
-            if s != src: continue
+            if s != src:
+                continue
             # add per_peer to every link on p
             for u, v in zip(p, p[1:]):
                 # ensure ordering matches loads keys
@@ -255,10 +257,10 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     There are (k^3/4) total hosts, assigned in ascending order across pod → edge → h.
     """
     hosts_per_pod = (k // 2) * (k // 2)   # e.g. for k=8, hosts_per_pod = 16
-    pod    = node_id // hosts_per_pod
-    offset = node_id %  hosts_per_pod
-    edge   = offset // (k // 2)
-    idx    = offset %  (k // 2)
+    pod = node_id // hosts_per_pod
+    offset = node_id % hosts_per_pod
+    edge = offset // (k // 2)
+    idx = offset % (k // 2)
     return f"h_{pod}_{edge}_{idx}"
 
 
@@ -329,7 +331,7 @@ def dragonfly_node_id_to_host_name(fat_idx: int, D: int, A: int, P: int) -> str:
     total_hosts = D * A * P
     assert 0 <= fat_idx < total_hosts, "fat_idx out of range"
 
-    host_offset   = fat_idx % P
-    router_group  = (fat_idx // P) % A
-    pod           = fat_idx // (A * P)
+    host_offset = fat_idx % P
+    router_group = (fat_idx // P) % A
+    pod = fat_idx // (A * P)
     return f"h_{pod}_{router_group}_{host_offset}"

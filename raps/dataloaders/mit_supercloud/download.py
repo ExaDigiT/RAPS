@@ -20,28 +20,26 @@ Flags:
   --dry-run          # List a sample of files without downloading
 """
 # Suppress urllib3 InsecureRequestWarning
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-import os
-import re
-from datetime import datetime
-
-import pandas as pd
-import boto3
-from botocore import UNSIGNED
-from botocore.client import Config
-from tqdm import tqdm
-
 from .utils import (
     load_slurm_log,
     build_or_load_manifest,
-    filter_keys_by_jobs
+    # filter_keys_by_jobs  # Defined below! not in utils...
 )
+from tqdm import tqdm
+from botocore.client import Config
+from botocore import UNSIGNED
+import boto3
+import pandas as pd
+from datetime import datetime
+import re
+import os
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 # Default date window
 DEFAULT_START = "21052021"
-DEFAULT_END   = "22052021"
+DEFAULT_END = "22052021"
 
 
 def ensure_slurm_log(s3, bucket, key, dest):
@@ -109,7 +107,7 @@ def build_manifest(s3, bucket, prefix, manifest_path):
     print(f"Manifest written to {manifest_path}.")
 
 
-#def load_manifest(manifest_path):
+# def load_manifest(manifest_path):
 #    with open(manifest_path) as f:
 #        return [line.strip() for line in f]
 
@@ -140,7 +138,8 @@ def filter_keys_by_jobs(keys, job_ids):
 def download_traces(s3, bucket, prefix, outdir, keys, dry_run):
     if dry_run:
         print("Dry-run: sample of matching keys:")
-        for key in keys[:10]: print("  ", key)
+        for key in keys[:10]:
+            print("  ", key)
         return
     for key in tqdm(keys, desc="Downloading traces"):
         rel = key[len(prefix):]

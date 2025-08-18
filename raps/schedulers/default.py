@@ -62,9 +62,10 @@ class Scheduler:
                                      PolicyType.LJF, PolicyType.SJF]:
                     break  # The job at the front of the queue doesnt fit stop processing the queue.
                 else:
-                    raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
+                    raise NotImplementedError(
+                        "Depending on the Policy this choice should be explicit. Add the implementation above!")
 
-    def prepare_system_state(self,jobs_to_submit:List, running, timestep_start):
+    def prepare_system_state(self, jobs_to_submit: List, running, timestep_start):
         # def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         """
         In the case of replay and fast forward, previously placed jobs should be present.
@@ -94,7 +95,7 @@ class Scheduler:
         else:
             return jobs_to_submit
 
-    def place_job_and_manage_queues(self, job, queue,running, current_time):
+    def place_job_and_manage_queues(self, job, queue, running, current_time):
         self.resource_manager.assign_nodes_to_job(job, current_time, self.policy)
         running.append(job)
         queue.remove(job)
@@ -113,13 +114,13 @@ class Scheduler:
                 nodes_available = True  # Checked above
                 if job.nodes_required == 0:
                     raise ValueError(f"Job Requested zero nodes: {job}")
-                #clear scheduled nodes
+                # clear scheduled nodes
                 job.scheduled_nodes = []
         else:
             pass  # not enough nodes available
         return nodes_available
 
-    def backfill(self,queue:List, running:List, current_time):
+    def backfill(self, queue: List, running: List, current_time):
         # Try to find a backfill candidate from the entire queue.
         while queue:
             backfill_job = self.find_backfill_job(queue, running, current_time)
@@ -166,10 +167,10 @@ class Scheduler:
             pass
         elif self.bfpolicy == BackfillType.EASY:
             queue[:] = sorted(queue, key=lambda job: job.submit_time)
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy == BackfillType.FIRSTFIT:
             pass  # Stay with the prioritization!
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy in [BackfillType.BESTFIT,
                                BackfillType.GREEDY,
                                BackfillType.CONSERVATIVE,

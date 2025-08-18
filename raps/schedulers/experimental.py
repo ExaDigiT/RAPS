@@ -95,9 +95,10 @@ class Scheduler:
                                      ]:
                     break  # The job at the front of the queue doesnt fit stop processing the queue.
                 else:
-                    raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
+                    raise NotImplementedError(
+                        "Depending on the Policy this choice should be explicit. Add the implementation above!")
 
-    def place_job_and_manage_queues(self, job, queue,running, current_time):
+    def place_job_and_manage_queues(self, job, queue, running, current_time):
         self.resource_manager.assign_nodes_to_job(job, current_time)
         running.append(job)
         queue.remove(job)
@@ -105,7 +106,7 @@ class Scheduler:
             scheduled_nodes = summarize_ranges(job.scheduled_nodes)
             print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
 
-    def check_available_nodes(self,job):
+    def check_available_nodes(self, job):
         nodes_available = False
         if job.nodes_required <= len(self.resource_manager.available_nodes):
             if self.policy == PolicyType.REPLAY and job.scheduled_nodes:  # Check if we need exact set
@@ -116,13 +117,13 @@ class Scheduler:
                 nodes_available = True  # Checked above
                 if job.nodes_required == 0:
                     raise ValueError(f"Job Requested zero nodes: {job}")
-                #clear scheduled nodes
+                # clear scheduled nodes
                 job.scheduled_nodes = []
         else:
             pass  # not enough nodes available
         return nodes_available
 
-    def backfill(self,queue:List, running:List, current_time):
+    def backfill(self, queue: List, running: List, current_time):
         # Try to find a backfill candidate from the entire queue.
         while queue:
             backfill_job = self.find_backfill_job(queue, running, current_time)
@@ -169,10 +170,10 @@ class Scheduler:
             pass
         elif self.bfpolicy == BackfillType.EASY:
             queue[:] = sorted(queue, key=lambda job: job.submit_time)
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy == BackfillType.FIRSTFIT:
             pass  # Stay with the prioritization!
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy in [BackfillType.BESTFIT,
                                BackfillType.GREEDY,
                                BackfillType.CONSERVATIVE,
@@ -206,9 +207,9 @@ class Scheduler:
                 fugaku_priority = 0
             # Create a tuple of the job and the priority
             priority = job.priority
-            priority_triple_list.append((fugaku_priority,priority,job))
+            priority_triple_list.append((fugaku_priority, priority, job))
         # Sort everythin according to fugaku_points
-        priority_triple_list = sorted(priority_triple_list, key=lambda x:x[0], reverse=True)
+        priority_triple_list = sorted(priority_triple_list, key=lambda x: x[0], reverse=True)
         # Find the first element with negative fugaku_points
         for cutoff, triple in enumerate(priority_triple_list):
             fugaku_priority, _, _ = triple
@@ -216,7 +217,7 @@ class Scheduler:
                 break
         first_part = priority_triple_list[:cutoff]
         # Sort everything afterwards according to job priority
-        second_part = sorted(priority_triple_list[cutoff:], key=lambda x:x[1], reverse=True)
+        second_part = sorted(priority_triple_list[cutoff:], key=lambda x: x[1], reverse=True)
         queue_a = []
         queue_b = []
         if first_part != []:
@@ -244,9 +245,9 @@ class Scheduler:
                 raise KeyError("No nodes indicated")
 
             priority = 100 * nnodes * power
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to new priority
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=True)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=True)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)
@@ -263,9 +264,9 @@ class Scheduler:
                 power = 0
 
             priority = power
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to power_acct_priority Disregarding size
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=True)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=True)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)
@@ -282,15 +283,14 @@ class Scheduler:
                 power = 0
 
             priority = power
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to power_acct_priority Disregarding size
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=False)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=False)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)
             queue = list(queue)
         return queue
-
 
     def sort_AEDP(self, queue, accounts=None):
         if queue == []:
@@ -305,9 +305,9 @@ class Scheduler:
                 time = 0
 
             priority = energy * time
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to power_acct_priority Disregarding size
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=False)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=False)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)
@@ -327,9 +327,9 @@ class Scheduler:
                 time = 0
 
             priority = energy * time * time
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to power_acct_priority Disregarding size
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=False)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=False)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)
@@ -349,9 +349,9 @@ class Scheduler:
                 time = 0
 
             priority = power * time
-            priority_tuple_list.append((priority,job))
+            priority_tuple_list.append((priority, job))
         # Sort everythin according to power_acct_priority Disregarding size
-        priority_tuple_list = sorted(priority_tuple_list, key=lambda x:x[0], reverse=False)
+        priority_tuple_list = sorted(priority_tuple_list, key=lambda x: x[0], reverse=False)
         queue = []
         if priority_tuple_list != []:
             _, queue = zip(*priority_tuple_list)

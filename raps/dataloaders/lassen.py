@@ -26,7 +26,7 @@ Usage Instructions:
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 365d -t 1d
 
     # For the network replay this command gives suiteable snapshots:
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson
+    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
 
 """
 import math
@@ -46,7 +46,8 @@ def load_data(path, **kwargs):
     Loads data from the given file paths and returns job info.
     """
     nrows = None
-    alloc_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
+    alloc_df = pd.read_csv(os.path.join(
+        path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
     node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
     step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
     return load_data_from_df(alloc_df, node_df, step_df, **kwargs)
@@ -63,7 +64,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     verbose = kwargs.get('verbose')
     fastforward = kwargs.get('fastforward')  # int in seconds
 
-    allocation_df['job_submit_timestamp'] = pd.to_datetime(allocation_df['job_submit_time'], format='mixed', errors='coerce')
+    allocation_df['job_submit_timestamp'] = pd.to_datetime(
+        allocation_df['job_submit_time'], format='mixed', errors='coerce')
     allocation_df['begin_timestamp'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
     allocation_df['end_timestamp'] = pd.to_datetime(allocation_df['end_time'], format='mixed', errors='coerce')
 
@@ -90,8 +92,10 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta
 
     # As these are >1.4M jobs, filtered to the simulated timestamps before creating the job structs.
-    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]  # Job should not have ended before the simulation time
-    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]  # Job has to have been submited before or during the simulaion time
+    # Job should not have ended before the simulation time
+    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]
+    # Job has to have been submited before or during the simulaion time
+    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]
 
     job_list = []
 
@@ -99,7 +103,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         account = row['hashed_user_id']
         job_id = int(row['primary_job_id'])
-        allocation_id = row['allocation_id']
+        # allocation_id = row['allocation_id']  # Unused
         nodes_required = row['num_nodes']
         end_state = row['exit_status']
         name = str(uuid.uuid4())[:6]  # This generates a random 6 char identifier....
@@ -140,14 +144,16 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                 else:
                     gpu_power = gpu_node_idle_power
             if gpu_power < gpu_node_idle_power:
-                # print(gpu_power, gpu_node_idle_power)  # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
+                # print(gpu_power, gpu_node_idle_power)
+                # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
-            assert gpu_power >= gpu_node_idle_power, f"{gpu_power} >= {gpu_node_idle_power}" + f" gpu_power = ({gpu_node_energy.sum()} / {nodes_required}) / {wall_time}"
+            assert gpu_power >= gpu_node_idle_power, f"{gpu_power} >= {gpu_node_idle_power}" + \
+                f" gpu_power = ({gpu_node_energy.sum()} / {nodes_required}) / {wall_time}"
             gpu_min_power = gpu_node_idle_power
             gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
             # power_to_utilization has issues! As it is unclear if gpu_power is for a single gpu or all gpus of a node.
             # The multiplication by GPUS_PER_NODE fixes this but is patch-work! TODO Refactor and fix
-            gpu_util = power_to_utilization(gpu_power,gpu_min_power,gpu_max_power)
+            gpu_util = power_to_utilization(gpu_power, gpu_min_power, gpu_max_power)
             # gpu_util should to be between 0 an 4 (4 GPUs), where 4 is all GPUs full utilization.
             gpu_util_scalar = gpu_util * config['GPUS_PER_NODE']
 
@@ -162,7 +168,8 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                 cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core
             else:
                 cpu_util = 0.0
-            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / 10e9 / {nodes_required} / {wall_time} / {threads_per_core}"
+            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / 10e9 " \
+                f"/ {nodes_required} / {wall_time} / {threads_per_core}"
 
             # cpu_util should be between 0 an 2 (2 CPUs)
 
@@ -193,7 +200,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         if arrival == 'poisson':  # Modify the submit times according to Poisson process
             scheduled_nodes = None
-            submit_time = fastforward + next_arrival_byconfkwargs(config,kwargs)
+            submit_time = fastforward + next_arrival_byconfkwargs(config, kwargs)
             start_time = submit_time  # Pretend Job could start immediately # Alternative: None
             end_time = submit_time + wall_time  # Alternative: None
         else:  # Prescribed replay
@@ -275,10 +282,10 @@ def compute_time_offset(begin_time, reference_time):
 def adjust_bursts(burst_intervals, total, intervals):
     bursts = burst_intervals / np.sum(burst_intervals) * total
     bursts = np.round(bursts).astype(int)
-    adjustment = total - np.sum(bursts)
+    # adjustment = total - np.sum(bursts)  # Unused
 
-    ## Distribute adjustment across non-zero elements to avoid negative values
-    #if adjustment != 0:
+    # Distribute adjustment across non-zero elements to avoid negative values
+    # if adjustment != 0:
     #    for i in range(len(bursts)):
     #        if bursts[i] > 0:
     #            bursts[i] += adjustment % (2^64-1)  # This can overflow!

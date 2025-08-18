@@ -18,6 +18,7 @@ from datetime import timedelta
 
 from raps.policy import PolicyType
 
+
 def get_matching_variables(variables, pattern):
     # Regex pattern to match strings containing .summary
     pattern = re.compile(pattern)
@@ -58,8 +59,8 @@ class ThermoFluidsModel:
     Methods
     -------
     initialize():
-        Initializes the FMU by extracting the file, reading the model description, setting up input and output variables,
-        and preparing the model for simulation.
+        Initializes the FMU by extracting the file, reading the model description,
+        setting up input and output variables, and preparing the model for simulation.
     generate_runtime_values(cdu_power, sc) -> dict:
         Generates runtime values dynamically for the FMU inputs based on CDU power and other configuration parameters.
     generate_fmu_inputs(runtime_values: dict, uncertainties: bool = False) -> list:
@@ -75,6 +76,7 @@ class ThermoFluidsModel:
     cleanup():
         Cleans up the extracted FMU directory, ensuring no temporary files are left behind.
     """
+
     def __init__(self, **config):
         """
         Constructs all the necessary attributes for the ThermoFluidsModel object.
@@ -141,15 +143,19 @@ class ThermoFluidsModel:
         """
         # Dynamically generate the power inputs
         runtime_values = {
-        f"simulator_1_datacenter_1_computeBlock_{i+1}_cabinet_1_sources_Q_flow_total": cdu_power[i] * self.config['COOLING_EFFICIENCY'] / self.config['RACKS_PER_CDU']
-        for i in range(self.config['NUM_CDUS'])
+            f"simulator_1_datacenter_1_computeBlock_{i + 1}"
+            f"_cabinet_1_sources_Q_flow_total": cdu_power[i] *
+            self.config['COOLING_EFFICIENCY'] / self.config['RACKS_PER_CDU']
+            for i in range(self.config['NUM_CDUS'])
         }
 
         # Default temperature is from the config
         temperature = self.config['WET_BULB_TEMP']
 
         # If replay mode is on and weather data is available
-        if engine.scheduler.policy== PolicyType.REPLAY and self.weather and self.weather.start is not None and self.weather.has_coords:
+        if engine.scheduler.policy == PolicyType.REPLAY and \
+            self.weather and self.weather.start is not None and \
+                self.weather.has_coords:
             # Convert total seconds to timedelta object
             delta = timedelta(seconds=engine.current_time)
             target_datetime = self.weather.start + delta
@@ -204,7 +210,6 @@ class ThermoFluidsModel:
 
         return fmu_inputs
 
-
     def calculate_pue(self, cooling_input, cooling_output):
         """
         Calculate the Power Usage Effectiveness (PUE) of the data center.
@@ -235,7 +240,8 @@ class ThermoFluidsModel:
 
         # Get the sum of the work done by all CDU pumps
         W_CDUPs = sum(
-            convert_to_watts(cooling_output.get(f'simulator[1].datacenter[1].computeBlock[{idx+1}].cdu[1].summary.W_flow_CDUP_kW'))
+            convert_to_watts(cooling_output.get(
+                f'simulator[1].datacenter[1].computeBlock[{idx + 1}].cdu[1].summary.W_flow_CDUP_kW'))
             for idx in range(self.config['NUM_CDUS'])
         )
 
@@ -246,7 +252,8 @@ class ThermoFluidsModel:
         total_input_power = np.maximum(total_cooling_input_power, 1e-3)
 
         # Calculate PUE
-        pue = (total_input_power + np.sum(W_CDUPs) + np.sum(W_HTWPs) + np.sum(W_CTWPs) + np.sum(W_CTs)) / total_input_power
+        pue = (total_input_power + np.sum(W_CDUPs) + np.sum(W_HTWPs) +
+               np.sum(W_CTWPs) + np.sum(W_CTs)) / total_input_power
 
         return pue
 
@@ -318,7 +325,7 @@ class ThermoFluidsModel:
         # Cleanup - at the end of the simulation
         shutil.rmtree(self.unzipdir, ignore_errors=True)
 
-    def simulate_cooling(self,*, rack_power, engine):
+    def simulate_cooling(self, *, rack_power, engine):
         cdu_power = rack_power.T[-1] * 1000
         runtime_values = self.generate_runtime_values(cdu_power, engine)
 

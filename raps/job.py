@@ -21,7 +21,7 @@ def job_dict(*, nodes_required, name, account,
              allocated_cpu_cores=0, allocated_gpu_units=0,
              # Traces
              cpu_trace, gpu_trace, ntx_trace, nrx_trace,
-             #Times
+             # Times
              submit_time=0, time_limit=0,
              start_time=0, end_time=0, wall_time=0,
              trace_time=0, trace_start_time=0, trace_end_time=0,
@@ -77,7 +77,7 @@ def dilate_trace(trace, factor):
     Returns:
     - list of float: the dilated trace.
     """
-    if trace is None or (isinstance(trace,(list, np.ndarray)) and len(trace) == 0):
+    if trace is None or (isinstance(trace, (list, np.ndarray)) and len(trace) == 0):
         return trace
     # Traces can be list/np.array or single float values.
     # In case of a single float, we adjust the value directly as it is applied to each timestep
@@ -153,16 +153,17 @@ class Job:
         else:
             raise ValueError(f"{self.nodes_required} {self.scheduled_nodes}")
         if self.scheduled_nodes == [] or self.scheduled_nodes is None or \
-           (isinstance(self.scheduled_nodes,list) and isinstance(self.scheduled_nodes[0], int)) or \
-           (isinstance(self.scheduled_nodes,np.ndarray) and isinstance(self.scheduled_nodes[0], int)):
+           (isinstance(self.scheduled_nodes, list) and isinstance(self.scheduled_nodes[0], int)) or \
+           (isinstance(self.scheduled_nodes, np.ndarray) and isinstance(self.scheduled_nodes[0], int)):
             pass  # Type is ok
         else:
             # Type is not as expected!
-            raise ValueError(f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, with {type(self.scheduled_nodes[0])}")
-        assert isinstance(self.submit_time,(int,float))
-        assert isinstance(self.wall_time,(int,float,np.int64,np.double))
-        assert isinstance(self.start_time,(int,float,np.int64,np.double,type(None)))
-        assert isinstance(self.end_time,(int,float,np.int64,np.double,type(None)))
+            raise ValueError(
+                f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, with {type(self.scheduled_nodes[0])}")
+        assert isinstance(self.submit_time, (int, float))
+        assert isinstance(self.wall_time, (int, float, np.int64, np.double))
+        assert isinstance(self.start_time, (int, float, np.int64, np.double, type(None)))
+        assert isinstance(self.end_time, (int, float, np.int64, np.double, type(None)))
         assert self.start_time <= self.end_time, f"{self.start_time} <= {self.end_time}"
 
     def __repr__(self):
@@ -235,11 +236,10 @@ class Job:
         self.end_time = self.start_time + self.wall_time
 
 
-
 class JobStatistics:
     """ Reduced class for handling statistics after the job has finished.  """
 
-    def __init__(self,job):
+    def __init__(self, job):
         self.id = job.id
         self.name = job.name
         self.account = job.account
@@ -250,42 +250,42 @@ class JobStatistics:
         self.start_time = job.start_time
         self.end_time = job.end_time
         self.state = job._state
-        if isinstance(job.cpu_trace,list) or isinstance(job.cpu_trace,np.ndarray):
+        if isinstance(job.cpu_trace, list) or isinstance(job.cpu_trace, np.ndarray):
             if len(job.cpu_trace) == 0:
                 self.avg_cpu_usage = 0
             else:
                 self.avg_cpu_usage = sum(job.cpu_trace) / len(job.cpu_trace)
-        elif isinstance(job.cpu_trace,int) or isinstance(job.cpu_trace,float):
+        elif isinstance(job.cpu_trace, int) or isinstance(job.cpu_trace, float):
             self.avg_cpu_usage = job.cpu_trace
         else:
             raise NotImplementedError()
 
-        if isinstance(job.gpu_trace,list) or isinstance(job.gpu_trace,np.ndarray):
+        if isinstance(job.gpu_trace, list) or isinstance(job.gpu_trace, np.ndarray):
             if len(job.gpu_trace) == 0:
                 self.avg_gpu_usage = 0
             else:
                 self.avg_gpu_usage = sum(job.gpu_trace) / len(job.gpu_trace)
-        elif isinstance(job.gpu_trace,int) or isinstance(job.gpu_trace,float):
+        elif isinstance(job.gpu_trace, int) or isinstance(job.gpu_trace, float):
             self.avg_gpu_usage = job.gpu_trace
         else:
             raise NotImplementedError()
 
-        if isinstance(job.ntx_trace,list) or isinstance(job.ntx_trace,np.ndarray):
+        if isinstance(job.ntx_trace, list) or isinstance(job.ntx_trace, np.ndarray):
             if len(job.ntx_trace) == 0:
                 self.avg_ntx_usage = 0
             else:
                 self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
-        elif isinstance(job.ntx_trace,int) or isinstance(job.ntx_trace,float):
+        elif isinstance(job.ntx_trace, int) or isinstance(job.ntx_trace, float):
             self.avg_ntx_usage = job.ntx_trace
         else:
             self.avg_ntx_usage = 0
 
-        if isinstance(job.nrx_trace,list) or isinstance(job.nrx_trace,np.ndarray):
+        if isinstance(job.nrx_trace, list) or isinstance(job.nrx_trace, np.ndarray):
             if len(job.nrx_trace) == 0:
                 self.avg_nrx_usage = 0
             else:
                 self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
-        elif isinstance(job.nrx_trace,int) or isinstance(job.nrx_trace,float):
+        elif isinstance(job.nrx_trace, int) or isinstance(job.nrx_trace, float):
             self.avg_nrx_usage = job.nrx_trace
         else:
             self.avg_nrx_usage = 0

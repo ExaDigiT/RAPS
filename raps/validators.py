@@ -6,7 +6,7 @@ def recompute_power(nodes, running_jobs, current_time):
         idx = min(idx, len(j.cpu_trace)-1)
         cpu_p = j.cpu_trace[idx]
         gpu_p = j.gpu_trace[idx] if j.gpu_trace else 0
-        nid   = j.scheduled_nodes[0]
+        nid = j.scheduled_nodes[0]
         node_power[nid] += cpu_p + gpu_p
     total = sum(node_power.values())
     return node_power, total

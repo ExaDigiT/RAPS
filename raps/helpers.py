@@ -2,6 +2,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+
 def check_python_version():
     # Load pyproject.toml
     pyproject_path = Path(__file__).parent.parent / "pyproject.toml"

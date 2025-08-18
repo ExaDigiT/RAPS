@@ -40,7 +40,9 @@ class Scheduler:
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
             if self.debug:
-                print(f"[DEBUG] Scheduler: Considering job {job.id} (CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required})")
+                print(
+                    f"[DEBUG] Scheduler: Considering job {job.id} "
+                    f"(CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required})")
             if self.policy == PolicyType.REPLAY:
                 if job.start_time > current_time:
                     continue  # Replay: Job didn't start yet. Next!
@@ -61,15 +63,17 @@ class Scheduler:
 
                 # After backfill dedice continue processing the queue or wait, continuing may result in fairness issues.
                 if self.policy in [PolicyType.REPLAY]:
-                    # print(f"Nodes available {nodes_available} - Req:{len(job.requested_nodes)} N-avail:{len(self.resource_manager.available_nodes)}")
+                    # print(f"Nodes available {nodes_available} - "
+                    #       f"Req:{len(job.requested_nodes)} N-avail:{len(self.resource_manager.available_nodes)}")
                     continue  # Regardless if the job at the front of the queue doenst fit, try placing all of them.
                 elif self.policy in [PolicyType.FCFS, PolicyType.PRIORITY,
                                      PolicyType.LJF, PolicyType.SJF]:
                     break  # The job at the front of the queue doesnt fit stop processing the queue.
                 else:
-                    raise NotImplementedError("Depending on the Policy this choice should be explicit. Add the implementation above!")
+                    raise NotImplementedError(
+                        "Depending on the Policy this choice should be explicit. Add the implementation above!")
 
-    def prepare_system_state(self,jobs_to_submit:List, running, timestep_start):
+    def prepare_system_state(self, jobs_to_submit: List, running, timestep_start):
         # def schedule(self, queue, running, current_time, accounts=None, sorted=False, debug=False):
         """
         In the case of replay and fast forward, previously placed jobs should be present.
@@ -99,7 +103,7 @@ class Scheduler:
         else:
             return jobs_to_submit
 
-    def place_job_and_manage_queues(self, job, queue,running, current_time, node_id):
+    def place_job_and_manage_queues(self, job, queue, running, current_time, node_id):
         self.resource_manager.assign_nodes_to_job(job, current_time, node_id)
         running.append(job)
         queue.remove(job)
@@ -112,7 +116,11 @@ class Scheduler:
         # Iterate through all nodes managed by the ResourceManager
         for node in self.resource_manager.nodes:
             if self.debug:
-                print(f"[DEBUG]   Checking node {node['id']}: Available CPU: {node['available_cpu_cores']}, Available GPU: {node['available_gpu_units']}. Job needs CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required}")
+                print(
+                    f"[DEBUG]   Checking node {node['id']}: "
+                    f"Available CPU: {node['available_cpu_cores']}, "
+                    f"Available GPU: {node['available_gpu_units']}. "
+                    f"Job needs CPU: {job.cpu_cores_required}, GPU: {job.gpu_units_required}")
             # Skip if the node is down
             if node['is_down']:
                 continue
@@ -125,7 +133,7 @@ class Scheduler:
         # If no suitable node is found, return None
         return None
 
-    def backfill(self,queue:List, running:List, current_time):
+    def backfill(self, queue: List, running: List, current_time):
         # Try to find a backfill candidate from the entire queue.
         while queue:
             backfill_job, node_id = self.find_backfill_job(queue, running, current_time)
@@ -146,13 +154,13 @@ class Scheduler:
             return None, None
 
         # Identify when the nex job in the queue could run as a time limit:
-        first_job = queue[0]
+        # first_job = queue[0]  # Unused
         # For multitenancy, we need to check if the first job can fit on any node
         # based on its core/GPU requirements, not just nodes_required.
         # This is a simplification; a more complex backfill might consider
         # if the job can fit by combining resources from multiple nodes.
         # For now, we assume it needs to fit on a single node.
-        
+
         # We need to know the total available resources if all running jobs finish by shadow_time_end
         # This is complex with multitenancy, so for now, we'll simplify the backfill logic
         # to just check if a job can fit on *any* node, not necessarily the one
@@ -162,11 +170,11 @@ class Scheduler:
         # With multitenancy, this needs a more sophisticated resource projection.
         # For now, we will make `time_limit` effectively infinite for backfill candidates
         # if the job can fit on *any* node, and rely on `check_available_nodes`.
-        
+
         # Revert to a simpler time_limit for now, or remove it if not applicable
         # For now, let's assume time_limit is not strictly tied to node availability
         # in the same way as before, and focus on resource availability.
-        time_limit = float('inf') # Effectively no time limit for backfill candidates
+        time_limit = float('inf')  # Effectively no time limit for backfill candidates
 
         # We now have the time_limit after which no backfilled job should end
         # as the next job in line has the necessary resrouces after this time limit.
@@ -176,10 +184,10 @@ class Scheduler:
             pass
         elif self.bfpolicy == BackfillType.EASY:
             queue[:] = sorted(queue, key=lambda job: job.submit_time)
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy == BackfillType.FIRSTFIT:
             pass  # Stay with the prioritization!
-            return self.return_first_fit(queue,time_limit)
+            return self.return_first_fit(queue, time_limit)
         elif self.bfpolicy in [BackfillType.BESTFIT,
                                BackfillType.GREEDY,
                                BackfillType.CONSERVATIVE,

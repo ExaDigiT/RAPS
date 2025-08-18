@@ -1,6 +1,7 @@
 import numpy as np
 from .utils import linear_to_3d_index
 
+
 class FLOPSManager():
 
     def __init__(self, **kwargs):
@@ -23,25 +24,25 @@ class FLOPSManager():
 
         if self.validate:   # cpu_util is in fact node_Watts in this case
             total_peak = (
-                self.config['CPU_FP_RATIO'] * self.config['CPU_PEAK_FLOPS'] + \
+                self.config['CPU_FP_RATIO'] * self.config['CPU_PEAK_FLOPS'] +
                 self.config['GPU_FP_RATIO'] * self.config['GPU_PEAK_FLOPS']
             )
             denominator = (
-                self.config['POWER_CPU_MAX'] * self.config['CPUS_PER_NODE'] + \
-                self.config['POWER_GPU_MAX'] * self.config['GPUS_PER_NODE'] + \
-                self.config['POWER_NIC'] * self.config['NICS_PER_NODE'] + \
+                self.config['POWER_CPU_MAX'] * self.config['CPUS_PER_NODE'] +
+                self.config['POWER_GPU_MAX'] * self.config['GPUS_PER_NODE'] +
+                self.config['POWER_NIC'] * self.config['NICS_PER_NODE'] +
                 self.config['POWER_NVME']
             )
             self.flop_state[node_indices] = total_peak * (cpu_util_flat / denominator)
         else:
             self.flop_state[node_indices] = (
-                self.config['CPU_FP_RATIO'] * cpu_util_flat * self.config['CPU_PEAK_FLOPS'] + \
+                self.config['CPU_FP_RATIO'] * cpu_util_flat * self.config['CPU_PEAK_FLOPS'] +
                 self.config['GPU_FP_RATIO'] * gpu_util_flat * self.config['GPU_PEAK_FLOPS']
             )
 
     def get_rpeak(self):
         node_peak_flops = (
-            self.config['CPUS_PER_NODE'] * self.config['CPU_PEAK_FLOPS'] + \
+            self.config['CPUS_PER_NODE'] * self.config['CPU_PEAK_FLOPS'] +
             self.config['GPUS_PER_NODE'] * self.config['GPU_PEAK_FLOPS']
         )
         system_peak_flops = self.config['AVAILABLE_NODES'] * node_peak_flops

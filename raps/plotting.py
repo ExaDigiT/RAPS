@@ -16,13 +16,13 @@ Plotter
 import itertools
 
 import matplotlib.pyplot as plt
-import matplotlib.dates as md
 import matplotlib.ticker as ticker
 from matplotlib.ticker import MaxNLocator
 import time
 import numpy as np
 from uncertainties import unumpy
 from rich.progress import track
+
 
 class BasePlotter:
     """
@@ -37,6 +37,7 @@ class BasePlotter:
     title : str
         The title of the plot.
     """
+
     def __init__(self, xlabel, ylabel, title, uncertainties=False):
         """
         Constructs all the necessary attributes for the BasePlotter object.
@@ -82,6 +83,7 @@ class BasePlotter:
         plt.savefig(save_path)
         plt.close()
 
+
 class Plotter(BasePlotter):
     """
     A class for creating and saving specific types of plots, such as histories,
@@ -92,6 +94,7 @@ class Plotter(BasePlotter):
     save_path : str
         The path to save the plot.
     """
+
     def __init__(self, xlabel='', ylabel='', title='', save_path='out.svg', uncertainties=False):
         """
         Constructs all the necessary attributes for the Plotter object.
@@ -270,7 +273,7 @@ def plot_job_gantt(start_times, end_times, node_counts):
             alpha=0.8
         )
 
-    #for y, (s, e, n) in enumerate(zip(start_times, end_times, node_counts)):
+    # for y, (s, e, n) in enumerate(zip(start_times, end_times, node_counts)):
     #    plt.barh(y, width=e - s, left=s, height=0.8,
     #                 color='yellow', edgecolor='black', alpha=0.8)
     #    # Optionally place the node count label in the middle of the bar
@@ -302,7 +305,7 @@ def plot_network_histogram(*, ax, data, bins=50, save_path='network_histogram.pn
     ax.yscale('log')
 
     # force scientific notation on x-axis
-    ax.ticklabel_format(style='scientific', axis='x', scilimits=(0,0))
+    ax.ticklabel_format(style='scientific', axis='x', scilimits=(0, 0))
 
     ax.xlabel('Network Traffic per Job (bytes)')
     ax.ylabel('Frequency')
@@ -324,10 +327,10 @@ def spaced_colors(n, cmap_name='nipy_spectral'):
     return [cmap(v) for v in values]
 
 
-def plot_jobs_gantt(*,ax=None,jobs, bars_are_node_sized):
-    jobs.sort(key=lambda x:x.submit_time)
+def plot_jobs_gantt(*, ax=None, jobs, bars_are_node_sized):
+    jobs.sort(key=lambda x: x.submit_time)
     if ax is None:
-        ax = plt.figure(figsize=(10,4))
+        ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
     submit_t = [x.submit_time for x in jobs]
     duration = [x.wall_time for x in jobs]
@@ -337,34 +340,34 @@ def plot_jobs_gantt(*,ax=None,jobs, bars_are_node_sized):
     offset = 0
     for i in track(range(len(jobs)), description="Collecting information to plot"):
         if bars_are_node_sized:
-            ax.barh(offset + nodes_required[i] / 2,duration[i], height=nodes_required[i], left=submit_t[i])
+            ax.barh(offset + nodes_required[i] / 2, duration[i], height=nodes_required[i], left=submit_t[i])
             offset += nodes_required[i]
         else:
             ax.barh(i, duration[i], height=1.0, left=submit_t[i], color=colors[i])
     print("Plotting")
 
     ax.set_ylabel("Job ID")
-    ##ax_b labels:
+    # ax_b labels:
     ax.set_xlabel("time [hh:mm]")
     minx_s = min([x.submit_time for x in jobs])
     maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
-                            (x1,x2) in [(n // 60,n % 60) for
-                                        n in x_label_mins[0::60]]]
+                   (x1, x2) in [(n // 60, n % 60) for
+                                n in x_label_mins[0::60]]]
 
-    ax.set_xticks(x_label_ticks,x_label_str)
-    #ax.yaxis.set_inverted(True)
+    ax.set_xticks(x_label_ticks, x_label_str)
+    # ax.yaxis.set_inverted(True)
     return ax
 
 
-def plot_nodes_gantt(*,ax=None,jobs):
+def plot_nodes_gantt(*, ax=None, jobs):
     if ax is None:
-        ax = plt.figure(figsize=(10,4))
+        ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
     duration = [x.wall_time for x in jobs]
-    #nodes_required = [x['nodes_required'] for x in jobs]
+    # nodes_required = [x['nodes_required'] for x in jobs]
     start_t = [x.start_time for x in jobs]
     nodeIDs = [x.scheduled_nodes for x in jobs]
 
@@ -375,28 +378,28 @@ def plot_nodes_gantt(*,ax=None,jobs):
     print("Plotting")
 
     ax.set_ylabel("Node ID")
-    ##ax_b labels:
+    # ax_b labels:
     ax.set_xlabel("time [hh:mm]")
-    minx_s = min([x.submit_time for x in jobs])
-    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
-    #ax.xaxis.set_major_formatter(md.DateFormatter('%H:%M:%S'))
+    # minx_s = min([x.submit_time for x in jobs])  # Unused
+    # maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))  # Unused
+    # ax.xaxis.set_major_formatter(md.DateFormatter('%H:%M:%S'))
 
     formatter = ticker.FuncFormatter(lambda s, x: time.strftime('%m-%d %H:%M:%S', time.gmtime(s)))
     ax.xaxis.set_major_formatter(formatter)
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-    #x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
-    #x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
-    #x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
+    # x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
+    # x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
+    # x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
     #                        (x1,x2) in [(n // 60,n % 60) for
     #                                    n in x_label_mins[0::60]]]
 
-    #ax.set_xticks(x_label_ticks,x_label_str)
-    ax.set_ylim(1,max(list(itertools.chain.from_iterable(nodeIDs))))
-    #ax.yaxis.set_inverted(True)
+    # ax.set_xticks(x_label_ticks,x_label_str)
+    ax.set_ylim(1, max(list(itertools.chain.from_iterable(nodeIDs))))
+    # ax.yaxis.set_inverted(True)
     return ax
 
 
 if __name__ == "__main__":
     plotter = Plotter()
-    #plotter.plot_history([1, 2, 3, 4])
+    # plotter.plot_history([1, 2, 3, 4])

@@ -150,9 +150,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     jobprofile_df = jobprofile_df.sort_values(by='timestamp')
     jobprofile_df = jobprofile_df.reset_index(drop=True)
 
-    #telemetry_start_timestamp = jobs_df['time_snapshot'].min()  # Earliets time snapshot within the day!
+    # telemetry_start_timestamp = jobs_df['time_snapshot'].min()  # Earliets time snapshot within the day!
     telemetry_start_timestamp = jobprofile_df['timestamp'].min()  # Earliets time snapshot within the day!
-    #telemetry_end_timestamp = jobs_df['time_snapshot'].max()  # This time has nothing to do with the jobs!
+    # telemetry_end_timestamp = jobs_df['time_snapshot'].max()  # This time has nothing to do with the jobs!
     telemetry_end_timestamp = jobprofile_df['timestamp'].max()  # Earliets time snapshot within the day!
 
     # Time that can be simulated # Take earliest time as baseline reference
@@ -162,14 +162,15 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
     first_start_timestamp = jobs_df['time_start'].min()
     diff = first_start_timestamp - telemetry_start_timestamp
-    first_start = int(diff.total_seconds())  # negative seconds or 0
+    # first_start = int(diff.total_seconds())  # negative seconds or 0  # Unused
 
     num_jobs = len(jobs_df)
     if debug:
         print("num_jobs:", num_jobs)
         print("telemetry_start:", telemetry_start, "simulation_fin", telemetry_end)
-        print("telemetry_start_timestamp:", telemetry_start_timestamp, "telemetry_end_timestamp", telemetry_end_timestamp)
-        print("first_start_timestamp:",first_start_timestamp, "last start timestamp:", jobs_df['time_start'].max())
+        print("telemetry_start_timestamp:", telemetry_start_timestamp,
+              "telemetry_end_timestamp", telemetry_end_timestamp)
+        print("first_start_timestamp:", first_start_timestamp, "last start timestamp:", jobs_df['time_start'].max())
 
     jobs = []
     # Map dataframe to job state. Add results to jobs list
@@ -186,21 +187,22 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             name = encrypt(name)
 
         if validate:
-            cpu_power = jobprofile_df[jobprofile_df['allocation_id'] \
+            cpu_power = jobprofile_df[jobprofile_df['allocation_id']
                                       == allocation_id]['mean_node_power']
             cpu_trace = cpu_power.values
             gpu_trace = cpu_trace
 
         else:
-            cpu_power = jobprofile_df[jobprofile_df['allocation_id'] \
+            cpu_power = jobprofile_df[jobprofile_df['allocation_id']
                                       == allocation_id]['sum_cpu0_power']
             cpu_power_array = cpu_power.values
             cpu_min_power = nodes_required * config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
             cpu_max_power = nodes_required * config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
-            cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)  # Will be negative! as cpu_power_array[i] can be smaller than cpu_min_power
+            # Will be negative! as cpu_power_array[i] can be smaller than cpu_min_power
+            cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)
             cpu_trace = cpu_util * config['CPUS_PER_NODE']
 
-            gpu_power = jobprofile_df[jobprofile_df['allocation_id'] \
+            gpu_power = jobprofile_df[jobprofile_df['allocation_id']
                                       == allocation_id]['sum_gpu_power']
             gpu_power_array = gpu_power.values
 
@@ -229,7 +231,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         end_time = diff.total_seconds()
         if not start_time <= end_time or np.isnan(end_time):
             continue  # Start_time is not smaller than end_time or is not valid
-            #Skip entry.
+            # Skip entry.
 
         wall_time = end_time - start_time
         if np.isnan(wall_time):
@@ -250,7 +252,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 trace_start_time = 0
                 trace_end_time = trace_time
             else:
-                print(f"Job: {job_id} {end_state} {start_time} - {end_time},Trace: {trace_start_time} - {trace_end_time} Missing: {missing_trace_time}!")
+                print(f"Job: {job_id} {end_state} {start_time} - {end_time}, "
+                      f"Trace: {trace_start_time} - {trace_end_time}, "
+                      f"Missing: {missing_trace_time}!")
         else:
             trace_missing_values = False
 
@@ -261,7 +265,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config,kwargs)
+            submit_time = next_arrival_byconfkwargs(config, kwargs)
             start_time = None  # ?
             end_time = None  # ?
             priority = aging_boost(nodes_required)
@@ -279,12 +283,18 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             print("ignoring job b/c zero trace:", jidx, submit_time, start_time, nodes_required)
             continue  # SKIP!
         if end_time < telemetry_start:
-            # raise ValueError("Job ends before frist recorded telemetry entry:",job_id, "start:", start_time,"end:",end_time, " Telemetry: ", len(gpu_trace), "entries.")
-            print("Job ends before frist recorded telemetry entry:",job_id, "start:", start_time,"end:",end_time, " Telemetry: ", len(gpu_trace), "entries.")
+            # raise ValueError("Job ends before frist recorded telemetry entry:",
+            #                  job_id, "start:", start_time,"end:",end_time,
+            #                  " Telemetry: ", len(gpu_trace), "entries.")
+            print("Job ends before frist recorded telemetry entry:", job_id, "start:",
+                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
             continue  # SKIP!
         if start_time > telemetry_end:
-            # raise ValueError("Job starts after last recorded telemetry entry:",job_id, "start:", start_time,"end:",end_time, " Telemetry: ", len(gpu_trace), "entries.")
-            print("Job starts after last recorded telemetry entry:",job_id, "start:", start_time,"end:",end_time, " Telemetry: ", len(gpu_trace), "entries.")
+            # raise ValueError("Job starts after last recorded telemetry entry:",
+            #                  job_id, "start:", start_time,"end:",end_time,
+            #                  " Telemetry: ", len(gpu_trace), "entries.")
+            print("Job starts after last recorded telemetry entry:", job_id, "start:",
+                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
             continue  # SKIP!
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
@@ -330,7 +340,8 @@ def xname_to_index(xname: str, config: dict):
     if row == 6:
         col -= 9
     rack_index = row * 12 + col
-    node_index = chassis * config['BLADES_PER_CHASSIS'] * config['NODES_PER_BLADE'] + slot * config['NODES_PER_BLADE'] + node
+    node_index = chassis * config['BLADES_PER_CHASSIS'] * \
+        config['NODES_PER_BLADE'] + slot * config['NODES_PER_BLADE'] + node
     return rack_index * config['SC_SHAPE'][2] + node_index
 
 

@@ -87,7 +87,7 @@ def main():
 
         td = Telemetry(**args_dict)
         jobs, timestep_start, timestep_end, args_from_file = \
-            td.load_jobs_times_args_from_files(files=args.replay, args=args)
+            td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
         # TODO: Merge args and args_from_files? see telemetry.py:97
 
     else:  # Synthetic jobs
