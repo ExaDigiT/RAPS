@@ -1,4 +1,5 @@
 import sys
+import os
 import pandas as pd
 import numpy as np
 from rich.align import Align
@@ -545,19 +546,22 @@ class LayoutManager:
             context = Live(self.layout, auto_refresh=True, refresh_per_second=3)
         else:
             context = nullcontext()
-        with context:
-            # last_i = 0
-            for i, data in enumerate(self.engine.run_simulation(jobs,
-                                                                timestep_start,
-                                                                timestep_end,
-                                                                time_delta,
-                                                                autoshutdown=True)):
-                if data and (not self.debug and not self.noui):
-                    self.update_full_layout(data, time_delta)
-                    # self.update_progress_bar(i-last_i)
-                    # last_i=i
-                if not self.debug and not self.noui:
-                    self.update_progress_bar(1)
+        try:
+            with context:
+                # last_i = 0
+                for i, data in enumerate(self.engine.run_simulation(jobs,
+                                                                    timestep_start,
+                                                                    timestep_end,
+                                                                    time_delta,
+                                                                    autoshutdown=True)):
+                    if data and (not self.debug and not self.noui):
+                        self.update_full_layout(data, time_delta)
+                        # self.update_progress_bar(i-last_i)
+                        # last_i=i
+                    if not self.debug and not self.noui:
+                        self.update_progress_bar(1)
+        finally:
+            os.system("stty sane")
 
     def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
         """ Prepares the UI and returns a generator for the simulation """
