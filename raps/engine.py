@@ -1,6 +1,11 @@
 from typing import Optional, List
 import dataclasses
 import pandas as pd
+import threading
+import sys
+import tty
+import termios
+import time
 
 from raps.job import Job, JobState
 from raps.policy import PolicyType
@@ -17,8 +22,6 @@ from raps.network import (
     apply_job_slowdown,
     compute_system_network_stats
 )
-from raps.workload import continuous_job_generation
-from raps.downtime import Downtime
 
 
 @dataclasses.dataclass
@@ -28,35 +31,84 @@ class TickData:
     completed: list[Job]
     running: list[Job]
     queue: list[Job]
+    down_nodes: list[int]
     power_df: Optional[pd.DataFrame]
     p_flops: Optional[float]
     g_flops_w: Optional[float]
     system_util: float
     fmu_inputs: Optional[dict]
     fmu_outputs: Optional[dict]
-    # This should not be here v:
     num_active_nodes: int
     num_free_nodes: int
-    down_nodes: list[int]
-    # This should not be here ^:
     avg_net_tx: float
     avg_net_rx: float
     avg_net_util: float
     slowdown_per_job: float
     node_occupancy: dict[int, int]
+    time_delta: int
+
+
+class SimulationState:
+    def __init__(self, time_delta):
+        self.paused = False
+        self.time_delta = time_delta
+        self.lock = threading.Lock()
+
+    def toggle_pause(self):
+        with self.lock:
+            self.paused = not self.paused
+
+    def is_paused(self):
+        with self.lock:
+            return self.paused
+
+    def speed_up(self):
+        with self.lock:
+            self.time_delta *= 2
+            print(f"\n[INFO] time_delta increased to {self.time_delta}", file=sys.stderr)
+
+    def slow_down(self):
+        with self.lock:
+            if self.time_delta > 1:
+                self.time_delta //= 2
+                print(f"\n[INFO] time_delta decreased to {self.time_delta}", file=sys.stderr)
+
+    def get_time_delta(self):
+        with self.lock:
+            return self.time_delta
+
+
+def keyboard_listener(state):
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(sys.stdin.fileno())
+        while True:
+            char = sys.stdin.read(1)
+            if char == 'k' or char == ' ':
+                state.toggle_pause()
+                if state.is_paused():
+                    print("\n[PAUSED] Press space or k to resume.", file=sys.stderr)
+                else:
+                    print("\n[RESUMED]", file=sys.stderr)
+            elif char == 'l' or char == '+':
+                state.speed_up()
+            elif char == 'j' or char == '_':
+                state.slow_down()
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *,
-                 power_manager,
+    def __init__(self, *, power_manager,
                  flops_manager,
                  cooling_model=None,
                  config,
                  jobs=None,
                  total_initial_jobs=0,
-                 continuous_workload=None,  # Workload class to generate from for continuous generation
                  **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
@@ -78,11 +130,9 @@ class Engine:
         self.power_manager = power_manager
         self.flops_manager = flops_manager
         self.debug = kwargs.get('debug')
-        self.continuous_workload = continuous_workload
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
-        # Factor to downscale the 1s timesteps (power of 10):
-        self.downscale = kwargs.get('downscale', 1)
+        self.downscale = kwargs.get('downscale', 1)  # Factor to downscale the 1s timesteps (power of 10)
         self.simulate_network = kwargs.get('simulate_network')
         self.sys_util_history = []
         self.scheduler_queue_history = []
@@ -93,9 +143,6 @@ class Engine:
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
         self.node_occupancy_history = []
-        self.downtime = Downtime(first_downtime=kwargs.get('downtime_first'),
-                                 downtime_interval=kwargs.get('downtime_interval'),
-                                 downtime_length=kwargs.get('downtime_length'))
 
         # Set scheduler type - either based on config or command-line args - defaults to 'default'
         if self.config['multitenant']:
@@ -119,8 +166,7 @@ class Engine:
 
         if self.simulate_network:
             available_nodes = self.resource_manager.available_nodes
-            self.network_model = NetworkModel(available_nodes=available_nodes,
-                                              config=config, kwargs=kwargs)
+            self.network_model = NetworkModel(available_nodes=available_nodes, config=config, kwargs=kwargs)
         else:
             self.network_model = None
 
@@ -177,14 +223,12 @@ class Engine:
         else:
             return False
 
-    def prepare_timestep(self, *, replay: bool = True, jobs):
+    def prepare_timestep(self, replay: bool = True):
         # 1 identify completed jobs
-        # 2 Check continuous job generation
-        # 3 Simulate node failure # Defunct feature!
-        # 4 Simulate downtime
-        # 5 Update active and free nodes
+        # 2 Simulate node failure # Defunct feature!
+        # 3 Update active and free nodes
 
-        # 1 Identify Completed Jobs
+        # Identify Completed Jobs
         completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
         # Update Completed Jobs, their account and  and Free resources.
         for job in completed_jobs:
@@ -200,36 +244,29 @@ class Engine:
             # Free the nodes via the resource manager.
             self.resource_manager.free_nodes_from_job(job)
 
-        # 2 Check continuous job generation
-        if self.continuous_workload is not None:  # Experimental
-            continuous_job_generation(engine=self, timestep=self.current_time, jobs=jobs)
-
-        # 3 Simulate node failure
         if not replay:
+            # Simulate node failure
             newly_downed_nodes = self.resource_manager.node_failure(self.config['MTBF'])
             for node in newly_downed_nodes:
                 self.power_manager.set_idle(node)
         else:
             newly_downed_nodes = []
 
-        # 4 Simulate downtime
-        need_reschedule = self.downtime.check_and_trigger(timestep=self.current_time, engine=self)
-
-        # 5 Update active/free nodes based on core/GPU utilization
+        # Update active/free nodes based on core/GPU utilization
         if self.config['multitenant']:
-            # #total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
-            # #total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
-            # #available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
-            # #available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+            # total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)  # Unused
+            # total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)  # Unused
+            # available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)  # Unused
+            # available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)  # Unused
 
             self.num_free_nodes = len([node for node in self.resource_manager.nodes if
                                       not node['is_down'] and
                                       node['available_cpu_cores'] == node['total_cpu_cores'] and
                                       node['available_gpu_units'] == node['total_gpu_units']])
             self.num_active_nodes = len([node for node in self.resource_manager.nodes if
-                                        not node['is_down'] and
-                                        (node['available_cpu_cores'] < node['total_cpu_cores']
-                                         or node['available_gpu_units'] < node['total_gpu_units'])])
+                                         not node['is_down'] and
+                                         (node['available_cpu_cores'] < node['total_cpu_cores'] or
+                                          node['available_gpu_units'] < node['total_gpu_units'])])
 
             # Update system utilization history
             self.resource_manager.update_system_utilization(self.current_time, self.running)
@@ -240,7 +277,7 @@ class Engine:
                 - len(self.resource_manager.available_nodes) \
                 - len(self.resource_manager.down_nodes)
 
-        return completed_jobs, newly_downed_nodes, need_reschedule
+        return completed_jobs, newly_downed_nodes
 
     def complete_timestep(self, autoshutdown, all_jobs: List, jobs: List):
         # 1 update running time of all running jobs
@@ -309,9 +346,9 @@ class Engine:
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if job.running_time > job.wall_time:
-                    raise Exception(f"Job should have ended already!\n\
-                                       {job.running_time} > {job.wall_time}\
-                                    ")
+                    raise Exception(f"""Job should have ended already!
+                                       {job.running_time} > {job.wall_time}
+                                    """)
                 # Aggregate scheduled nodes
                 scheduled_nodes.append(job.scheduled_nodes)
 
@@ -320,7 +357,7 @@ class Engine:
                 cpu_utils.append(cpu_util)
                 # Percentage Utilization!
 
-                # Get GPU utilizaiton
+                # Get GPU utilization
                 gpu_util = get_current_utilization(job.gpu_trace, job)
                 gpu_utils.append(gpu_util)
                 # Percentage Utilization!
@@ -434,7 +471,8 @@ class Engine:
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
             slowdown_per_job=0,
-            node_occupancy=node_occupancy
+            node_occupancy=node_occupancy,
+            time_delta=time_delta
         )
         return tick_data
 
@@ -459,8 +497,8 @@ class Engine:
             self.scheduler.schedule([job], self.running, job.start_time, accounts=self.accounts, sorted=True)
             self.queue.remove(job)
         if replay and len(self.queue) != 0:
-            raise ValueError("Something went wrong! Not all jobs could be placed!"
-                             "\nPotential confligt in queue:\n{self.queue}")
+            raise ValueError(
+                f"Something went wrong! Not all jobs could be placed!\nPotential confligt in queue:\n{self.queue}")
         # Restore the target policy and backfill for the remainder of the simulation.
         self.scheduler.policy = target_policy
         self.scheduler.bfpolicy = target_bfpolicy
@@ -477,8 +515,9 @@ class Engine:
         if self.debug:
             print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
             if jobs:
-                print("[DEBUG] run_simulation: First job submit_time: "
-                      "{jobs[0].submit_time}, start_time: {jobs[0].start_time}")
+                print(
+                    "[DEBUG] run_simulation: First job submit_time: "
+                    f"{jobs[0].submit_time}, start_time: {jobs[0].start_time}")
 
         # Place jobs that are currently running, onto the system.
         self.prepare_system_state(jobs, timestep_start, timestep_end, replay)
@@ -489,7 +528,18 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
         batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
 
-        for timestep in range(timestep_start, timestep_end):  # Runs every seconds!
+        sim_state = SimulationState(time_delta)
+        listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
+        listener_thread.start()
+
+        timestep = timestep_start
+        while timestep < timestep_end:  # Runs every seconds!
+
+            if sim_state.is_paused():
+                time.sleep(0.1)
+                continue
+
+            current_time_delta = sim_state.get_time_delta()
 
             if (timestep % batch_window == 0) or (timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
@@ -497,13 +547,13 @@ class Engine:
                 all_jobs[:] = [job for job in all_jobs if job.submit_time > timestep + batch_window]
 
             # 1. Prepare Timestep:
-            completed_jobs, newly_downed_nodes, need_reschedule = self.prepare_timestep(replay=replay, jobs=jobs)
+            completed_jobs, newly_downed_nodes = self.prepare_timestep(replay)
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
 
             # 3. Schedule jobs that are now in the queue.
-            if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions or need_reschedule:
+            if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions:
                 self.scheduler.schedule(self.queue, self.running,
                                         self.current_time,
                                         accounts=self.accounts,
@@ -513,14 +563,12 @@ class Engine:
                 print(".", end="", flush=True)
 
             # 4. Run tick only at specified time_delta
-            if 0 == (timestep % time_delta) and \
-                    ((time_delta == 1 and
-                     self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or
-                     (time_delta != 1 or self.downscale != 1)
-                     ):
-                tick_data = self.tick(time_delta=time_delta)
+            if 0 == (timestep % current_time_delta) and \
+               ((current_time_delta == 1 and
+                 self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or
+                    (current_time_delta != 1 or self.downscale != 1)):
+                tick_data = self.tick(time_delta=current_time_delta)
                 tick_data.completed = completed_jobs
-                tick_data.down_nodes = self.resource_manager.down_nodes
             else:
                 tick_data = None
 
@@ -529,6 +577,8 @@ class Engine:
             if simulation_done:
                 break
             yield tick_data
+
+            timestep += 1
 
     def get_job_history_dict(self):
         return self.job_history_dict
