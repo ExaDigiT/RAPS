@@ -13,7 +13,6 @@ from raps.job import Job, JobState
 from raps.policy import PolicyType
 from raps.utils import (
     summarize_ranges,
-    expand_ranges,
     get_current_utilization
 )
 from raps.resmgr import ResourceManager
@@ -24,6 +23,8 @@ from raps.network import (
     apply_job_slowdown,
     compute_system_network_stats
 )
+from raps.workload import continuous_job_generation
+from raps.downtime import Downtime
 
 
 @dataclasses.dataclass
@@ -113,6 +114,7 @@ class Engine:
                  config,
                  jobs=None,
                  total_initial_jobs=0,
+                 continuous_workload=None,  # Workload class to generate from for continuous generation
                  **kwargs):
         self.config = config
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
@@ -134,6 +136,7 @@ class Engine:
         self.power_manager = power_manager
         self.flops_manager = flops_manager
         self.debug = kwargs.get('debug')
+        self.continuous_workload = continuous_workload
         self.output = kwargs.get('output')
         self.replay = kwargs.get('replay')
         self.downscale = kwargs.get('downscale', 1)  # Factor to downscale the 1s timesteps (power of 10)
@@ -147,6 +150,9 @@ class Engine:
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
         self.node_occupancy_history = []
+        self.downtime = Downtime(first_downtime=kwargs.get('downtime_first'),
+                                 downtime_interval=kwargs.get('downtime_interval'),
+                                 downtime_length=kwargs.get('downtime_length'))
 
         # Set scheduler type - either based on config or command-line args - defaults to 'default'
         if self.config['multitenant']:
@@ -227,7 +233,75 @@ class Engine:
         else:
             return False
 
-    def prepare_timestep(self, replay: bool = True):
+    def prepare_timestep(self, *, replay: bool = True, jobs):
+        # 1 identify completed jobs
+        # 2 Check continuous job generation
+        # 3 Simulate node failure # Defunct feature!
+        # 4 Simulate downtime
+        # 5 Update active and free nodes
+
+        # 1 Identify Completed Jobs
+        completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
+        # Update Completed Jobs, their account and  and Free resources.
+        for job in completed_jobs:
+            self.power_manager.set_idle(job.scheduled_nodes)
+            job.state = JobState.COMPLETED
+
+            self.running.remove(job)
+            self.jobs_completed += 1
+            job_stats = job.statistics()
+            if self.accounts:
+                self.accounts.update_account_statistics(job_stats)
+            self.job_history_dict.append(job_stats.__dict__)
+            # Free the nodes via the resource manager.
+            self.resource_manager.free_nodes_from_job(job)
+
+        # 2 Check continuous job generation
+        if self.continuous_workload is not None:  # Experimental
+            continuous_job_generation(engine=self, timestep=self.current_time, jobs=jobs)
+
+        # 3 Simulate node failure
+        if not replay:
+            newly_downed_nodes = self.resource_manager.node_failure(self.config['MTBF'])
+            for node in newly_downed_nodes:
+                self.power_manager.set_idle(node)
+        else:
+            newly_downed_nodes = []
+
+        need_reschedule = False
+        # 4 Simulate downtime
+        need_reschedule = self.downtime.check_and_trigger(timestep=self.current_time, engine=self)
+
+        # 5 Update active/free nodes based on core/GPU utilization
+        if self.config['multitenant']:
+            # #total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)
+            # #total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)
+            # #available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)
+            # #available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)
+
+            self.num_free_nodes = len([node for node in self.resource_manager.nodes if
+                                      not node['is_down'] and
+                                      node['available_cpu_cores'] == node['total_cpu_cores'] and
+                                      node['available_gpu_units'] == node['total_gpu_units']])
+            self.num_active_nodes = len([node for node in self.resource_manager.nodes if
+                                        not node['is_down'] and
+                                        (node['available_cpu_cores'] < node['total_cpu_cores']
+                                         or node['available_gpu_units'] < node['total_gpu_units'])])
+
+            # Update system utilization history
+            self.resource_manager.update_system_utilization(self.current_time, self.running)
+        else:
+            # Whole-node allocator
+            self.num_free_nodes = len(self.resource_manager.available_nodes)
+            self.num_active_nodes = self.config['TOTAL_NODES'] \
+                - len(self.resource_manager.available_nodes) \
+                - len(self.resource_manager.down_nodes)
+        self.down_nodes = self.resource_manager.down_nodes
+        # TODO This should only be managed in the resource manager!
+
+        return completed_jobs, newly_downed_nodes, need_reschedule
+
+    def prepare_timestep_old(self, replay: bool = True):
         # 1 identify completed jobs
         # 2 Simulate node failure # Defunct feature!
         # 3 Update active and free nodes
@@ -440,11 +514,13 @@ class Engine:
                                                                    net_rx_list=net_rx_list,
                                                                    slowdown_factors=slowdown_factors
                                                                    )
+            slowdown_per_job = sum(slowdown_factors)/len(slowdown_factors) if len(slowdown_factors) != 0 else 0
             self.record_network_stats(avg_tx=avg_tx,
                                       avg_rx=avg_rx,
                                       avg_net=avg_net)
         else:
             avg_tx, avg_rx, avg_net = None, None, None
+            slowdown_per_job = 0
 
         # Continue with System Simulation
 
@@ -462,7 +538,7 @@ class Engine:
             completed=None,
             running=self.running,
             queue=self.queue,
-            down_nodes=expand_ranges(self.down_nodes[1:]),
+            down_nodes=self.down_nodes,
             power_df=power_df,
             p_flops=pflops,
             g_flops_w=gflops_per_watt,
@@ -474,7 +550,7 @@ class Engine:
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
             avg_net_util=avg_net,
-            slowdown_per_job=0,
+            slowdown_per_job=slowdown_per_job,
             node_occupancy=node_occupancy,
             time_delta=time_delta
         )
@@ -551,13 +627,13 @@ class Engine:
                 all_jobs[:] = [job for job in all_jobs if job.submit_time > timestep + batch_window]
 
             # 1. Prepare Timestep:
-            completed_jobs, newly_downed_nodes = self.prepare_timestep(replay=replay)
+            completed_jobs, newly_downed_nodes, need_reschedule = self.prepare_timestep(replay=replay, jobs=jobs)
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
 
             # 3. Schedule jobs that are now in the queue.
-            if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions:
+            if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions or need_reschedule:
                 self.scheduler.schedule(self.queue, self.running,
                                         self.current_time,
                                         accounts=self.accounts,
