@@ -882,7 +882,7 @@ def run_workload():
         td = Telemetry(**args_dict)
         jobs, _, _, _ = td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
     else:
-        workload = Workload(config)
+        workload = Workload(args, config)
         jobs = getattr(workload, args.workload)(args=args)
     plot_job_hist(jobs, config=config, dist_split=args.multimodal, gantt_nodes=args.gantt_nodes)
     if args.output:
