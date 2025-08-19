@@ -1,9 +1,13 @@
 {
-    "TOPOLOGY": "fat-tree",
-    "NETWORK_MAX_BW": 1e9,
-    "FATTREE_K": 16,
-    "DRAGONFLY_D": 11,
-    "DRAGONFLY_A": 9,
-    "DRAGONFLY_P": 8,
-    "LATENCY": 1
+  "TOPOLOGY": "torus3d",
+  "NETWORK_MAX_BW": 9.6e9,
+  "TORUS_X": 24,
+  "TORUS_Y": 24,
+  "TORUS_Z": 24,
+  "TORUS_WRAP": true,
+  "HOSTS_PER_ROUTER": 2,
+  "TORUS_LINK_BW": 9.6e9,
+  "LATENCY_PER_HOP": 1e-6,
+  "TORUS_ROUTING": "DOR_XYZ",
+  "NODE_COORDS_CSV": null
 }
