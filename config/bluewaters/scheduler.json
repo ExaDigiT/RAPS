@@ -3,7 +3,7 @@
     "SEED": 42,
     "JOB_ARRIVAL_TIME": 100,
     "MTBF": 11,
-    "TRACE_QUANTA": 15,
+    "TRACE_QUANTA": 60,
     "MIN_WALL_TIME": 60,
     "MAX_WALL_TIME": 43200,
     "UI_UPDATE_FREQ": 900,

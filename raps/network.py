@@ -1,25 +1,37 @@
+import csv
 import networkx as nx
 from itertools import combinations
 from raps.utils import get_current_utilization
+from pathlib import Path
 
 
 class NetworkModel:
-    """
-    """
+    """ """
 
     def __init__(self, *, available_nodes, config, **kwargs):
-        self.topology = config.get('TOPOLOGY')
+        self.topology = config.get("TOPOLOGY")
         # if fat-tree, build the graph once
         if self.topology == "fat-tree":
             print("building fat-tree graph...")
             self.fattree_k = config.get("FATTREE_K")
             self.net_graph = build_fattree(self.fattree_k)
             print(self.net_graph)
+        elif self.topology == "torus3d":
+            print("building torus3d graph...")
+            dims = (int(config["TORUS_X"]), int(config["TORUS_Y"]), int(config["TORUS_Z"]))
+            wrap = bool(config.get("TORUS_WRAP", True))
+            link_bw = float(config.get("TORUS_LINK_BW", config.get("NETWORK_MAX_BW")))
+            hpr = int(config.get("HOSTS_PER_ROUTER"))
+            routing = config.get("TORUS_ROUTING", "DOR_XYZ").upper()
+            coords_csv = config.get("NODE_COORDS_CSV")  # optional
+            self.net_graph, self.torus_meta = build_torus3d(
+                dims=dims, wrap=wrap, link_bw=link_bw, hosts_per_router=hpr, routing=routing, coords_csv=coords_csv
+            )
         elif self.topology == "dragonfly":
             print("building dragonfly graph...")
-            D = config["DRAGONFLY_D"]     # groups
-            A = config["DRAGONFLY_A"]     # routers per group
-            P = config["DRAGONFLY_P"]     # hosts per router
+            D = config["DRAGONFLY_D"]  # groups
+            A = config["DRAGONFLY_A"]  # routers per group
+            P = config["DRAGONFLY_P"]  # hosts per router
             self.net_graph = build_dragonfly(D, A, P)
             print(self.net_graph)
 
@@ -63,7 +75,7 @@ class NetworkModel:
 
                 host_list = []
                 for real_n in job.scheduled_nodes:
-                    fat_idx = self.real_to_fat_idx[real_n]   # contiguous in [0..(D*A*P−1)]
+                    fat_idx = self.real_to_fat_idx[real_n]  # contiguous in [0..(D*A*P−1)]
                     host_list.append(dragonfly_node_id_to_host_name(fat_idx, D, A, P))
                 if debug:
                     print("  dragonfly hosts:", host_list)
@@ -89,7 +101,7 @@ def apply_job_slowdown(*, job, max_throughput, net_util, net_cong, net_tx, net_r
         slowdown_factor = network_slowdown(throughput, max_throughput)
 
         if debug:
-            print("***", hasattr(job, 'dilated'), throughput, max_throughput, slowdown_factor)
+            print("***", hasattr(job, "dilated"), throughput, max_throughput, slowdown_factor)
 
         # Only apply slowdown once per job to avoid compounding the effect.
         if not job.dilated:
@@ -169,30 +181,30 @@ def build_fattree(k):
     G = nx.Graph()
     # core
     # num_core = (k//2)**2  # Unused!
-    for i in range(k//2):
-        for j in range(k//2):
+    for i in range(k // 2):
+        for j in range(k // 2):
             core = f"c_{i}_{j}"
             G.add_node(core, type="core")
     # pods
     for pod in range(k):
         # agg switches
-        for agg in range(k//2):
+        for agg in range(k // 2):
             a = f"a_{pod}_{agg}"
             G.add_node(a, type="agg")
             # connect to all core switches in column agg
-            for i in range(k//2):
+            for i in range(k // 2):
                 core = f"c_{agg}_{i}"
                 G.add_edge(a, core)
         # edge switches + hosts
-        for edge in range(k//2):
+        for edge in range(k // 2):
             e = f"e_{pod}_{edge}"
             G.add_node(e, type="edge")
             # connect edge→each agg in this pod
-            for agg in range(k//2):
+            for agg in range(k // 2):
                 a = f"a_{pod}_{agg}"
                 G.add_edge(e, a)
             # connect hosts
-            for h in range(k//2):
+            for h in range(k // 2):
                 host = f"h_{pod}_{edge}_{h}"
                 G.add_node(host, type="host")
                 G.add_edge(e, host)
@@ -205,7 +217,7 @@ def all_to_all_paths(G, hosts):
     """
     paths = []
     for i in range(len(hosts)):
-        for j in range(i+1, len(hosts)):
+        for j in range(i + 1, len(hosts)):
             src, dst = hosts[i], hosts[j]
             p = nx.shortest_path(G, src, dst)
             paths.append((src, dst, p))
@@ -222,11 +234,11 @@ def link_loads_for_job(G, job_hosts, tx_volume_bytes):
     # each host sends tx_volume_bytes to each of the (N-1) peers
     for src in job_hosts:
         if len(job_hosts) >= 2:
-            per_peer = tx_volume_bytes / (len(job_hosts)-1)
+            per_peer = tx_volume_bytes / (len(job_hosts) - 1)
         else:
             per_peer = 0
         # find paths where src is the sender
-        for (s, d, p) in paths:
+        for s, d, p in paths:
             if s != src:
                 continue
             # add per_peer to every link on p
@@ -256,7 +268,7 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     Map a 0-based integer node_id into one of the fat-tree hosts "h_{pod}_{edge}_{h}".
     There are (k^3/4) total hosts, assigned in ascending order across pod → edge → h.
     """
-    hosts_per_pod = (k // 2) * (k // 2)   # e.g. for k=8, hosts_per_pod = 16
+    hosts_per_pod = (k // 2) * (k // 2)  # e.g. for k=8, hosts_per_pod = 16
     pod = node_id // hosts_per_pod
     offset = node_id % hosts_per_pod
     edge = offset // (k // 2)
@@ -335,3 +347,152 @@ def dragonfly_node_id_to_host_name(fat_idx: int, D: int, A: int, P: int) -> str:
     router_group = (fat_idx // P) % A
     pod = fat_idx // (A * P)
     return f"h_{pod}_{router_group}_{host_offset}"
+
+
+def build_torus3d(dims, wrap=True, link_bw=1e9, hosts_per_router=1, routing="DOR_XYZ", coords_csv=None):
+    """
+    Build a 3D torus at router granularity, then attach host nodes to routers.
+    Node ids in the returned graph are host names ("h_x_y_z_i") and router names ("r_x_y_z").
+    Edges have attribute 'capacity' (bytes/s) and 'latency' (per hop).
+    """
+    X, Y, Z = map(int, dims)
+    G = nx.Graph()
+
+    # Routers
+    def rname(x, y, z):
+        return f"r_{x}_{y}_{z}"
+
+    for x in range(X):
+        for y in range(Y):
+            for z in range(Z):
+                G.add_node(rname(x, y, z), kind="router", coord=(x, y, z))
+
+    # Toroidal links between routers (±x, ±y, ±z)
+    def wrapi(i, n):
+        return (i + n) % n if wrap else (None if i < 0 or i >= n else i)
+
+    for x in range(X):
+        for y in range(Y):
+            for z in range(Z):
+                u = rname(x, y, z)
+                # x+
+                nxp = wrapi(x + 1, X)
+                v = rname(nxp, y, z) if nxp is not None else None
+                if v and not G.has_edge(u, v):
+                    G.add_edge(u, v, capacity=link_bw)
+                # y+
+                nyp = wrapi(y + 1, Y)
+                v = rname(x, nyp, z) if nyp is not None else None
+                if v and not G.has_edge(u, v):
+                    G.add_edge(u, v, capacity=link_bw)
+                # z+
+                nzp = wrapi(z + 1, Z)
+                v = rname(x, y, nzp) if nzp is not None else None
+                if v and not G.has_edge(u, v):
+                    G.add_edge(u, v, capacity=link_bw)
+
+    # Attach hosts to routers
+    host_to_router = {}
+    router_to_hosts = {}
+
+    def hname(x, y, z, i):
+        return f"h_{x}_{y}_{z}_{i}"
+
+    # If a nid→(x,y,z) CSV is supplied, place accordingly; else dense round-robin
+    # CSV format: nid,x,y,z[,i]
+    nid_placement = {}
+    if coords_csv:
+        p = Path(coords_csv)
+        with p.open("rt") as fh:
+            rd = csv.reader(fh)
+            for row in rd:
+                if not row:
+                    continue
+                nid = int(row[0])
+                x, y, z = map(int, row[1:4])
+                i = int(row[4]) if len(row) > 4 else 0
+                nid_placement[nid] = (x, y, z, i)
+
+    # Build hosts
+    for x in range(X):
+        for y in range(Y):
+            for z in range(Z):
+                r = rname(x, y, z)
+                router_to_hosts[r] = []
+                for i in range(hosts_per_router):
+                    h = hname(x, y, z, i)
+                    G.add_node(h, kind="host", coord=(x, y, z), local_index=i)
+                    G.add_edge(h, r, capacity=link_bw)  # host↔router edge; you can cap with NETWORK_MAX_BW instead
+                    host_to_router[h] = r
+                    router_to_hosts[r].append(h)
+
+    meta = {
+        "dims": (X, Y, Z),
+        "wrap": wrap,
+        "routing": routing,
+        "host_to_router": host_to_router,
+        "router_to_hosts": router_to_hosts,
+    }
+    return G, meta
+
+
+def _axis_steps(a, b, n, wrap=True):
+    """Return minimal step sequence along one axis from a to b with wrap-around."""
+    if a == b:
+        return []
+    fwd = (b - a) % n
+    back = (a - b) % n
+    if not wrap:
+        step = 1 if b > a else -1
+        return [step] * abs(b - a)
+    if fwd <= back:
+        return [1] * fwd
+    else:
+        return [-1] * back
+
+
+def torus_route_xyz(src_r, dst_r, dims, wrap=True):
+    """Router-level path (list of router names) using XYZ dimension-order routing."""
+    X, Y, Z = dims
+
+    def parse(r):
+        _, x, y, z = r.split("_")
+        return int(x), int(y), int(z)
+
+    x1, y1, z1 = parse(src_r)
+    x2, y2, z2 = parse(dst_r)
+
+    path = [src_r]
+    x, y, z = x1, y1, z1
+    for step in _axis_steps(x, x2, X, wrap):
+        x = (x + step) % X
+        path.append(f"r_{x}_{y}_{z}")
+    for step in _axis_steps(y, y2, Y, wrap):
+        y = (y + step) % Y
+        path.append(f"r_{x}_{y}_{z}")
+    for step in _axis_steps(z, z2, Z, wrap):
+        z = (z + step) % Z
+        path.append(f"r_{x}_{y}_{z}")
+    return path
+
+
+def torus_host_path(G, meta, h_src, h_dst):
+    r_src = meta["host_to_router"][h_src]
+    r_dst = meta["host_to_router"][h_dst]
+    routers = torus_route_xyz(r_src, r_dst, meta["dims"], meta["wrap"])
+    # host->src_router + (router path) + dst_router->host
+    path = [h_src, r_src] + routers[1:] + [h_dst]
+    return path
+
+
+def link_loads_for_job_torus(G, meta, host_list, traffic_bytes):
+    # all-to-all between hosts in host_list, route via torus_host_path, add traffic_bytes per pair
+    loads = {}
+    n = len(host_list)
+    for i in range(n):
+        for j in range(i + 1, n):
+            p = torus_host_path(G, meta, host_list[i], host_list[j])
+            for u, v in zip(p, p[1:]):
+                e = tuple(sorted((u, v)))
+                loads[e] = loads.get(e, 0) + traffic_bytes
+    return loads

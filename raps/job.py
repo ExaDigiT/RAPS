@@ -176,6 +176,7 @@ class Job:
                 f"allocated_cpu_cores={self.allocated_cpu_cores}, "
                 f"allocated_gpu_units={self.allocated_gpu_units}, "
                 f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
+                f"ntx_trace={self.ntx_trace}, nrx_trace={self.nrx_trace}, "
                 f"end_state={self.end_state}, "
                 f"submit_time={self.submit_time}, time_limit={self.time_limit}, "
                 f"start_time={self.start_time}, end_time={self.end_time}, "
