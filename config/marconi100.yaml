@@ -1,0 +1,121 @@
+system:
+  num_cdus: 49
+  racks_per_cdu: 1
+  nodes_per_rack: 20
+  chassis_per_rack: 1
+  nodes_per_blade: 1
+  switches_per_chassis: 5
+  nics_per_node: 2
+  rectifiers_per_chassis: 5
+  nodes_per_rectifier: 4
+  missing_racks: []
+  down_nodes: []
+  cpus_per_node: 2
+  gpus_per_node: 4
+  cpu_peak_flops: 396800000000.0
+  gpu_peak_flops: 7800000000000.0
+  cpu_fp_ratio: 0.69
+  gpu_fp_ratio: 0.69
+power:
+  power_gpu_idle: 75
+  power_gpu_max: 300
+  power_cpu_idle: 47.25
+  power_cpu_max: 252
+  power_mem: 74.26
+  power_nic: 21
+  power_nvme: 45
+  power_switch: 250
+  power_cdu: 0
+  power_update_freq: 20
+  rectifier_peak_threshold: 13670
+  sivoc_loss_constant: 0
+  sivoc_efficiency: 1
+  rectifier_loss_constant: 0
+  rectifier_efficiency: 1
+  power_cost: 0.094
+scheduler:
+  job_arrival_time: 20
+  mtbf: 11
+  trace_quanta: 20
+  min_wall_time: 3600
+  max_wall_time: 43200
+  ui_update_freq: 3600
+  max_nodes_per_job: 3000
+  job_end_probs:
+    COMPLETED: 0.63
+    FAILED: 0.13
+    CANCELLED: 0.12
+    TIMEOUT: 0.11
+    NODE_FAIL: 0.01
+cooling:
+  cooling_efficiency: 0.945
+  wet_bulb_temp: 290.0
+  zip_code: '30170'
+  country_code: IT
+  fmu_path: "models/POWER9CSM/fmus/marconi100.fmu"
+  fmu_column_mapping:
+    T_sec_r_C: "Rack Return Temperature (°C)"
+    T_sec_s_C: "Rack Supply Temperature (°C)"
+    p_sec_r_psig: "Rack Supply Pressure (psig)"
+    p_sec_s_psig: "Rack Return Pressure (psig)"
+    V_flow_sec_GPM: "Rack Flowrate (gpm)"
+    T_prim_r_C: "Facility Return Temperature (°C)"
+    T_prim_s_C: "Facility Supply Temperature (°C)"
+    p_prim_s_psig: "Facility Supply Pressure (psig)"
+    p_prim_r_psig: "Facility Return Pressure (psig)"
+    V_flow_prim_GPM: "Facility Flowrate (gpm)"
+    W_flow_CDUP_kW: "Work Done By CDUP (kW)"
+  temperature_keys:
+    - simulator_1_datacenter_1_computeBlock_1_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_2_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_3_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_4_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_5_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_6_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_7_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_8_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_9_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_10_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_11_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_12_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_13_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_14_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_15_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_16_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_17_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_18_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_19_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_20_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_21_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_22_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_23_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_24_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_25_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_26_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_27_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_28_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_29_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_30_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_31_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_32_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_33_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_34_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_35_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_36_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_37_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_38_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_39_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_40_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_41_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_42_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_43_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_44_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_45_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_46_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_47_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_48_cabinet_1_sources_T_Air
+    - simulator_1_datacenter_1_computeBlock_49_cabinet_1_sources_T_Air
+    - simulator_1_centralEnergyPlant_1_coolingTowerLoop_1_sources_T_ext
+  w_htwps_key: "simulator[1].centralEnergyPlant[1].hotWaterLoop[1].summary.W_flow_HTWP_kW"
+  w_ctwps_key: "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CTWP_kW"
+  w_cts_key: "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CT_kW"

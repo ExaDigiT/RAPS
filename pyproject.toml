@@ -28,5 +28,7 @@ dependencies = [
     "pytest-order",
     "pytest-xdist",
     "pyyaml>=6.0.2",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
     "pre-commit"
 ]

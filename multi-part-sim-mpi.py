@@ -15,7 +15,7 @@ from raps.power import PowerManager, compute_node_power
 from raps.flops import FLOPSManager
 from raps.engine import Engine
 from raps.ui import LayoutManager
-from raps.config import ConfigManager, CONFIG_PATH
+from raps.config import get_system_config, CONFIG_PATH
 from args import args
 import random
 import os
@@ -42,7 +42,7 @@ def main():
     partition_names = comm.bcast(partition_names, root=0)
 
     # 3) Load configs for every partition (all ranks do this)
-    configs = [ConfigManager(system_name=p).get_config() for p in partition_names]
+    configs = [get_system_config(p).get_legacy() for p in partition_names]
     args_dicts = [{**vars(args), 'config': cfg} for cfg in configs]
 
     # 4) Each rank decides which partition‐indices it owns (round-robin):

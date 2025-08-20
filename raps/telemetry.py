@@ -45,7 +45,7 @@ import pandas as pd
 from tqdm import tqdm
 # from rich.progress import track
 
-from raps.config import ConfigManager
+from raps.config import get_system_config
 from raps.job import Job, job_dict
 import matplotlib.pyplot as plt
 from raps.plotting import (
@@ -289,7 +289,7 @@ class Telemetry:
 
 
 def run_telemetry():
-    config = ConfigManager(system_name=args.system).get_config()
+    config = get_system_config(args.system).get_legacy()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
     if args.replay:

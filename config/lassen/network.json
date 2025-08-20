@@ -1,9 +1,0 @@
-{
-    "TOPOLOGY": "fat-tree",
-    "NETWORK_MAX_BW": 1e9,
-    "FATTREE_K": 16,
-    "DRAGONFLY_D": 11,
-    "DRAGONFLY_A": 9,
-    "DRAGONFLY_P": 8,
-    "LATENCY": 1
-}
