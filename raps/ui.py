@@ -516,7 +516,7 @@ class LayoutManager:
 
         self.update_scheduled_jobs(data.running + data.queue)
         self.update_status(
-            data.current_time, len(data.running), len(data.queue), data.num_active_nodes,
+            data.current_timestep, len(data.running), len(data.queue), data.num_active_nodes,
             data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job,
             data.time_delta
         )
@@ -524,7 +524,7 @@ class LayoutManager:
         self.update_scheduled_jobs(data.running + data.queue)
 
         self.update_status(
-            data.current_time,
+            data.current_timestep,
             len(data.running),
             len(data.queue),
             data.num_active_nodes,

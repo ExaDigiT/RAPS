@@ -30,7 +30,7 @@ from raps.downtime import Downtime
 @dataclasses.dataclass
 class TickData:
     """ Represents the state output from the simulation each tick """
-    current_time: int
+    current_timestep: int
     completed: list[Job]
     running: list[Job]
     queue: list[Job]
@@ -130,7 +130,7 @@ class Engine:
         self.job_history_dict = []
         self.jobs_completed = 0
         self.total_initial_jobs = total_initial_jobs
-        self.current_time = 0
+        self.current_timestep = 0
         self.cooling_model = cooling_model
         self.sys_power = 0
         self.power_manager = power_manager
@@ -190,13 +190,17 @@ class Engine:
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
         if self.debug:
-            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_time}")
+            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_timestep}")
         # Build a list of jobs whose start_time is <= current_time.
-        eligible_jobs = [job for job in jobs_to_submit if job.start_time < self.current_time]
+        eligible_jobs = [job for job in jobs_to_submit if
+                         job.start_time is not None
+                         and job.start_time < self.current_timestep]
         if self.debug:
             print(f"[DEBUG] add_running_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
-        jobs_to_submit[:] = [job for job in jobs_to_submit if job.start_time >= self.current_time]
+        jobs_to_submit[:] = [job for job in jobs_to_submit if
+                             job.start_time is not None
+                             and job.start_time >= self.current_timestep]
         if self.debug:
             print(f"[DEBUG] add_running_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
@@ -215,13 +219,13 @@ class Engine:
         - false if no new jobs are present
         """
         if self.debug:
-            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_time}")
+            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_timestep}")
         # Build a list of jobs whose submit_time is <= current_time.
-        eligible_jobs = [job for job in jobs_to_submit if job.submit_time <= self.current_time]
+        eligible_jobs = [job for job in jobs_to_submit if job.submit_time <= self.current_timestep]
         if self.debug:
             print(f"[DEBUG] add_eligible_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
-        jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_time]
+        jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_timestep]
         if self.debug:
             print(f"[DEBUG] add_eligible_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
@@ -241,7 +245,8 @@ class Engine:
         # 5 Update active and free nodes
 
         # 1 Identify Completed Jobs
-        completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
+        completed_jobs = [job for job in self.running if
+                          job.end_time is not None and job.end_time <= self.current_timestep]
         # Update Completed Jobs, their account and  and Free resources.
         for job in completed_jobs:
             self.power_manager.set_idle(job.scheduled_nodes)
@@ -258,7 +263,7 @@ class Engine:
 
         # 2 Check continuous job generation
         if self.continuous_workload is not None:  # Experimental
-            continuous_job_generation(engine=self, timestep=self.current_time, jobs=jobs)
+            continuous_job_generation(engine=self, timestep=self.current_timestep, jobs=jobs)
 
         # 3 Simulate node failure
         if not replay:
@@ -270,7 +275,7 @@ class Engine:
 
         need_reschedule = False
         # 4 Simulate downtime
-        need_reschedule = self.downtime.check_and_trigger(timestep=self.current_time, engine=self)
+        need_reschedule = self.downtime.check_and_trigger(timestep=self.current_timestep, engine=self)
 
         # 5 Update active/free nodes based on core/GPU utilization
         if self.config['multitenant']:
@@ -289,7 +294,7 @@ class Engine:
                                          or node['available_gpu_units'] < node['total_gpu_units'])])
 
             # Update system utilization history
-            self.resource_manager.update_system_utilization(self.current_time, self.running)
+            self.resource_manager.update_system_utilization(self.current_timestep, self.running)
         else:
             # Whole-node allocator
             self.num_free_nodes = len(self.resource_manager.available_nodes)
@@ -301,73 +306,15 @@ class Engine:
 
         return completed_jobs, newly_downed_nodes, need_reschedule
 
-    def prepare_timestep_old(self, replay: bool = True):
-        # 1 identify completed jobs
-        # 2 Simulate node failure # Defunct feature!
-        # 3 Update active and free nodes
-
-        # Identify Completed Jobs
-        completed_jobs = [job for job in self.running if job.end_time is not None and job.end_time <= self.current_time]
-        # Update Completed Jobs, their account and  and Free resources.
-        for job in completed_jobs:
-            self.power_manager.set_idle(job.scheduled_nodes)
-            job.state = JobState.COMPLETED
-
-            self.running.remove(job)
-            self.jobs_completed += 1
-            job_stats = job.statistics()
-            if self.accounts:
-                self.accounts.update_account_statistics(job_stats)
-            self.job_history_dict.append(job_stats.__dict__)
-            # Free the nodes via the resource manager.
-            self.resource_manager.free_nodes_from_job(job)
-
-        if not replay:
-            # Simulate node failure
-            newly_downed_nodes = self.resource_manager.node_failure(self.config['MTBF'])
-            for node in newly_downed_nodes:
-                self.power_manager.set_idle(node)
-        else:
-            newly_downed_nodes = []
-
-        # Update active/free nodes based on core/GPU utilization
-        if self.config['multitenant']:
-            # total_cpu_cores = sum(node['total_cpu_cores'] for node in self.resource_manager.nodes)  # Unused
-            # total_gpu_units = sum(node['total_gpu_units'] for node in self.resource_manager.nodes)  # Unused
-            # available_cpu_cores = sum(node['available_cpu_cores'] for node in self.resource_manager.nodes)  # Unused
-            # available_gpu_units = sum(node['available_gpu_units'] for node in self.resource_manager.nodes)  # Unused
-
-            self.num_free_nodes = len([node for node in self.resource_manager.nodes if
-                                      not node['is_down'] and
-                                      node['available_cpu_cores'] == node['total_cpu_cores'] and
-                                      node['available_gpu_units'] == node['total_gpu_units']])
-            self.num_active_nodes = len([node for node in self.resource_manager.nodes if
-                                         not node['is_down'] and
-                                         (node['available_cpu_cores'] < node['total_cpu_cores'] or
-                                          node['available_gpu_units'] < node['total_gpu_units'])])
-
-            # Update system utilization history
-            self.resource_manager.update_system_utilization(self.current_time, self.running)
-        else:
-            # Whole-node allocator
-            self.num_free_nodes = len(self.resource_manager.available_nodes)
-            self.num_active_nodes = self.config['TOTAL_NODES'] \
-                - len(self.resource_manager.available_nodes) \
-                - len(self.resource_manager.down_nodes)
-
-        return completed_jobs, newly_downed_nodes
-
     def complete_timestep(self, autoshutdown, all_jobs: List, jobs: List):
         # 1 update running time of all running jobs
-        # 2 update the current_time of the engine (this serves as reference for most computations)
+        # 2 update the current_timestep of the engine (this serves as reference for most computations)
         # 3 Check if simulation should shutdown
 
         # update Running time
         for job in self.running:
             if job.state == JobState.RUNNING:
-                job.running_time = self.current_time - job.start_time
-
-        self.current_time += 1  # Update the current time every timestep
+                job.running_time = self.current_timestep - job.start_time
 
         # Stop the simulation if no more jobs are running or in the queue or in the job list.
         if autoshutdown and \
@@ -376,10 +323,15 @@ class Engine:
            not self.replay and \
            len(all_jobs) == 0 and \
            len(jobs) == 0:
-            print(f"[DEBUG] {self.config['system_name']} - Stopping simulation at time {self.current_time}")
+            if self.debug:
+                print(f"[DEBUG] Simulaiton Complete: {self.config['system_name']} - "
+                      f"Stopping simulation at time {self.current_timestep}. "
+                      f"Simulation ran for {self.current_timestep - self.timestep_start}")
             simulation_complete = True
         else:
             simulation_complete = False
+            self.current_timestep += 1  # Update the current time every timestep
+
         return simulation_complete
 
     def tick(self, *, time_delta=1):
@@ -409,7 +361,7 @@ class Engine:
         net_tx_list = []
         net_rx_list = []
         if self.debug:
-            print(f"Current Time: {self.current_time}")
+            print(f"Current Time: {self.current_timestep}")
 
         slowdown_factors = []
 
@@ -417,7 +369,7 @@ class Engine:
             if self.debug:
                 print(f"JobID: {job.id}")
 
-            job.running_time = self.current_time - job.start_time
+            job.running_time = self.current_timestep - job.start_time
 
             if job.state != JobState.RUNNING:
                 raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.state}")
@@ -534,7 +486,7 @@ class Engine:
         self.node_occupancy_history.append(node_occupancy)
 
         tick_data = TickData(
-            current_time=self.current_time,
+            current_timestep=self.current_timestep,
             completed=None,
             running=self.running,
             queue=self.queue,
@@ -558,10 +510,13 @@ class Engine:
 
     def prepare_system_state(self, all_jobs: List, timestep_start, timestep_end, replay: bool):
         # Modifies Jobs object
-        self.current_time = timestep_start
+        self.current_timestep = timestep_start
 
         # Keep only jobs that have not yet ended and that have a chance to start
-        all_jobs[:] = [job for job in all_jobs if job.end_time >= timestep_start and job.submit_time < timestep_end]
+        all_jobs[:] = [job for job in all_jobs if (job.end_time is not None
+                                                   and job.end_time >= timestep_start
+                                                   and job.submit_time < timestep_end
+                                                   ) or job.end_time is None]
 
         all_jobs.sort(key=lambda j: j.submit_time)
 
@@ -585,7 +540,8 @@ class Engine:
 
     def run_simulation(self, jobs, timestep_start, timestep_end, time_delta=1, autoshutdown=False):
         """Generator that yields after each simulation tick."""
-        self.timesteps = (timestep_end - timestep_start)  # Where is this used?
+        self.timestep_start = timestep_start
+        self.timestep_end = timestep_end
 
         if self.scheduler.policy == PolicyType.REPLAY:
             replay = True
@@ -612,8 +568,8 @@ class Engine:
         listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
         listener_thread.start()
 
-        timestep = timestep_start
-        while timestep < timestep_end:  # Runs every seconds!
+        self.current_timestep = timestep_start
+        while self.current_timestep < timestep_end:  # Runs every seconds!
 
             if sim_state.is_paused():
                 time.sleep(0.1)
@@ -621,10 +577,10 @@ class Engine:
 
             current_time_delta = sim_state.get_time_delta()
 
-            if (timestep % batch_window == 0) or (timestep == timestep_start):
+            if (self.current_timestep % batch_window == 0) or (self.current_timestep == timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
-                jobs += [job for job in all_jobs if job.submit_time <= timestep + batch_window]
-                all_jobs[:] = [job for job in all_jobs if job.submit_time > timestep + batch_window]
+                jobs += [job for job in all_jobs if job.submit_time <= self.current_timestep + batch_window]
+                all_jobs[:] = [job for job in all_jobs if job.submit_time > self.current_timestep + batch_window]
 
             # 1. Prepare Timestep:
             completed_jobs, newly_downed_nodes, need_reschedule = self.prepare_timestep(replay=replay, jobs=jobs)
@@ -635,18 +591,19 @@ class Engine:
             # 3. Schedule jobs that are now in the queue.
             if completed_jobs != [] or newly_downed_nodes != [] or has_new_additions or need_reschedule:
                 self.scheduler.schedule(self.queue, self.running,
-                                        self.current_time,
+                                        self.current_timestep,
                                         accounts=self.accounts,
                                         sorted=(not has_new_additions))
 
-            if self.debug and timestep % self.config['UI_UPDATE_FREQ'] == 0:
+            if self.debug and self.current_timestep % self.config['UI_UPDATE_FREQ'] == 0:
                 print(".", end="", flush=True)
 
             # 4. Run tick only at specified time_delta
-            if 0 == (timestep % current_time_delta) and \
-               ((current_time_delta == 1 and
-                 self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or
-                    (current_time_delta != 1 or self.downscale != 1)):
+            if 0 == (self.current_timestep % current_time_delta) \
+               and ((current_time_delta == 1
+                    and self.current_timestep % self.config['POWER_UPDATE_FREQ'] == 0)
+                    or (current_time_delta != 1 or self.downscale != 1)
+                    ):
                 tick_data = self.tick(time_delta=current_time_delta)
                 tick_data.completed = completed_jobs
             else:
@@ -658,8 +615,6 @@ class Engine:
                 break
             yield tick_data
 
-            timestep += 1
-
     def get_job_history_dict(self):
         return self.job_history_dict
 
@@ -670,7 +625,7 @@ class Engine:
         return self.scheduler_running_history
 
     def record_util_stats(self, *, system_util):
-        self.sys_util_history.append((self.current_time, system_util))
+        self.sys_util_history.append((self.current_timestep, system_util))
         self.scheduler_queue_history.append(len(self.running))
         self.scheduler_running_history.append(len(self.queue))
 
@@ -684,11 +639,11 @@ class Engine:
         self.net_util_history.append(avg_net)
 
     def record_power_stats(self, *, time_delta, total_power_kw, total_loss_kw, jobs_power):
-        if (time_delta == 1 and self.current_time % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:
+        if (time_delta == 1 and self.current_timestep % self.config['POWER_UPDATE_FREQ'] == 0) or time_delta != 1:
             # First job specific
             record_power_stats_foreach_job(running_jobs=self.running, jobs_power=jobs_power)
             # power manager
-            self.power_manager.history.append((self.current_time, total_power_kw))
-            self.power_manager.loss_history.append((self.current_time, total_loss_kw))
+            self.power_manager.history.append((self.current_timestep, total_power_kw))
+            self.power_manager.loss_history.append((self.current_timestep, total_loss_kw))
         # engine
         self.sys_power = total_power_kw

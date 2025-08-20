@@ -12,22 +12,49 @@ Implementing such using something like:
 """
 
 
-def job_dict(*, nodes_required, name, account,
+class JobState(Enum):
+    """Enumeration for job states."""
+    RUNNING = 'R'
+    PENDING = 'PD'
+    COMPLETED = 'C'
+    CANCELLED = 'CA'
+    FAILED = 'F'
+    TIMEOUT = 'TO'
+
+
+def job_dict(*,
+             nodes_required,
+             name,
+             account,
              # Allocation
-             end_state, scheduled_nodes=None,
-             id, priority=0, partition=0,
+             job_state=JobState.PENDING,
+             end_state: JobState | None = None,
+             scheduled_nodes=None,
+             id,
+             priority: int | None = 0,
+             partition: int | None = 0,
              # Resource Requests and allocations
-             cpu_cores_required=0, gpu_units_required=0,
-             allocated_cpu_cores=0, allocated_gpu_units=0,
+             cpu_cores_required=0,
+             gpu_units_required=0,
+             allocated_cpu_cores=0,
+             allocated_gpu_units=0,
              # Traces
-             cpu_trace, gpu_trace, ntx_trace, nrx_trace,
+             cpu_trace,
+             gpu_trace,
+             ntx_trace,
+             nrx_trace,
              # Times
-             submit_time=0, time_limit=0,
-             start_time=0, end_time=0, wall_time=0,
-             trace_time=0, trace_start_time=0, trace_end_time=0,
-             trace_quanta=None,
-             trace_missing_values=False,
-             downscale=1
+             submit_time=0,
+             time_limit: int = 0,
+             start_time: int | None = 0,
+             end_time: int | None = 0,
+             wall_time: int | None = 0,  # Should this be removed?
+             trace_time: int | None = 0,
+             trace_start_time: int | None = 0,
+             trace_end_time: int | None = 0,
+             trace_quanta: int | None = None,
+             trace_missing_values: bool | None = False,
+             downscale: int = 1
              ):
     """ Return job info dictionary """
     return {
@@ -35,6 +62,7 @@ def job_dict(*, nodes_required, name, account,
         'name': name,
         'account': account,
         # Allocation:
+        'job_state': job_state,
         'end_state': end_state,
         'scheduled_nodes': scheduled_nodes,
         'id': id,
@@ -92,16 +120,6 @@ def dilate_trace(trace, factor):
     # Use linear interpolation to compute the new trace values
     new_trace = np.interp(new_indices, old_indices, trace).tolist()
     return new_trace
-
-
-class JobState(Enum):
-    """Enumeration for job states."""
-    RUNNING = 'R'
-    PENDING = 'PD'
-    COMPLETED = 'C'
-    CANCELLED = 'CA'
-    FAILED = 'F'
-    TIMEOUT = 'TO'
 
 
 class Job:
@@ -164,7 +182,8 @@ class Job:
         assert isinstance(self.wall_time, (int, float, np.int64, np.double))
         assert isinstance(self.start_time, (int, float, np.int64, np.double, type(None)))
         assert isinstance(self.end_time, (int, float, np.int64, np.double, type(None)))
-        assert self.start_time <= self.end_time, f"{self.start_time} <= {self.end_time}"
+        if self.start_time is not None and self.end_time is not None:
+            assert self.start_time <= self.end_time, f"{self.start_time} <= {self.end_time}"
 
     def __repr__(self):
         """Return a string representation of the job."""
@@ -177,7 +196,7 @@ class Job:
                 f"allocated_gpu_units={self.allocated_gpu_units}, "
                 f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
                 f"ntx_trace={self.ntx_trace}, nrx_trace={self.nrx_trace}, "
-                f"end_state={self.end_state}, "
+                f"job_state={self.job_state}, end_state={self.end_state}, "
                 f"submit_time={self.submit_time}, time_limit={self.time_limit}, "
                 f"start_time={self.start_time}, end_time={self.end_time}, "
                 f"wall_time={self.wall_time}, "
@@ -258,6 +277,8 @@ class JobStatistics:
                 self.avg_cpu_usage = sum(job.cpu_trace) / len(job.cpu_trace)
         elif isinstance(job.cpu_trace, int) or isinstance(job.cpu_trace, float):
             self.avg_cpu_usage = job.cpu_trace
+        elif job.cpu_trace is None:
+            self.avg_cpu_usage = None
         else:
             raise NotImplementedError()
 
@@ -268,6 +289,8 @@ class JobStatistics:
                 self.avg_gpu_usage = sum(job.gpu_trace) / len(job.gpu_trace)
         elif isinstance(job.gpu_trace, int) or isinstance(job.gpu_trace, float):
             self.avg_gpu_usage = job.gpu_trace
+        elif job.gpu_trace is None:
+            self.avg_gpu_usage = None
         else:
             raise NotImplementedError()
 
@@ -278,8 +301,10 @@ class JobStatistics:
                 self.avg_ntx_usage = sum(job.ntx_trace) / len(job.ntx_trace)
         elif isinstance(job.ntx_trace, int) or isinstance(job.ntx_trace, float):
             self.avg_ntx_usage = job.ntx_trace
+        elif job.ntx_trace is None:
+            self.avg_ntx_usage = None
         else:
-            self.avg_ntx_usage = 0
+            raise NotImplementedError()
 
         if isinstance(job.nrx_trace, list) or isinstance(job.nrx_trace, np.ndarray):
             if len(job.nrx_trace) == 0:
@@ -288,8 +313,10 @@ class JobStatistics:
                 self.avg_nrx_usage = sum(job.nrx_trace) / len(job.nrx_trace)
         elif isinstance(job.nrx_trace, int) or isinstance(job.nrx_trace, float):
             self.avg_nrx_usage = job.nrx_trace
+        elif job.nrx_trace is None:
+            self.avg_nrx_usage = None
         else:
-            self.avg_nrx_usage = 0
+            raise NotImplementedError()
 
         if len(job.power_history) == 0:
             self.avg_node_power = 0

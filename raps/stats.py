@@ -15,8 +15,9 @@ from .engine import Engine
 
 def get_engine_stats(engine: Engine):
     """ Return engine statistics """
+    timesteps = engine.current_timestep - engine.timestep_start
     num_samples = len(engine.power_manager.history) if engine.power_manager else 0
-    time_simulated = convert_seconds_to_hhmmss(engine.timesteps / engine.downscale)
+    time_simulated = convert_seconds_to_hhmmss(timesteps / engine.downscale)
     average_power_mw = sum_values(engine.power_manager.history) / num_samples / 1000 if num_samples else 0
     average_loss_mw = sum_values(engine.power_manager.loss_history) / num_samples / 1000 if num_samples else 0
     min_loss_mw = min_value(engine.power_manager.loss_history) / 1000 if num_samples else 0
@@ -24,7 +25,7 @@ def get_engine_stats(engine: Engine):
 
     loss_fraction = average_loss_mw / average_power_mw if average_power_mw else 0
     efficiency = 1 - loss_fraction if loss_fraction else 0
-    total_energy_consumed = average_power_mw * engine.timesteps / 3600 if engine.timesteps else 0  # MW-hr
+    total_energy_consumed = average_power_mw * timesteps / 3600 if timesteps else 0  # MW-hr
     emissions = total_energy_consumed * 852.3 / 2204.6 / efficiency if efficiency else 0
     total_cost = total_energy_consumed * 1000 * engine.config.get('POWER_COST', 0)  # Total cost in dollars
 
@@ -149,7 +150,8 @@ def get_job_stats(engine: Engine):
 
     min_agg_node_hours, max_agg_node_hours, sum_agg_node_hours = sys.maxsize, -sys.maxsize - 1, 0
     # Completion statistics
-    throughput = engine.jobs_completed / engine.timesteps * 3600 if engine.timesteps else 0  # Jobs per hour
+    throughput = engine.jobs_completed / (engine.current_timestep - engine.timestep_start) * 3600 if \
+        (engine.current_timestep - engine.timestep_start != 0) else 0  # Jobs per hour
 
     min_wait_time, max_wait_time, sum_wait_time = sys.maxsize, -sys.maxsize - 1, 0
     min_turnaround_time, max_turnaround_time, sum_turnaround_time = sys.maxsize, -sys.maxsize - 1, 0
@@ -215,10 +217,14 @@ def get_job_stats(engine: Engine):
         min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den = \
             min_max_sum(psf_partial_den, min_psf_partial_den, max_psf_partial_den, sum_psf_partial_den)
 
-        min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(job['avg_cpu_usage'], min_cpu_u, max_cpu_u, sum_cpu_u)
-        min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(job['avg_gpu_usage'], min_gpu_u, max_gpu_u, sum_gpu_u)
-        min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(job['avg_ntx_usage'], min_ntx_u, max_ntx_u, sum_ntx_u)
-        min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(job['avg_nrx_usage'], min_nrx_u, max_nrx_u, sum_nrx_u)
+        if job['avg_cpu_usage'] is not None:
+            min_cpu_u, max_cpu_u, sum_cpu_u = min_max_sum(job['avg_cpu_usage'], min_cpu_u, max_cpu_u, sum_cpu_u)
+        if job['avg_gpu_usage'] is not None:
+            min_gpu_u, max_gpu_u, sum_gpu_u = min_max_sum(job['avg_gpu_usage'], min_gpu_u, max_gpu_u, sum_gpu_u)
+        if job['avg_ntx_usage'] is not None:
+            min_ntx_u, max_ntx_u, sum_ntx_u = min_max_sum(job['avg_ntx_usage'], min_ntx_u, max_ntx_u, sum_ntx_u)
+        if job['avg_nrx_usage'] is not None:
+            min_nrx_u, max_nrx_u, sum_nrx_u = min_max_sum(job['avg_nrx_usage'], min_nrx_u, max_nrx_u, sum_nrx_u)
 
         if job['num_nodes'] <= 5:
             jobsSmall += 1
@@ -270,6 +276,25 @@ def get_job_stats(engine: Engine):
         min_cpu_u, max_cpu_u, avg_cpu_u = -1, -1, -1
         min_gpu_u, max_gpu_u, avg_gpu_u = -1, -1, -1
         min_ntx_u, max_ntx_u, avg_ntx_u = -1, -1, -1
+        min_nrx_u, max_nrx_u, avg_nrx_u = -1, -1, -1
+
+    if min_cpu_u == sys.maxsize and \
+       max_cpu_u == -sys.maxsize - 1 and \
+       sum_cpu_u == 0:
+        min_cpu_u, max_cpu_u, avg_cpu_u = -1, -1, -1
+
+    if min_gpu_u == sys.maxsize and \
+       max_gpu_u == -sys.maxsize - 1 and \
+       sum_gpu_u == 0:
+        min_gpu_u, max_gpu_u, avg_gpu_u = -1, -1, -1
+    if min_ntx_u == sys.maxsize and \
+       max_ntx_u == -sys.maxsize - 1 and \
+       sum_ntx_u == 0:
+        min_ntx_u, max_ntx_u, avg_ntx_u = -1, -1, -1
+
+    if min_nrx_u == sys.maxsize and \
+       max_nrx_u == -sys.maxsize - 1 and \
+       sum_nrx_u == 0:
         min_nrx_u, max_nrx_u, avg_nrx_u = -1, -1, -1
 
     job_stats = {
