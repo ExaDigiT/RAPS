@@ -1,0 +1,83 @@
+system:
+  num_cdus: 25
+  racks_per_cdu: 3
+  nodes_per_rack: 128
+  chassis_per_rack: 8
+  nodes_per_blade: 2
+  switches_per_chassis: 4
+  nics_per_node: 4
+  rectifiers_per_chassis: 4
+  nodes_per_rectifier: 4
+  missing_racks:
+    - 41
+  down_nodes: []
+  cpus_per_node: 1
+  gpus_per_node: 4
+  cpu_peak_flops: 2048000000000.0
+  gpu_peak_flops: 52000000000000.0
+  cpu_fp_ratio: 0.667
+  gpu_fp_ratio: 0.667
+power:
+  power_gpu_idle: 88
+  power_gpu_max: 560
+  power_cpu_idle: 90
+  power_cpu_max: 280
+  power_mem: 74.26
+  power_nic: 20
+  power_nvme: 30
+  power_switch: 250
+  power_cdu: 8473.47
+  power_update_freq: 15
+  rectifier_peak_threshold: 13670
+  sivoc_loss_constant: 13
+  sivoc_efficiency: 0.98
+  rectifier_loss_constant: 17
+  rectifier_efficiency: 0.96
+  power_cost: 0.094
+scheduler:
+  job_arrival_time: 100
+  mtbf: 11
+  trace_quanta: 15
+  min_wall_time: 60
+  max_wall_time: 43200
+  ui_update_freq: 900
+  max_nodes_per_job: 3000
+  job_end_probs:
+    COMPLETED: 0.63
+    FAILED: 0.13
+    CANCELLED: 0.12
+    TIMEOUT: 0.11
+    NODE_FAIL: 0.01
+uq:
+  power_gpu_uncertainty: 0.05
+  power_cpu_uncertainty: 0.05
+  power_mem_uncertainty: 0.05
+  power_nic_uncertainty: 0.05
+  power_nvme_uncertainty: 0.05
+  power_cdus_uncertainty: 0.05
+  power_node_uncertainty: 0.002
+  power_switch_uncertainty: 0.05
+  rectifier_power_uncertainty: 0.05
+cooling:
+  cooling_efficiency: 0.945
+  wet_bulb_temp: 290.0
+  zip_code: '37831'
+  country_code: US
+  fmu_path: "models/Simulator_olcf5_base.fmu"
+  fmu_column_mapping:
+    T_sec_r_C: "Rack Return Temperature (°C)"
+    T_sec_s_C: "Rack Supply Temperature (°C)"
+    p_sec_r_psig: "Rack Supply Pressure (psig)"
+    p_sec_s_psig: "Rack Return Pressure (psig)"
+    V_flow_sec_GPM: "Rack Flowrate (gpm)"
+    T_prim_r_C: "Facility Return Temperature (°C)"
+    T_prim_s_C: "Facility Supply Temperature (°C)"
+    p_prim_s_psig: "Facility Supply Pressure (psig)"
+    p_prim_r_psig: "Facility Return Pressure (psig)"
+    V_flow_prim_GPM: "Facility Flowrate (gpm)"
+    W_flow_CDUP_kW: "Work Done By CDUP (kW)"
+  temperature_keys:
+    - simulator_1_centralEnergyPlant_1_coolingTowerLoop_1_sources_Towb
+  w_htwps_key: "simulator[1].centralEnergyPlant[1].hotWaterLoop[1].summary.W_flow_HTWP_kW"
+  w_ctwps_key: "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CTWP_kW"
+  w_cts_key: "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CT_kW"

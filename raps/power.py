@@ -55,10 +55,10 @@ def compute_node_power(cpu_util, gpu_util, net_util, config):
     power_gpu = gpu_util * config['POWER_GPU_MAX'] + \
         (config['GPUS_PER_NODE'] - gpu_util) * config['POWER_GPU_IDLE']
 
-    try:
+    if config.get("POWER_NIC_IDLE") != None and config.get("POWER_NIC_MAX") != None:
         power_nic = config['POWER_NIC_IDLE'] + \
             (config['POWER_NIC_MAX'] - config['POWER_NIC_IDLE']) * net_util
-    except KeyError:
+    else:
         if isinstance(net_util, np.ndarray):
             power_nic = config['POWER_NIC'] * np.ones(net_util.shape)
         else:

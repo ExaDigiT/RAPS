@@ -16,7 +16,7 @@ import math
 #
 from raps.helpers import check_python_version
 #
-from raps.config import ConfigManager
+from raps.config import get_system_config
 from raps.constants import OUTPUT_PATH, SEED
 from raps.cooling import ThermoFluidsModel
 from raps.ui import LayoutManager
@@ -54,7 +54,7 @@ def main():
     if args.verbose or args.debug:
         print(args)
 
-    config = ConfigManager(system_name=args.system).get_config()
+    config = get_system_config(args.system).get_legacy()
 
     if args.seed:
         random.seed(SEED)

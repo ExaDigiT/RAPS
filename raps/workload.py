@@ -876,8 +876,8 @@ def check_workload_args(args):
 
 def run_workload():
     from raps.args import args, args_dict
-    from raps.config import ConfigManager
-    config = ConfigManager(system_name=args.system).get_config()
+    from raps.config import get_system_config
+    config = get_system_config(args.system).get_legacy()
     if args.replay:
         td = Telemetry(**args_dict)
         jobs, _, _, _ = td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)

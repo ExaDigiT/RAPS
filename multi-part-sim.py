@@ -16,7 +16,7 @@ from raps.power import PowerManager, compute_node_power
 from raps.flops import FLOPSManager
 from raps.engine import Engine
 from raps.ui import LayoutManager
-from raps.config import ConfigManager, CONFIG_PATH
+from raps.config import get_system_config, CONFIG_PATH
 from raps.args import args
 import random
 import os
@@ -35,7 +35,7 @@ if '*' in args.partitions[0]:
 
     args.system = partition_names[0].split(os.sep)[0]
 
-configs = [ConfigManager(system_name=partition).get_config() for partition in partition_names]
+configs = [get_system_config(partition).get_legacy() for partition in partition_names]
 args_dicts = [
     {**vars(args), 'config': config, 'partition': partition_names[i]}
     for i, config in enumerate(configs)
