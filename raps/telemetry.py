@@ -256,13 +256,14 @@ class Telemetry:
                 jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(
                     file)
                 if args_from_file is not None:
-                    print("File was generated with:"
-                          f"\n--system {args_from_file.system} "
-                          f"-ff {args_from_file.fastforward} "
-                          f"-t {args_from_file.time}\n"
-                          f"All Args:\n{args_from_file}"
-                          "To use these set them from the commandline!"
-                          )
+                    print(f"File was generated with:"
+                          f"\n--system {args_from_file.system} ")
+                    if hasattr(args_from_file, 'fastforward'):
+                        print(f"-ff {args_from_file.fastforward} ")
+                    if hasattr(args_from_file, 'time'):
+                        print(f"-t {args_from_file.time}")
+                    print(f"All Args:\n{args_from_file}"
+                          "\nTo use these set them from the commandline!")
                 else:
                     print("No generation arguments extracted from input file!")
                     # Args are usually extracted to tell the users how to reporduce results.
