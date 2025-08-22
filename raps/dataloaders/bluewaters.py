@@ -220,10 +220,11 @@ def load_data(local_dataset_path, **kwargs):
             id=jid,
             priority=0,
             submit_time=sub,
-            time_limit=0,
+            time_limit=int(rec.get("wall_time")),
             start_time=st,
             end_time=et,
-            wall_time=duration,
+            expected_run_time=duration,
+            current_run_time=0,
             trace_time=sub,
             trace_start_time=st,
             trace_end_time=et,
@@ -268,7 +269,7 @@ def load_data(local_dataset_path, **kwargs):
     bin_s = config.get("TRACE_QUANTA")
     jobs = []
 
-    for r in jobs_raw:
+    for r in jobs_raw:  # Is this intended? We go throught the 'raw' jobs_dicts that were creeated above?
         st_abs = int(r["start_time"])
         et_abs = int(r["end_time"])
         nodes = r.get("scheduled_nodes") or []
@@ -300,10 +301,11 @@ def load_data(local_dataset_path, **kwargs):
             id=jid,
             priority=0,
             submit_time=int(r["submit_time"]),
-            time_limit=0,
+            time_limit=int(r["time_limit"]),
             start_time=st_abs,
             end_time=et_abs,
-            wall_time=et_abs - st_abs,
+            expected_run_time=et_abs - st_abs,
+            current_run_time=0,
             trace_time=st_abs,
             trace_start_time=st_abs,
             trace_end_time=st_abs + samples * bin_s,

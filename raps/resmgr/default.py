@@ -54,8 +54,9 @@ class ExclusiveNodeResourceManager:
 
         # Mark job running
         job.start_time = current_time
-        job.end_time = current_time + job.wall_time
-        job.state = JobState.RUNNING
+        if job.expected_run_time:
+            job.end_time = current_time + job.expected_run_time  # This may be an assumption!
+        job.current_state = JobState.RUNNING
 
     def free_nodes_from_job(self, job):
         """Frees the full nodes previously allocated to a job."""

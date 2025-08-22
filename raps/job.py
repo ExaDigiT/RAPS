@@ -1,5 +1,6 @@
 from enum import Enum
 import numpy as np
+from types import NoneType
 
 """
 Note: want to simplify this in the future to use a minimal required set of job attributes,
@@ -17,6 +18,7 @@ class JobState(Enum):
     RUNNING = 'R'
     PENDING = 'PD'
     COMPLETED = 'C'
+    COMPLETING = 'Cing'
     CANCELLED = 'CA'
     FAILED = 'F'
     TIMEOUT = 'TO'
@@ -27,7 +29,7 @@ def job_dict(*,
              name,
              account,
              # Allocation
-             job_state=JobState.PENDING,
+             current_state=JobState.PENDING,
              end_state: JobState | None = None,
              scheduled_nodes=None,
              id,
@@ -48,7 +50,8 @@ def job_dict(*,
              time_limit: int = 0,
              start_time: int | None = 0,
              end_time: int | None = 0,
-             wall_time: int | None = 0,  # Should this be removed?
+             expected_run_time: int | None = 0,
+             current_run_time: int = 0,
              trace_time: int | None = 0,
              trace_start_time: int | None = 0,
              trace_end_time: int | None = 0,
@@ -62,7 +65,7 @@ def job_dict(*,
         'name': name,
         'account': account,
         # Allocation:
-        'job_state': job_state,
+        'current_state': current_state,
         'end_state': end_state,
         'scheduled_nodes': scheduled_nodes,
         'id': id,
@@ -83,7 +86,8 @@ def job_dict(*,
         'time_limit': time_limit,
         'start_time': start_time,
         'end_time': end_time,
-        'wall_time': wall_time,
+        'expected_run_time': expected_run_time,
+        'current_run_time': current_run_time,
         'trace_time': trace_time,
         'trace_start_time': trace_start_time,
         'trace_end_time': trace_end_time,
@@ -132,7 +136,7 @@ class Job:
     """
     _id_counter = 0
 
-    def __init__(self, job_dict, state=JobState.PENDING, account=None):
+    def __init__(self, job_dict, current_state=JobState.PENDING, end_state=None, account=None):
         # # current_time unused!
         # Initializations:
         self.power = 0
@@ -143,14 +147,16 @@ class Job:
         self.allocated_cpu_cores = 0
         self.allocated_gpu_units = 0
         self.power_history = []
-        self._state = state
+        self._current_state = current_state
+        self.end_state = end_state  # default None!
         self.account = account
         # Times:
         self.submit_time = None   # Actual submit time
         self.time_limit = None    # Time limit set at submission
         self.start_time = None    # Actual start time when executing or from telemetry
-        self.end_time = None      # Actual end time when executing or from telemetry
-        self.wall_time = None     # end_time - start_time
+        self.end_time = None      # Actual end time, either None if or from telemetry
+        self.expected_run_time = None
+        self.current_run_time = 0
         self.trace_time = None    # Time period for which traces are available
         self.trace_start_time = None  # Relative start time of the trace (to running time)
         self.trace_end_time = None    # Relative end time of the trace
@@ -175,13 +181,14 @@ class Job:
            (isinstance(self.scheduled_nodes, np.ndarray) and isinstance(self.scheduled_nodes[0], int)):
             pass  # Type is ok
         else:
-            # Type is not as expected!
             raise ValueError(
-                f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, with {type(self.scheduled_nodes[0])}")
+                    f"type: self.scheduled_nodes:{type(self.scheduled_nodes)}, "
+                    f"with {type(self.scheduled_nodes[0])}")
         assert isinstance(self.submit_time, (int, float))
-        assert isinstance(self.wall_time, (int, float, np.int64, np.double))
-        assert isinstance(self.start_time, (int, float, np.int64, np.double, type(None)))
-        assert isinstance(self.end_time, (int, float, np.int64, np.double, type(None)))
+        assert isinstance(self.expected_run_time, (int, float, np.int64, np.double, NoneType))
+        assert isinstance(self.current_run_time, (int, float, np.int64, np.double))
+        assert isinstance(self.start_time, (int, float, np.int64, np.double, NoneType))
+        assert isinstance(self.end_time, (int, float, np.int64, np.double, NoneType))
         if self.start_time is not None and self.end_time is not None:
             assert self.start_time <= self.end_time, f"{self.start_time} <= {self.end_time}"
 
@@ -196,30 +203,32 @@ class Job:
                 f"allocated_gpu_units={self.allocated_gpu_units}, "
                 f"cpu_trace={self.cpu_trace}, gpu_trace={self.gpu_trace}, "
                 f"ntx_trace={self.ntx_trace}, nrx_trace={self.nrx_trace}, "
-                f"job_state={self.job_state}, end_state={self.end_state}, "
+                f"end_state={self.end_state}, "
+                f"current_state={self.current_state}, "
                 f"submit_time={self.submit_time}, time_limit={self.time_limit}, "
                 f"start_time={self.start_time}, end_time={self.end_time}, "
-                f"wall_time={self.wall_time}, "
+                f"expected_run_time={self.expected_run_time}, "
+                f"current_run_time={self.current_run_time}, "
                 f"trace_time={self.trace_time}, "
                 f"trace_start_time={self.trace_start_time}, "
                 f"trace_end_time={self.trace_end_time}, "
                 f"trace_quanta={self.trace_quanta}, "
-                f"running_time={self.running_time}, state={self._state}, "
+                f"running_time={self.running_time}, "
                 f"power={self.power}, "
                 f"power_history={self.power_history})")
 
     @property
-    def state(self):
+    def current_state(self):
         """Get the current state of the job."""
-        return self._state
+        return self._current_state
 
-    @state.setter
-    def state(self, value):
-        """Set the state of the job."""
+    @current_state.setter
+    def current_state(self, value):
+        """Set the current_state of the job."""
         if isinstance(value, JobState):
-            self._state = value
+            self._current_state = value
         elif isinstance(value, str) and value in JobState.__members__:
-            self._state = JobState[value]
+            self._current_state = JobState[value]
         else:
             raise ValueError(f"Invalid state: {value}")
 
@@ -243,7 +252,7 @@ class Job:
 
     def apply_dilation(self, factor):
         """
-        Apply a dilation factor to the job’s execution traces and wall time.
+        Apply a dilation factor to the job’s execution traces and run time.
 
         Parameters:
         - factor (float): the dilation factor; >1 to slow down (lengthen the traces) and <1 to speed up.
@@ -252,8 +261,11 @@ class Job:
         self.gpu_trace = dilate_trace(self.gpu_trace, factor)
         self.ntx_trace = dilate_trace(self.ntx_trace, factor)
         self.nrx_trace = dilate_trace(self.nrx_trace, factor)
-        self.wall_time = int(np.round(self.wall_time * factor))
-        self.end_time = self.start_time + self.wall_time
+        if self.end_time is not None:
+            expected_run_time = self.end_time - self.start_time
+            expected_run_time = int(np.round(expected_run_time * factor))
+            assert self.start_time is not None
+            self.end_time = self.start_time + expected_run_time
 
 
 class JobStatistics:
@@ -269,7 +281,7 @@ class JobStatistics:
         self.submit_time = job.submit_time
         self.start_time = job.start_time
         self.end_time = job.end_time
-        self.state = job._state
+        self.current_state = job.current_state
         if isinstance(job.cpu_trace, list) or isinstance(job.cpu_trace, np.ndarray):
             if len(job.cpu_trace) == 0:
                 self.avg_cpu_usage = 0
@@ -332,8 +344,8 @@ if __name__ == "__main__":
 
     # Each sample in the trace represents 15 seconds.
     trace_quanta = 15  # seconds per sample
-    wall_time = 600    # total job wall time in seconds (600s = 10 minutes)
-    num_samples = wall_time // trace_quanta  # should be 40 samples
+    expected_run_time = 600    # total job run time in seconds (600s = 10 minutes)
+    num_samples = expected_run_time // trace_quanta  # should be 40 samples
 
     # Generate a random GPU trace (values between 0 and 4 for 4 GPUs total)
     gpu_trace = [random.uniform(0, 4) for _ in range(num_samples)]
@@ -352,7 +364,7 @@ if __name__ == "__main__":
         gpu_trace=gpu_trace,
         ntx_trace=ntx_trace,
         nrx_trace=nrx_trace,
-        wall_time=wall_time,
+        expected_run_time=expected_run_time,
         end_state="",
         scheduled_nodes=[],
         time_offset=0,
@@ -363,7 +375,7 @@ if __name__ == "__main__":
     job_instance = Job(jdict, current_time=0)
 
     # Print original job properties.
-    print("Original wall_time:", job_instance.wall_time)
+    print("Original expected_run_time:", job_instance.expected_run_time)
     print("Original cpu_trace length:", len(job_instance.cpu_trace))
     print("Original gpu_trace length:", len(job_instance.gpu_trace))
 
@@ -373,11 +385,11 @@ if __name__ == "__main__":
 
     # Calculate the expected new lengths.
     expected_samples = int(np.round(num_samples * dilation_factor))
-    expected_wall_time = int(np.round(wall_time * dilation_factor))
+    expected_run_time = int(np.round(expected_run_time * dilation_factor))
 
     # Print the dilated job properties.
     print("\nAfter applying a dilation factor of", dilation_factor)
-    print("New wall_time:", job_instance.wall_time, "(expected:", expected_wall_time, ")")
+    print("New expected_run_time:", job_instance.expected_run_time, "(expected:", expected_run_time, ")")
     print("New cpu_trace length:", len(job_instance.cpu_trace), "(expected:", expected_samples, ")")
     print("New gpu_trace length:", len(job_instance.gpu_trace), "(expected:", expected_samples, ")")
 

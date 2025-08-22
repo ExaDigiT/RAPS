@@ -81,14 +81,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
     # Map dataframe to job state. Add results to jobs list
     for jidx in tqdm(range(num_jobs - 1), total=num_jobs, desc="Processing Jobs"):
-
         job_id = jobs_df.loc[jidx, 'job_id']
         if not jid == '*':
             if int(jid) == int(job_id):
                 print(f'Extracting {job_id} profile')
             else:
                 continue
-
         nodes_required = jobs_df.loc[jidx, 'num_nodes_alloc']
         name = str(uuid.uuid4())[:6]
         account = jobs_df.loc[jidx, 'user_id']
@@ -193,10 +191,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
                                 time_limit=time_limit,
                                 start_time=start_time,
                                 end_time=end_time,
-                                wall_time=wall_time,
+                                expected_run_time=wall_time,
+                                current_run_time=0,
                                 trace_time=trace_time,
                                 trace_start_time=trace_start_time,
                                 trace_end_time=trace_end_time,
+                                trace_quanta=None,
                                 trace_missing_values=True
                                 )
             job = Job(job_info)

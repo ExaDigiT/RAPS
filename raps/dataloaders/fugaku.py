@@ -74,7 +74,7 @@ def load_data_from_df(df, **kwargs):
     telemetry_end = int(diff.total_seconds())
 
     # Loop through the DataFrame rows to extract job information
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing Jobs"):
+    for i, row in tqdm(df.iterrows(), total=len(df), desc="Processing Jobs"):
         nodes_required = row['nnumr'] if 'nnumr' in df.columns else 0
         name = row['jnam'] if 'jnam' in df.columns else 'unknown'
         account = row['usr']
@@ -114,6 +114,12 @@ def load_data_from_df(df, **kwargs):
         end_time = int(diff.total_seconds())
 
         wall_time = end_time - start_time
+        if end_time < start_time:
+            print(f"Job: {i}, skiped end_time < start_time ({end_time} < {start_time})")
+            if kwargs.get('debug'):
+                print(row)
+            continue
+
         # duration = int(row['duration']) if 'duration' in df.columns else 0
         # if (wall_time != duration):
         #    if abs(wall_time - duration) <= 1:  # offset is often 1
@@ -153,7 +159,7 @@ def load_data_from_df(df, **kwargs):
             time_limit=time_limit,
             start_time=start_time,
             end_time=end_time,
-            wall_time=wall_time,
+            expected_run_time=wall_time,
             trace_time=trace_time,
             trace_start_time=trace_start_time,
             trace_end_time=trace_end_time,

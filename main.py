@@ -83,7 +83,16 @@ def main():
     args_dict['config'] = config
     flops_manager = FLOPSManager(**args_dict)
 
-    if args.replay:
+    if args.live and not args.replay:
+        assert args.time is not None, {"--time must be set, specifing how long we want to predict"}
+        td = Telemetry(**args_dict)
+        jobs, timestep_start, timestep_end = \
+            td.load_jobs_times_args_from_live_system()
+        if args.output is not None:
+            td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
+                             timestep_end=timestep_end, args=args, filename=td.dirname)
+
+    elif args.replay:
 
         td = Telemetry(**args_dict)
         jobs, timestep_start, timestep_end, args_from_file = \
@@ -113,7 +122,7 @@ def main():
                          timestep_end=timestep_end, args=args, filename=td.dirname)
 
     if args.fastforward is not None:
-        timestep_start = args.fastforward
+        timestep_start = timestep_start + args.fastforward
 
     if args.time is not None:
         timestep_end = timestep_start + args.time

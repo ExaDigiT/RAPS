@@ -156,6 +156,9 @@ parser.add_argument("--jid", type=str, default="*",
 parser.add_argument("--scale", type=int, default=0,
                     help=("Scale telemetry to a smaller target system, "
                           "e.g., --scale 192"))
+parser.add_argument("--live", action="store_true",
+                    help="Grab data from live system.")
+
 
 # Synthetic workloads
 parser = add_workload_to_parser(parser)

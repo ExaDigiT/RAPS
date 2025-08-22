@@ -240,7 +240,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                                 time_limit=time_limit,
                                 start_time=start_time,
                                 end_time=end_time,
-                                wall_time=wall_time,
+                                expected_run_time=wall_time,
                                 trace_time=trace_time,
                                 trace_start_time=trace_start_time,
                                 trace_end_time=trace_end_time,

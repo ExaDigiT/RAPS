@@ -323,7 +323,7 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
             # submit_time=row["timestamp"], time_limit=0,
             submit_time=start, time_limit=0,
             start_time=start, end_time=end,
-            wall_time=wall, trace_time=row["timestamp"],
+            expected_run_time=wall, trace_time=row["timestamp"],
             trace_start_time=start, trace_end_time=end, trace_quanta=trace_quanta
         )
         # Wrap dict in a real Job so telemetry.save_snapshot() can use __dict__

@@ -83,8 +83,9 @@ class MultiTenantResourceManager:
         job.allocated_cpu_cores = job.cpu_cores_required
         job.allocated_gpu_units = job.gpu_units_required
         job.start_time = current_time
-        job.end_time = current_time + job.wall_time
-        job.state = JobState.RUNNING
+        if job.expected_run_time:
+            job.end_time = current_time + job.expected_run_time  # this may be an assumption (See default.py)
+        job.current_state = JobState.RUNNING
 
     def free_nodes_from_job(self, job):
         """Releases cores/GPUs from a completed job."""
