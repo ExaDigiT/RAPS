@@ -104,7 +104,8 @@ class Scheduler:
         queue.remove(job)
         if self.debug:
             scheduled_nodes = summarize_ranges(job.scheduled_nodes)
-            print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
+            print(f"t={current_time}: Scheduled job {job.id} with time limit "
+                  f"{job.time_limit} on nodes {scheduled_nodes}")
 
     def check_available_nodes(self, job):
         nodes_available = False
@@ -159,7 +160,7 @@ class Scheduler:
                 break
             else:
                 shadow_nodes_avail += job.nodes_required
-                shadow_time_end = job.end_time
+                shadow_time_end = job.time_limit
 
         time_limit = shadow_time_end - current_time
         # We now have the time_limit after which no backfilled job should end
@@ -202,6 +203,7 @@ class Scheduler:
         # Everything with negative Fugaku Points get sorted according to normal priority
         priority_triple_list = []
         for job in queue:
+            assert accounts and accounts.account_dict
             fugaku_priority = accounts.account_dict[job.account].fugaku_points
             if fugaku_priority is None:
                 fugaku_priority = 0
@@ -233,6 +235,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.account_dict
             power = accounts.account_dict[job.account].avg_power
             if power is None:
                 power = 0
@@ -259,6 +262,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.accounts_dict
             power = accounts.account_dict[job.account].avg_power
             if power is None:
                 power = 0
@@ -278,6 +282,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.accounts_dict
             power = accounts.account_dict[job.account].avg_power
             if power is None:
                 power = 0
@@ -297,6 +302,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.accounts_dict
             energy = accounts.account_dict[job.account].energy_allocated
             time = accounts.account_dict[job.account].time_allocated
             if energy is None:
@@ -319,6 +325,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.accounts_dict
             energy = accounts.account_dict[job.account].energy_allocated
             time = accounts.account_dict[job.account].time_allocated
             if energy is None:
@@ -341,6 +348,7 @@ class Scheduler:
             return queue
         priority_tuple_list = []
         for job in queue:
+            assert accounts and accounts.accounts_dict
             power = accounts.account_dict[job.account].avg_power
             time = accounts.account_dict[job.account].time_allocated
             if power is None:

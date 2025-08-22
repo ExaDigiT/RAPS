@@ -43,6 +43,7 @@ class Scheduler:
                 if job.start_time > current_time:
                     continue  # Replay: Job didn't start yet. Next!
                 else:
+                    # assert job.start_time == current_time, f"{job.start_time} == {current_time}"
                     pass
             else:
                 pass
@@ -101,7 +102,8 @@ class Scheduler:
         queue.remove(job)
         if self.debug:
             scheduled_nodes = summarize_ranges(job.scheduled_nodes)
-            print(f"t={current_time}: Scheduled job {job.id} with wall time {job.wall_time} on nodes {scheduled_nodes}")
+            print(f"t={current_time}: Scheduled job {job.id} with time limit "
+                  f"{job.time_limit} on nodes {scheduled_nodes}")
 
     def check_available_nodes(self, job):
         nodes_available = False
@@ -146,7 +148,7 @@ class Scheduler:
         else:
             nodes_required = first_job.nodes_required
 
-        sorted_running = sorted(running, key=lambda job: job.end_time)
+        sorted_running = sorted(running, key=lambda job: job.time_limit)
 
         # Identify when we have enough nodes therefore the start time of the first_job in line
         shadow_time_end = 0
@@ -156,7 +158,7 @@ class Scheduler:
                 break
             else:
                 shadow_nodes_avail += job.nodes_required
-                shadow_time_end = job.end_time
+                shadow_time_end = job.start_time + job.time_limit
 
         time_limit = shadow_time_end - current_time
         # We now have the time_limit after which no backfilled job should end

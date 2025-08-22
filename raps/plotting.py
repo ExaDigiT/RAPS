@@ -333,7 +333,7 @@ def plot_jobs_gantt(*, ax=None, jobs, bars_are_node_sized):
         ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
     submit_t = [x.submit_time for x in jobs]
-    duration = [x.wall_time for x in jobs]
+    duration = [x.current_run_time if x.end_time else x.time_limit for x in jobs]
     nodes_required = [x.nodes_required for x in jobs]
 
     colors = spaced_colors(len(jobs))
@@ -350,7 +350,8 @@ def plot_jobs_gantt(*, ax=None, jobs, bars_are_node_sized):
     # ax_b labels:
     ax.set_xlabel("time [hh:mm]")
     minx_s = min([x.submit_time for x in jobs])
-    maxx_s = np.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
+    maxx_s = np.ceil(max([x.current_run_tim if x.end_time else x.time_limit for
+                          x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
@@ -366,10 +367,13 @@ def plot_nodes_gantt(*, ax=None, jobs):
     if ax is None:
         ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
-    duration = [x.wall_time for x in jobs]
+    duration = [x.current_run_time if x.end_time else x.time_limit for x in jobs]
     # nodes_required = [x['nodes_required'] for x in jobs]
     start_t = [x.start_time for x in jobs]
     nodeIDs = [x.scheduled_nodes for x in jobs]
+    print(nodeIDs)
+    if not any(nodeIDs):
+        raise IndexError(f"No nodeIDs: {nodeIDs}, jobs have no scheduled_nodes.")
 
     colors = spaced_colors(len(jobs))
     for i in track(range(len(jobs)), description="Collecting information to plot"):

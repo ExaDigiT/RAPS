@@ -2,6 +2,7 @@ import sys
 import os
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
@@ -135,7 +136,7 @@ class LayoutManager:
 
         # Build the column headers
         # columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST"]
-        columns = ["JOBID", "WALL TIME", "NAME", "ACCOUNT", "ST", "NODES"]
+        columns = ["JOBID", "TIME LIMIT", "NAME", "ACCOUNT", "ST", "NODES"]
         if show_slowdown:
             columns.append("SLOW DOWN")
         else:
@@ -144,7 +145,7 @@ class LayoutManager:
             else:
                 columns.append("SEGMENT")  # NODE SEGMENTS
 
-        columns.append("TIME")
+        columns.append("WALL TIME")
 
         # Create table with bold magenta headers
         table = Table(title="Job Queue", header_style="bold magenta", expand=True)
@@ -195,11 +196,11 @@ class LayoutManager:
 
             row = [
                 str(job.id).zfill(5),
-                convert_seconds_to_hhmm(job.wall_time // self.engine.downscale),
+                convert_seconds_to_hhmm(job.time_limit // self.engine.downscale),
                 # str(job.wall_time),
                 str(job.name),
                 str(job.account),
-                job.state.value,
+                job.current_state.value,
                 str(job.nodes_required),
                 nodes_display,
                 running_time_str
@@ -223,7 +224,8 @@ class LayoutManager:
                       down_nodes,
                       avg_net_util,
                       slowdown,
-                      time_delta):
+                      time_delta,
+                      timestep_start=0):
         """
         Updates the status information table with the provided system status data.
 
@@ -243,25 +245,43 @@ class LayoutManager:
             List of nodes that are down.
         """
         # Define columns with header styles
-        columns = [
-            "Time", "Jobs Running", "Jobs Queued",
-            "Active Nodes", "Free Nodes", "Down Nodes", "Speed"]
+        columns = []
+        time_header = "Time"
+        if timestep_start != 0:  # append time simulated
+            time_header += " (+Sim)"
+        columns.append(time_header)
+        columns.append("Jobs Running")
+        columns.append("Jobs Queued")
+        columns.append("Active Nodes")
+        columns.append("Free Nodes")
+        columns.append("Down Nodes")
+        columns.append("Speed")
+
         if self.simulate_network:
             columns.extend(("Net Util (%)", "Slowdown per job"))
         table = Table(header_style="bold magenta", expand=True)
         for col in columns:
             table.add_column(col, justify="center")
 
+        row = []
         # Add data row with white values
-        row = [
-            convert_seconds_to_hhmmss(time // self.engine.downscale),
-            str(nrun),
-            str(nqueue),
-            str(active_nodes),
-            str(free_nodes),
-            str(len(down_nodes)),
-            f"{time_delta}x"
-        ]
+        time_in_s = time // self.engine.downscale
+        if (time_in_s < 946684800):  # Introducing Y2K into our codebase! Kek
+            time_str = convert_seconds_to_hhmm(time_in_s)
+        else:
+            # For the curious: If the simulation time in seconds is large than
+            # unix timestamp for Jan 2000 this is a unix timestamp,
+            time_str = f"{datetime.fromtimestamp(time_in_s).strftime("%Y-%m-%d %H:%M")}"
+        if timestep_start != 0:  # append time simulated
+            time_str += f"\nSim: {convert_seconds_to_hhmm(time_in_s - timestep_start)}"
+
+        row.append(time_str)
+        row.append(str(nrun))
+        row.append(str(nqueue))
+        row.append(str(active_nodes))
+        row.append(str(free_nodes))
+        row.append(str(len(down_nodes)))
+        row.append(f"{time_delta}x")
         if self.simulate_network:
             row.append(f"{avg_net_util * 100:.0f}%")
             row.append(f"{slowdown:.1f}x")
@@ -501,7 +521,7 @@ class LayoutManager:
         self.progress.update(self.progress_task, description=f"{timestamp}", advance=timestamp, transient=True)
         self.layout["progress"].update(self.progress.get_renderable())
 
-    def update_full_layout(self, data: TickData, time_delta=1):
+    def update_full_layout(self, data: TickData, time_delta=1, timestep_start=0):
         if self.debug:
             return
         uncertainties = self.engine.power_manager.uncertainties
@@ -515,13 +535,6 @@ class LayoutManager:
             self.update_pressflow_array(data.fmu_outputs)
 
         self.update_scheduled_jobs(data.running + data.queue)
-        self.update_status(
-            data.current_timestep, len(data.running), len(data.queue), data.num_active_nodes,
-            data.num_free_nodes, data.down_nodes, data.avg_net_util, data.slowdown_per_job,
-            data.time_delta
-        )
-
-        self.update_scheduled_jobs(data.running + data.queue)
 
         self.update_status(
             data.current_timestep,
@@ -532,7 +545,8 @@ class LayoutManager:
             data.down_nodes,
             data.avg_net_util,
             data.slowdown_per_job,
-            data.time_delta
+            data.time_delta,
+            timestep_start=timestep_start
         )
 
         self.update_power_array(
@@ -555,7 +569,7 @@ class LayoutManager:
                                                                     time_delta,
                                                                     autoshutdown=True)):
                     if data and (not self.debug and not self.noui):
-                        self.update_full_layout(data, time_delta)
+                        self.update_full_layout(data, time_delta, timestep_start=timestep_start)
                         # self.update_progress_bar(i-last_i)
                         # last_i=i
                     if not self.debug and not self.noui:

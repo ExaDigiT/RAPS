@@ -157,7 +157,7 @@ class ThermoFluidsModel:
             self.weather and self.weather.start is not None and \
                 self.weather.has_coords:
             # Convert total seconds to timedelta object
-            delta = timedelta(seconds=engine.current_time)
+            delta = timedelta(seconds=engine.current_timestep)
             target_datetime = self.weather.start + delta
 
             # Get temperature from weather data
@@ -332,7 +332,7 @@ class ThermoFluidsModel:
         # FMU inputs are N powers and the wetbulb temp
         fmu_inputs = self.generate_fmu_inputs(runtime_values,
                                               uncertainties=engine.power_manager.uncertainties)
-        cooling_inputs, cooling_outputs = self.step(engine.current_time,
+        cooling_inputs, cooling_outputs = self.step(engine.current_timestep,
                                                     fmu_inputs,
                                                     engine.config['POWER_UPDATE_FREQ'])
         return cooling_inputs, cooling_outputs

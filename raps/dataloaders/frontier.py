@@ -9,6 +9,8 @@
     # To analyze the data
     python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR
 """
+import ast
+import time
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -38,6 +40,8 @@ def load_data(files, **kwargs):
     list
         The list of parsed jobs.
     """
+    if kwargs.get("live") is True:
+        return load_live_data()
     assert (len(files) == 2), "Frontier dataloader requires two files: joblive and jobprofile"
 
     jobs_path = files[0]
@@ -111,13 +115,14 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     With this each job's
     - submit_time
     - time_limit
-    - start_time
-    - end_time
-    - wall_time (end_time-start_time, actual runtime in seconds)
-    - trace_time (lenght of each trace in seconds)
-    - trace_start_time (time offset in seconds after which the trace starts)
-    - trace_end_time (time offset in seconds after which the trace ends)
-    - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta)
+    - start_time  # Maybe Null
+    - end_time  # Maybe Null
+    - expected_run_time (end_time - start_time)  # Maybe Null
+    - current_run_time (How long did the job run already, when loading)  # Maybe zero
+    - trace_time (lenght of each trace in seconds)  # Maybe Null
+    - trace_start_time (time offset in seconds after which the trace starts)  # Maybe Null
+    - trace_end_time (time offset in seconds after which the trace ends)  # Maybe Null
+    - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta) # Maybe Null
     has to be set for use within the simulation
 
     The values trace_start_time are similar to the telemetry_start and
@@ -233,21 +238,20 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             continue  # Start_time is not smaller than end_time or is not valid
             # Skip entry.
 
-        wall_time = end_time - start_time
-        if np.isnan(wall_time):
-            wall_time = 0
+        expected_run_time = end_time - start_time
+        current_run_time = 0  # Check if we the job may  may be runninghave wall time of the jobs
 
         trace_quanta = config['TRACE_QUANTA']
         trace_time = gpu_trace.size * trace_quanta  # seconds
 
         trace_start_time = 0
         trace_end_time = trace_time
-        if wall_time > trace_time:
-            missing_trace_time = int(wall_time - trace_time)
+        if expected_run_time > trace_time:
+            missing_trace_time = int(expected_run_time - trace_time)
             trace_missing_values = True
             if start_time < 0:
                 trace_start_time = missing_trace_time
-                trace_end_time = wall_time
+                trace_end_time = expected_run_time
             elif end_time > telemetry_end:
                 trace_start_time = 0
                 trace_end_time = trace_time
@@ -310,14 +314,230 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 scheduled_nodes=scheduled_nodes,
                 id=job_id,
                 priority=priority,  # partition missing
-                submit_time=submit_time, time_limit=time_limit,
-                start_time=start_time, end_time=end_time,
-                wall_time=wall_time, trace_time=trace_time,
+                submit_time=submit_time,
+                time_limit=time_limit,
+                start_time=start_time,
+                end_time=end_time,
+                expected_run_time=expected_run_time,
+                current_run_time=current_run_time,
+                trace_time=trace_time,
                 trace_start_time=trace_start_time, trace_end_time=trace_end_time,
                 trace_quanta=trace_quanta, trace_missing_values=trace_missing_values)
 
             job = Job(job_info)
             jobs.append(job)
+    return jobs, telemetry_start, telemetry_end
+
+
+def load_live_data(**kwargs):
+    """ Load Slurm Live data using pyslurm """
+    jobs = list()
+    telemetry_start = int(time.time())  # This is now! get unix time
+    telemetry_start = 1755721300
+    if hasattr(kwargs, 'time'):
+        time_to_sim = kwargs.get('time')  # Should be specified .
+        assert isinstance(time_to_sim, int)
+    else:
+        time_to_sim = 14 * 24 * 60 * 60   # or we simulate 2 weeks.
+    telemetry_end = telemetry_start + time_to_sim
+
+    total_partitions = 0
+    partition_dict = dict()
+
+    import pyslurm  # noqa
+    # Local Tests
+    # filename = "something/something/pyslurm.dump"
+    # with open(filename, 'r') as f:
+    #   s = f.read()
+    #   data = ast.literal_eval(s)
+    #
+    data = pyslurm.job().get()
+
+    for jidx, jdata in data.items():
+        if jdata['job_state'] == "COMPLETED" \
+                or jdata['job_state'] == "CANCELLED":
+            continue
+        if jdata['job_state'] == "TIMEOUT" \
+                or jdata['job_state'] == "FAILED":
+            if jdata['requeue'] is False:
+                continue
+
+        # if jidx == XXX:
+        #    print(jdata)
+        #    exit()
+        # Picking the useful ones from the 110 features: Leaving the rest for potential changes
+        account = jdata['account']
+        # 'accrue_time': String  = 'Unknown',
+        # 'admin_comment': String,
+        # 'alloc_node': String = 'login08',
+        # 'alloc_sid':  int
+        # 'array_job_id': None,
+        # 'array_task_id': None,
+        # 'array_task_str': None,
+        # 'het_job_id': None,
+        # 'het_job_id_set': None,
+        # 'het_job_offset': None,
+        # 'array_max_tasks': None,
+        # 'assoc_id': int,
+        # 'batch_flag': int,
+        # 'batch_features': None,
+        # 'batch_host': None,
+        # 'billable_tres': float,
+        # 'bitflags': int,
+        # 'boards_per_node': int,
+        # 'burst_buffer': None,
+        # 'burst_buffer_state': None,
+        # 'command': String,
+        # 'comment': None,
+        # 'contiguous': bool,
+        # 'core_spec': int,
+        # 'cores_per_socket': int,
+        # 'cpus_per_task': int,
+        # 'cpus_per_tres': None,
+        # 'cpu_freq_gov': int,
+        # 'cpu_freq_max': int,
+        # 'cpu_freq_min': int,
+        # 'dependency': None,
+        # 'derived_ec': String,
+        # 'eligible_time': int,
+        # 'end_time': int,
+        # 'exc_nodes': [],
+        # 'exit_code': String,
+        # 'features': [],
+        # 'group_id': int,
+        job_id = jdata['job_id']
+        current_state = jdata['job_state']
+        end_state = None
+        # 'last_sched_eval': String # e.g. '2013-02-31T14:29:09',
+        # 'licenses': {},
+        # 'max_cpus': int,
+        # 'max_nodes': int,
+        # 'mem_per_tres': None,
+        name = jdata['name']
+        # 'network': None,
+        # 'nodes': None,
+        # 'nice': 0,
+        # 'ntasks_per_core': int,
+        # 'ntasks_per_core_str': String
+        # 'ntasks_per_node': int,
+        # 'ntasks_per_socket': int,
+        # 'ntasks_per_socket_str': String,
+        # 'ntasks_per_board': 0,
+        # 'num_cpus': int,
+        nodes_required: int = jdata['num_nodes']
+        # 'num_tasks': 49152,
+        # 'partition': String,  # e.g.'batch',
+        if jdata['partition'] in partition_dict:
+            pass
+        else:
+            partition_dict[jdata['partition']] = total_partitions
+            total_partitions += 1
+        partition = partition_dict[jdata['partition']]
+        # 'mem_per_cpu': bool,
+        # 'min_memory_cpu': None,
+        # 'mem_per_node': bool,
+        # 'min_memory_node': int,
+        # 'pn_min_memory': int,
+        # 'pn_min_cpus': int,
+        # 'pn_min_tmp_disk': int,
+        priority = jdata['priority']
+        # 'profile': int,
+        # 'qos': String  # e.g. 'normal',
+        # 'reboot': int,
+        scheduled_nodes_str_list = jdata['req_nodes']  # Explicitly requested nodes  # Missmatch between slurm and raps
+        scheduled_nodes = []
+        for n in scheduled_nodes_str_list:
+            scheduled_nodes = int(n[8:])
+        # Do we need to reintroduce a list of explicitly required nodes? This is currently handled by setting the
+        # scheduled_nodes before the scheduler modifies this list
+        # 'req_switch': int,
+        # 'requeue': bool,
+        # 'resize_time': int,
+        # 'restart_cnt': int,
+        # 'resv_name': None,
+        # 'run_time': int,  # ??
+        # 'run_time_str': String,
+        # 'sched_nodes': None,
+        # 'selinux_context': None,
+        # 'shared': String,
+        # 'sockets_per_board': int,
+        # 'sockets_per_node': int,
+        if current_state == "RUNNING":
+            start_time = jdata['start_time']
+            end_time = None
+            current_run_time = jdata['run_time']
+        else:
+            start_time = None
+            end_time = None
+            current_run_time = jdata['run_time']  # ??
+            if jdata['job_state'] == "TIMEOUT":
+                if jdata['requeue'] is False:
+                    current_run_time = 0  # ??
+            elif jdata['job_state'] == "COMPLETING":
+                if jdata['requeue'] is False:
+                    current_run_time = 0  # ??
+            else:
+                assert current_run_time == 0, "Check if any other value occurs and should be handled! " \
+                                              f"current_run_time:{current_run_time}" \
+                                              f"\njdata:\n{jdata}"
+        expected_run_time = None
+        # 'state_reason': String  # e.g. 'JobHeldUser',
+        # 'std_err': String,
+        # 'std_in': String,
+        # 'std_out': String,
+        submit_time = jdata['submit_time']  # int,  Unix Time!
+        # 'suspend_time': int,
+        # 'system_comment': None,
+        # 'time_limit': e.g. 570,  # in minutes!
+        time_limit = jdata['time_limit'] * 60  # needed in seconds
+        # 'time_limit_str': '0-09:30:00',
+        # 'time_min': int,
+        # 'threads_per_core': int,
+        # 'tres_alloc_str': None,
+        # 'tres_bind': None,
+        # 'tres_freq': None,
+        # 'tres_per_job': None,
+        # 'tres_per_node': None,
+        # 'tres_per_socket': None,
+        # 'tres_per_task': None,
+        # 'tres_req_str': String,
+        account = jdata['user_id']  # int for slurm, may be String in raps and conversion works. ...
+        # 'wait4switch': int,
+        # 'wckey': None,
+        # 'work_dir': String
+        # 'cpus_allocated': dict,
+        # 'cpus_alloc_layout': dict
+        cpu_trace = None  # To be determined by a model!
+        gpu_trace = None
+        trace_time = None
+        trace_start_time = None
+        trace_end_time = None
+        trace_quanta = None
+        trace_missing_values = None
+        job_info = job_dict(
+            nodes_required=nodes_required,
+            name=name,
+            account=account,
+            cpu_trace=cpu_trace,
+            gpu_trace=gpu_trace,
+            nrx_trace=None,
+            ntx_trace=None,
+            current_state=current_state,
+            end_state=end_state,
+            scheduled_nodes=scheduled_nodes,
+            id=job_id,
+            priority=priority,  # partition missing
+            partition=partition,
+            submit_time=submit_time, time_limit=time_limit,
+            start_time=start_time, end_time=end_time,
+            expected_run_time=expected_run_time,
+            current_run_time=current_run_time,
+            trace_time=trace_time,
+            trace_start_time=trace_start_time, trace_end_time=trace_end_time,
+            trace_quanta=trace_quanta, trace_missing_values=trace_missing_values)
+        job = Job(job_info)
+        jobs.append(job)
+
     return jobs, telemetry_start, telemetry_end
 
 

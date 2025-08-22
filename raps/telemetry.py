@@ -11,8 +11,10 @@ import sys
 import random
 import argparse
 # import itertools
-import json
+# import json
 import os.path
+from typing import Optional
+from types import ModuleType
 
 
 if __name__ == "__main__":
@@ -36,6 +38,8 @@ if __name__ == "__main__":
                         f"or use the original submit times ({choices[0]})")
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('-o', '--output', type=str, default=None, help='Store output in --output <arg> file.')
+    parser.add_argument("--live", action="store_true", help="Grab data from live system.")
+
     args = parser.parse_args()
     args_dict = vars(args)
 
@@ -59,6 +63,7 @@ from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seco
 
 class Telemetry:
     """A class for handling telemetry data, including reading/parsing job data, and loading/saving snapshots."""
+    dataloader: Optional[ModuleType]
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -98,15 +103,17 @@ class Telemetry:
         list_of_job_dicts = data['jobs'].tolist()
         for job_info in list_of_job_dicts:
             jobs.append(Job(job_info))
-        if hasattr(data, 'timestep_start'):
+        if 'timestep_start' in data:
             timestep_start = int(data['timestep_start'])
         else:
             timestep_start = 0
-        if hasattr(data, 'timestep_end'):
+        if 'timestep_end' in data:
             timestep_end = int(data['timestep_end'])
         else:
             timestep_end = np.inf
-        if hasattr(data, 'args'):
+            print(timestep_end)
+            exit()
+        if 'args' in data:
             args_from_file = data['args'].tolist()
         else:
             args_from_file = None
@@ -124,31 +131,35 @@ class Telemetry:
             job_info = job_dict(nodes_required=line.get('num_nodes').item(),
                                 name=line.get('name').item(),
                                 account=line.get('account').item(),
-                                cpu_trace=None,
-                                gpu_trace=None,
-                                ntx_trace=None,
-                                nrx_trace=None,
-                                # end_state=line.get('end_state').item(),
-                                end_state=None,
-                                scheduled_nodes=json.loads(line.get('scheduled_nodes').item()),
+                                current_state=line.get('current_state').item(),
+                                end_state=line.get('end_state').item(),
+                                scheduled_nodes=line.get('scheduled_nodes').item(),
                                 id=line.get('id').item(),
-                                # priority=line.get('priority').item(),
-                                priority=None,
-                                # partition=line.get('partition').item(),
-                                partition=None,
+                                priority=line.get('priority').item(),
+                                partition=line.get('partition').item(),
+                                cpu_cores_required=line.get('cpu_cores_required').item(),
+                                gpu_units_required=line.get('gpu_units_required').item(),
+                                allocated_cpu_cores=line.get('allocated_cpu_cores').item(),
+                                allocated_gpu_units=line.get('allocated_gpu_units').item(),
+
+                                cpu_trace=line.get('cpu_trace'),
+                                gpu_trace=line.get('cpu_trace'),
+                                ntx_trace=line.get('cpu_trace'),
+                                nrx_trace=line.get('cpu_trace'),
                                 submit_time=line.get('submit_time').item(),
+                                time_limit=line.get('time_limit').item(),
                                 start_time=line.get('start_time').item(),
                                 end_time=line.get('end_time').item(),
-                                # wall_time=line.get('wall_time').item(),
-                                wall_time=line.get('end_time').item() - line.get('start_time').item(),
-                                # trace_time=line.get('trace_time').item(),
-                                trace_time=None,
+                                expected_run_time=line.get('expected_run_time').item(),
+                                current_run_time=line.get('current_run_time').item(),
+                                trace_time=line.get('trace_time'),
                                 # trace_start_time=line.get('trace_start_time').item(),
-                                trace_start_time=None,
+                                trace_start_time=line.get('trace_start_time'),
                                 # trace_end_time=line.get('trace_end_time').item(),
-                                trace_end_time=None,
-                                # trace_missing_values=line.get('trace_missing_values').item(),
-                                trace_missing_values=None
+                                trace_end_time=line.get('trace_end_time'),
+                                trace_quanta=line.get('trace_quanta').item(),
+                                trace_missing_values=line.get('trace_missing_values'),
+                                downscale=line.get('downscale'),
                                 )
             job = Job(job_info)
             jobs.append(job)
@@ -161,10 +172,17 @@ class Telemetry:
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
+        assert self.dataloader
         return self.dataloader.load_data(files, **self.kwargs)
+
+    def load_live_data(self):
+        """Load telemetry data using custom data loaders."""
+        assert self.dataloader
+        return self.dataloader.load_live_data(**self.kwargs)
 
     def load_data_from_df(self, *args, **kwargs):
         """Load telemetry data using custom data loaders."""
+        assert self.dataloader
         return self.dataloader.load_data_from_df(*args, **kwargs)
 
     def load_data_from_csv(self, file, *args, **kwargs):
@@ -201,15 +219,23 @@ class Telemetry:
 
     def node_index_to_name(self, index: int):
         """ Convert node index into a name"""
+        assert self.dataloader
         return self.dataloader.node_index_to_name(index, config=self.config)
 
     def cdu_index_to_name(self, index: int):
         """ Convert cdu index into a name"""
+        assert self.dataloader
         return self.dataloader.cdu_index_to_name(index, config=self.config)
 
     def cdu_pos(self, index: int) -> tuple[int, int]:
         """ Return (row, col) tuple for a cdu index """
+        assert self.dataloader
         return self.dataloader.cdu_pos(index, config=self.config)
+
+    def load_jobs_times_args_from_live_system(self):
+        jobs, timestep_start, timestep_end = self.load_live_data()
+        #  data_args = None
+        return jobs, timestep_start, timestep_end
 
     def load_jobs_times_args_from_files(self, *, files, args, config, downscale=1):
         """ Load all files as combined jobs """
@@ -292,7 +318,16 @@ def run_telemetry():
     config = get_system_config(args.system).get_legacy()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
-    if args.replay:
+
+    if args.live and not args.replay:
+        td = Telemetry(**args_dict)
+        jobs, timestep_start, timestep_end = \
+            td.load_jobs_times_args_from_live_system()
+        if args.output:
+            td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
+                             timestep_end=timestep_end, args=args, filename=td.dirname)
+
+    elif args.replay:
         jobs, timestep_start, timestep_end, _ = \
             td.load_jobs_times_args_from_files(files=args.replay,
                                                args=args,
@@ -304,17 +339,19 @@ def run_telemetry():
 
     timesteps = timestep_end - timestep_start
 
-    dt_list = []
-    wt_list = []
-    nr_list = []
+    dt_list = []  # arrival time ???
+    tl_list = []  # time limit
+    ert_list = []  # expected run time
+    nr_list = []  # nodes required
     submit_times = []
     end_times = []
     last = 0
     for job in jobs:
-        wt_list.append(job.wall_time)
+        tl_list.append(job.time_limit)
+        ert_list.append(job.expected_run_time)
         nr_list.append(job.nodes_required)
         submit_times.append(job.submit_time)
-        end_times.append(job.submit_time + job.wall_time)
+        end_times.append(job.submit_time + job.time_limit)
         if job.submit_time > 0:
             dt = job.submit_time - last
             dt_list.append(dt)
@@ -323,14 +360,18 @@ def run_telemetry():
             print(job)
     dt_list = [item for item in dt_list if item is not None]
     nr_list = [item for item in nr_list if item is not None]
-    wt_list = [item for item in wt_list if item is not None]
+    tl_list = [item for item in tl_list if item is not None]
+    ert_list = [item for item in ert_list if item is not None]
 
     print(f'Number of jobs: {len(jobs)}')
     print(f'Simulation will run for {timesteps} seconds')
     if dt_list:
         print(f'Average job arrival time is: {np.mean(dt_list):.2f}s')
-    if wt_list:
-        print(f'Average wall time is: {np.mean(wt_list):.2f}s')
+    if tl_list:
+        print(f'Average time limit is: {np.mean(tl_list):.2f}s')
+    if ert_list:
+        print(f'Average expected runtime is: {np.mean(ert_list):.2f}s')
+
     if nr_list:
         print(f'Nodes required (avg): {np.mean(nr_list):.2f}')
         print(f'Nodes required (max): {np.max(nr_list)}')

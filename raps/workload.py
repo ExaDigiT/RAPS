@@ -70,12 +70,12 @@ class Workload:
     def compute_traces(self,
                        cpu_util: float,
                        gpu_util: float,
-                       wall_time: int,
+                       expected_run_time: int,
                        trace_quanta: int
                        ) -> tuple[np.ndarray, np.ndarray]:
         """ Compute CPU and GPU traces based on mean CPU & GPU utilizations and wall time. """
-        cpu_trace = cpu_util * np.ones(int(wall_time) // trace_quanta)
-        gpu_trace = gpu_util * np.ones(int(wall_time) // trace_quanta)
+        cpu_trace = cpu_util * np.ones(int(expected_run_time) // trace_quanta)
+        gpu_trace = gpu_util * np.ones(int(expected_run_time) // trace_quanta)
         return (cpu_trace, gpu_trace)
 
     def job_arrival_distribution_draw_poisson(self, args, config):
@@ -227,7 +227,7 @@ class Workload:
                                 time_limit=time_limit,
                                 start_time=start_time,
                                 end_time=end_time,
-                                wall_time=wall_time, trace_time=wall_time,
+                                expected_run_time=wall_time, trace_time=wall_time,
                                 trace_start_time=0, trace_end_time=wall_time,
                                 cpu_cores_required=cpu_cores_required,
                                 gpu_units_required=gpu_units_required,
@@ -260,7 +260,7 @@ class Workload:
                                        time_limit=random.randint(43200, 43200),
                                        start_time=0,
                                        end_time=et,
-                                       wall_time=et))
+                                       expected_run_time=et))
             else:
                 new_job = Job(job_dict(nodes_required=1,
                                        name="LLM",
@@ -275,7 +275,7 @@ class Workload:
                                        time_limit=43200,
                                        start_time=0,
                                        end_time=7200,
-                                       wall_time=random.randint(60, 7200)))
+                                       expected_run_time=random.randint(60, 7200)))
             jobs.append(new_job)
         return jobs
 
@@ -407,7 +407,7 @@ class Workload:
                                 time_limit=time_limit,
                                 start_time=time_to_next_job,
                                 end_time=time_to_next_job + wall_time,
-                                wall_time=wall_time, trace_time=wall_time,
+                                expected_run_time=wall_time, trace_time=wall_time,
                                 trace_start_time=0, trace_end_time=wall_time,
                                 trace_quanta=config['TRACE_QUANTA'] * downscale,
                                 downscale=downscale
@@ -454,7 +454,7 @@ class Workload:
                                 time_limit=job_time + 1,
                                 start_time=0,
                                 end_time=job_time,
-                                wall_time=job_time,
+                                expected_run_time=job_time,
                                 trace_time=job_time,
                                 trace_start_time=0,
                                 trace_end_time=job_time,
@@ -496,7 +496,7 @@ class Workload:
                 submit_time=0,
                 start_time=0,
                 end_time=job_time,
-                wall_time=job_time,
+                expected_run_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
@@ -541,7 +541,7 @@ class Workload:
                 time_limit=job_time + 1,
                 start_time=0,
                 end_time=job_time,
-                wall_time=job_time,
+                expected_run_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
@@ -572,7 +572,7 @@ class Workload:
                 time_limit=job_time + 1,
                 start_time=10800,
                 end_time=14200,
-                wall_time=job_time,
+                expected_run_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
@@ -602,7 +602,7 @@ class Workload:
                 time_limit=job_time + 1,
                 start_time=14200,
                 end_time=17800,
-                wall_time=job_time,
+                expected_run_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
@@ -631,7 +631,7 @@ class Workload:
                 time_limit=job_time + 1,
                 start_time=17800,
                 end_time=21400,
-                wall_time=job_time,
+                expected_run_time=job_time,
                 trace_time=job_time,
                 trace_start_time=0,
                 trace_end_time=job_time,
@@ -652,7 +652,7 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
         split = dist_split
 
     y = [y.nodes_required for y in jobs]
-    x = [x.wall_time for x in jobs]
+    x = [x.expected_run_time for x in jobs]
     x2 = [x.time_limit for x in jobs]
     fig_m = plt.figure()
     gs = fig_m.add_gridspec(30, 1)
@@ -751,7 +751,7 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
     axs[1][1].tick_params(axis="y", labelleft=False)
 
     # Submit_time and Wall_time
-    duration = [x.wall_time for x in jobs]
+    duration = [x.expected_run_time for x in jobs]
     nodes_required = [x.nodes_required for x in jobs]
     submit_t = [x.submit_time for x in jobs]
 
@@ -787,7 +787,7 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
         # ax_b labels:
     ax_b.set_xlabel("time [hh:mm]")
     minx_s = 0
-    maxx_s = math.ceil(max([x.wall_time for x in jobs]) + max([x.submit_time for x in jobs]))
+    maxx_s = math.ceil(max([x.expected_run_time for x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [n for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
     x_label_str = [str(x1).zfill(2) + ":" + str(x2).zfill(2) for
@@ -887,7 +887,7 @@ def run_workload():
     plot_job_hist(jobs, config=config, dist_split=args.multimodal, gantt_nodes=args.gantt_nodes)
     if args.output:
         timestep_start = min([x.submit_time for x in jobs])
-        timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.wall_time for x in jobs]))
+        timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.expected_run_time for x in jobs]))
         filename = create_file_indexed('wl', create=False, ending="npz").split(".npz")[0]
         # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename, jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
@@ -956,7 +956,7 @@ def run_workload():
                         time_limit=wall_time,
                         start_time=0,
                         end_time=wall_time,
-                        wall_time=wall_time,
+                        expected_run_time=wall_time,
                         trace_time=wall_time,
                         trace_start_time=0,
                         trace_end_time=wall_time,
@@ -992,7 +992,7 @@ def run_workload():
                             time_limit=wall_time,
                             start_time=0,
                             end_time=wall_time,
-                            wall_time=wall_time,
+                            expected_run_time=wall_time,
                             trace_time=wall_time,
                             trace_start_time=0,
                             trace_end_time=wall_time,
@@ -1026,7 +1026,7 @@ def run_workload():
                             time_limit=wall_time,
                             start_time=offset,
                             end_time=offset + wall_time,
-                            wall_time=wall_time,
+                            expected_run_time=wall_time,
                             trace_time=wall_time,
                             trace_start_time=0,
                             trace_end_time=wall_time,
