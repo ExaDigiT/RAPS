@@ -13,7 +13,7 @@ Instructions for setup and usage are given below. An online documentation of Exa
 
 ## Setup environment
 
-Note: Requires python3.11 or greater.
+Note: Requires python3.12 or greater.
 
     pip install -e .
 
@@ -30,7 +30,7 @@ Note: Requires python3.11 or greater.
     # Frontier
     DATEDIR="date=2024-01-18"
     DPATH=~/data/frontier-sample-2024-01-18
-    python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR
+    python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
 ## Open Telemetry dataset
 
@@ -46,7 +46,7 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
 
 For Google cluster trace v2
 
-    python main.py --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -ff 600
+    python main.py --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample --ff 600
 
     # analyze dataset
     python -m raps.telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
@@ -83,7 +83,7 @@ For Lumi
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to
 get the datasets. To run a network simulation, use the following command:
 
-    python main.py -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -ff 365d -t 12h --arrival poisson -net
+    python main.py -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --ff 365d -t 12h --arrival poisson --net
 
 ## Snapshot of extracted workload data
 
@@ -140,10 +140,10 @@ This will dump a .npz file with a randomized name, e.g. ac23db.npz. Let's rename
 There are three ways to modify replaying of telemetry data:
 
 1. `--arrival`. Changing the arrival time distribution - replay cases will default to `--arrival prescribed`, where the jobs will be submitted exactly as they were submitted on the physical machine. This can be changed to `--arrival poisson` to change when the jobs arrive, which is especially useful in cases where there may be gaps in time, e.g., when the system goes down for several days, or the system is is underutilized.
-python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR --arrival poisson
+python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --arrival poisson
 2. `--policy`. Changing the way the jobs are scheduled. The `--policy` flag will be set by default to `replay` in cases where a telemetry file is provided, in which case the jobs will be scheduled according to the start times provided. Changing the `--policy` to `fcfs` or `backfill` will use the internal scheduler.
 
-python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR --policy fcfs --backfill firstfit -t 12h
+python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --policy fcfs --backfill firstfit -t 12h
 
 3. `--scale`. Changing the scale of each job in the telemetry data. The `--scale` flag will specify the maximum number of nodes for each job (generally set this to the max number of nodes of the smallest partition), and randomly select the number of nodes for each job from one to max nodes. This flag is useful when replaying telemetry from a larger system onto a smaller system.
 
@@ -151,11 +151,11 @@ python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR --pol
 
 ## Job-level power output example for replay of single job
 
-    python main.py -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR --jid 1234567 -o
+    python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --jid 1234567 -o
 
 ## Compute stats on telemetry data, e.g., average job arrival time
 
-    python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR $DPATH/jobprofile/$DATEDIR
+    python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
 ## Build and run Docker container
 

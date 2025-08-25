@@ -31,7 +31,7 @@ def test_main_run(system, system_config, system_file, random_id):
         "--time", "1m",
         "--system", system,
         "-f", *file_list,
-        "-net",
+        "--net",
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"

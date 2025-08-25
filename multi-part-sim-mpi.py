@@ -8,18 +8,16 @@ stats for heterogeneous systems (e.g., LUMI, Setonix, Adastra).
 
 from tqdm import tqdm
 from mpi4py import MPI
-from raps.utils import convert_to_seconds, next_arrival
+from raps.utils import next_arrival
 from raps.workload import Workload
 from raps.telemetry import Telemetry
 from raps.power import PowerManager, compute_node_power
 from raps.flops import FLOPSManager
 from raps.engine import Engine
 from raps.ui import LayoutManager
-from raps.config import get_system_config, CONFIG_PATH
-from args import args
+from raps.system_config import get_partition_configs
+from raps.sim_config import args
 import random
-import os
-import glob
 from raps.helpers import check_python_version
 check_python_version()
 
@@ -29,20 +27,10 @@ def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # 1) Expand “partitions” (on rank 0) if the user used a glob:
-    if rank == 0:
-        partition_names = args.partitions
-        if '*' in partition_names[0]:
-            paths = glob.glob(os.path.join(CONFIG_PATH, partition_names[0]))
-            partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
-    else:
-        partition_names = None
-
-    # 2) Broadcast the final list of partition_names to everyone
-    partition_names = comm.bcast(partition_names, root=0)
-
     # 3) Load configs for every partition (all ranks do this)
-    configs = [get_system_config(p).get_legacy() for p in partition_names]
+    multi_config = get_partition_configs(args.partitions)
+    partition_names = multi_config.partition_names
+    configs = [c.get_legacy() for c in multi_config.partitions]
     args_dicts = [{**vars(args), 'config': cfg} for cfg in configs]
 
     # 4) Each rank decides which partition‐indices it owns (round-robin):
@@ -122,12 +110,12 @@ def main():
 
     # 9) Compute timestep_start / timestep_end (all ranks agree):
     if args.fastforward:
-        fastforward = convert_to_seconds(args.fastforward)
+        fastforward = args.fastforward
     else:
         fastforward = 0
 
     if args.time:
-        timesteps = convert_to_seconds(args.time)
+        timesteps = args.time
     else:
         timesteps = 88200   # default 24 hours
 

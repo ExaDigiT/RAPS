@@ -1,4 +1,3 @@
-from tests.smoke import main
 
 import subprocess
 import os

@@ -20,7 +20,6 @@ def test_multi_part_sim_run(system, system_config):
     result = subprocess.run([
         "python", "multi-part-sim.py",
         "--time", "1h",
-        "--system", system,
         "-x", f"{system}/*",
         #"--noui"
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)

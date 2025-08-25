@@ -711,7 +711,6 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
         axs[0][1].yaxis.tick_right()
     else:
         axs[0][1].set_yticks([])
-        pass
     axs[0][1].hist(cpu_util, bins=100, orientation='vertical', zorder=1, density=True, color='tab:cyan')
     axs[0][1].axvline(np.mean(cpu_util), color='r', linewidth=1, zorder=3)
     axs[0][1].set(xlim=[0, config['CPUS_PER_NODE']])
@@ -800,83 +799,9 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
     plt.show()
 
 
-def add_workload_to_parser(parser):
-
-    choices = ['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant']
-    parser.add_argument('-w', '--workload', type=str, choices=choices,
-                        default=choices[0], help='Type of synthetic workload')
-
-    parser.add_argument("--multimodal", default=[1.0], type=float, nargs="+",
-                        help="Percentage to draw from each distribution "
-                             "(list of floats)e.g. '0.2 0.8' percentages apply"
-                             " in order to the list of the  --distribution argument list.")
-
-    # Jobsize:
-    parser.add_argument("--jobsize-distribution", type=str, nargs="+",
-                        choices=['uniform', 'weibull', 'normal'], default=None, help='Distribution type')
-
-    parser.add_argument("--jobsize-normal-mean", type=float, required=False, help="Mean (mu) for Normal distribution")
-    parser.add_argument("--jobsize-normal-stddev", type=float, required=False,
-                        help="Standard deviation (sigma) for Normal distribution")
-
-    parser.add_argument("--jobsize-weibull-shape", type=float, required=False, help="Jobsize shape of weibull")
-    parser.add_argument("--jobsize-weibull-scale", type=float, required=False, help="Jobsize scale of weibull")
-
-    parser.add_argument("--jobsize-is-of-degree", default=None, type=int, required=False,
-                        help="Draw jobsizes from distribution of degree N (squared,cubed).")
-    parser.add_argument("--jobsize-is-power-of", default=None, type=int, required=False,
-                        help="Draw jobsizes from distribution of power of N (2->2^x,3->3^x).")
-
-    # Walltime:
-    parser.add_argument("--walltime-distribution", type=str, nargs="+",
-                        choices=['uniform', 'weibull', 'normal'], default=None, help='Distribution type')
-
-    parser.add_argument("--walltime-normal-mean", type=float, required=False,
-                        help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--walltime-normal-stddev", type=float, required=False,
-                        help="Walltime standard deviation (sigma) for Normal distribution")
-
-    parser.add_argument("--walltime-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
-    parser.add_argument("--walltime-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
-
-    # Utilizations
-    parser.add_argument("--cpuutil-distribution", type=str, nargs="+",
-                        choices=['uniform', 'weibull', 'normal'], default=['uniform'], help='Distribution type')
-
-    parser.add_argument("--cpuutil-normal-mean", type=float, required=False,
-                        help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--cpuutil-normal-stddev", type=float, required=False,
-                        help="Walltime standard deviation (sigma) for Normal distribution")
-
-    parser.add_argument("--cpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
-    parser.add_argument("--cpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
-
-    parser.add_argument("--gpuutil-distribution", type=str, nargs="+",
-                        choices=['uniform', 'weibull', 'normal'], default=['uniform'], help='Distribution type')
-
-    parser.add_argument("--gpuutil-normal-mean", type=float, required=False,
-                        help="Walltime mean (mu) for Normal distribution")
-    parser.add_argument("--gpuutil-normal-stddev", type=float, required=False,
-                        help="Walltime standard deviation (sigma) for Normal distribution")
-
-    parser.add_argument("--gpuutil-weibull-shape", type=float, required=False, help="Walltime shape of weibull")
-    parser.add_argument("--gpuutil-weibull-scale", type=float, required=False, help="Walltime scale of weibull")
-
-    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False,
-                        help="Print Gannt with nodes required as line thickness (default false)")
-
-    return parser
-
-
-def check_workload_args(args):
-    if (args.jobsize_is_power_of is not None and args.jobsize_is_of_degree is not None):
-        print("Choose either --jobsize-is-power-of or --jobsize-is-of-degree! Not both.")
-        exit(1)
-
-
 def run_workload():
-    from raps.args import args, args_dict
-    from raps.config import get_system_config
+    from raps.sim_config import args, args_dict
+    from raps.system_config import get_system_config
     config = get_system_config(args.system).get_legacy()
     if args.replay:
         td = Telemetry(**args_dict)
@@ -1045,7 +970,6 @@ def continuous_job_generation(*, engine, timestep, jobs):
     if len(engine.queue) <= engine.continuous_workload.args.maxqueue:
         new_jobs = engine.continuous_workload.generate_jobs()
         jobs.extend(new_jobs)
-    pass
 
 
 if __name__ == "__main__":

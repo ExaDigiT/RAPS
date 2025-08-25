@@ -30,7 +30,7 @@ def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg,
     result = subprocess.run([
         "python", "main.py",
         "-t", time_arg,
-        "-ff", ff_arg,
+        "--ff", ff_arg,
         "--time-delta", tdelta_arg,
         "--system", system,
         #--"-f", system_file,

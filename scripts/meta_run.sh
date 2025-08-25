@@ -17,7 +17,7 @@ while [ $current_sec -le $end_sec ]; do
     DATEDIRS="date=$DATEDIR"
 
     # Construct the command with the formatted date
-    command="python main.py -d -o --plot power loss -f $DPATH/slurm/joblive/$DATEDIRS $DPATH/jobprofile/jobprofile/$DATEDIRS >& $DATEDIRS.out &"
+    command="python main.py -d -o --plot power loss -f $DPATH/slurm/joblive/$DATEDIRS,$DPATH/jobprofile/jobprofile/$DATEDIRS >& $DATEDIRS.out &"
     sleep 10
     
     # Execute the command
