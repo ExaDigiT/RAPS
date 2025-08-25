@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from raps.job import JobState
-from raps.args import args
+from raps.sim_config import args, sim_config
 import numpy as np
 
 

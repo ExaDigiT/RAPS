@@ -18,7 +18,7 @@ from types import ModuleType
 
 
 if __name__ == "__main__":
-    # from raps.args import args,args_dict
+    # from raps.sim_config import args, args_dict
     parser = argparse.ArgumentParser(description='Telemetry data validator')
     parser.add_argument('--jid', type=str, default='*', help='Replay job id')
     parser.add_argument('-f', '--replay', nargs='+', type=str,
@@ -49,7 +49,7 @@ import pandas as pd
 from tqdm import tqdm
 # from rich.progress import track
 
-from raps.config import get_system_config
+from raps.system_config import get_system_config
 from raps.job import Job, job_dict
 import matplotlib.pyplot as plt
 from raps.plotting import (
@@ -57,8 +57,8 @@ from raps.plotting import (
     plot_nodes_gantt,
     plot_network_histogram
 )
-from raps.utils import next_arrival_byconfargs, create_casename, convert_to_seconds
-# from raps.args import args, args_dict
+from raps.utils import next_arrival_byconfargs, create_casename, convert_to_time_unit
+# from raps.sim_config import args, args_dict
 
 
 class Telemetry:
@@ -259,7 +259,7 @@ class Telemetry:
                     print(f"File was generated with:"
                           f"\n--system {args_from_file.system} ")
                     if hasattr(args_from_file, 'fastforward'):
-                        print(f"-ff {args_from_file.fastforward} ")
+                        print(f"--ff {args_from_file.fastforward} ")
                     if hasattr(args_from_file, 'time'):
                         print(f"-t {args_from_file.time}")
                     print(f"All Args:\n{args_from_file}"
@@ -308,7 +308,7 @@ class Telemetry:
                                timestep_end=timestep_end,
                                args=args, filename=self.dirname)
         if args.time:
-            timestep_end = timestep_start + convert_to_seconds(args.time)
+            timestep_end = timestep_start + convert_to_time_unit(args.time)
         elif not timestep_end:
             timestep_end = int(max(job.wall_time + job.start_time for job in jobs)) + 1
 

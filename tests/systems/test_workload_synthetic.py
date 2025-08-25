@@ -1,7 +1,6 @@
 import subprocess
 import gc
 import pytest
-import shlex
 
 
 pytestmark = [

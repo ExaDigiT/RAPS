@@ -16,7 +16,7 @@ import math
 #
 from raps.helpers import check_python_version
 #
-from raps.config import get_system_config
+from raps.system_config import get_system_config
 from raps.constants import OUTPUT_PATH, SEED
 from raps.cooling import ThermoFluidsModel
 from raps.ui import LayoutManager
@@ -45,7 +45,7 @@ from raps.stats import (
     print_formatted_report
 )
 
-from raps.args import args, args_dict
+from raps.sim_config import args, args_dict
 
 check_python_version()
 

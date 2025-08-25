@@ -12,7 +12,7 @@
     python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
 
     # to fast-forward 60 days and replay for 1 day
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 -ff 60d -t 1d
+    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 --ff 60d -t 1d
 
     # to analyze dataset
     python -m raps.telemetry -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 -v

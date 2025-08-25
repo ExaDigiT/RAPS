@@ -16,7 +16,7 @@
     python main.py -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
 
     # to fast-forward 60 days and replay for 1 day
-    python main.py -f /path/to/job_table.parquet --system marconi100 -ff 60d -t 1d
+    python main.py -f /path/to/job_table.parquet --system marconi100 --ff 60d -t 1d
 
     # to analyze dataset
     python -m raps.telemetry -f /path/to/job_table.parquet --system marconi100 -v

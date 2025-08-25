@@ -8,17 +8,22 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 
 from datetime import timedelta
 from enum import Enum
-
 import os
 import hashlib
 import math
+import re
 import numpy as np
 import pandas as pd
 import random
 import sys
 import uuid
 import json
-
+import argparse
+from pathlib import Path
+from typing import Annotated as A, TypeVar, Callable
+from pydantic import BaseModel, TypeAdapter, AfterValidator
+from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
+import yaml
 from raps.job import Job
 
 
@@ -455,52 +460,70 @@ def next_arrival(lambda_rate, reset=False, start_time=0):
     return next_arrival.next_time
 
 
-def convert_to_seconds(time_str):
-    if isinstance(time_str, (int, float)):
-        return time_str  # this happens....
-    # Define the conversion factors
-    time_factors = {
-        'd': 86400,  # 1 day = 86400 seconds
-        'h': 3600,   # 1 hour = 3600 seconds
-        'm': 60,     # 1 minute = 60 seconds
-        's': 1,      # 1 second = 1 second
-        '': 1        # empty string = 1 second
-    }
-    downscale_factors = {
-        'ms': 1000,
-        'cs': 100,
-        'ds': 10
-    }
+TIME_UNITS = {
+    'd': timedelta(days=1),
+    'h': timedelta(hours=1),
+    'm': timedelta(minutes=1),
+    's': timedelta(seconds=1),
+    'ds': timedelta(milliseconds=100),
+    'cs': timedelta(milliseconds=10),
+    'ms': timedelta(milliseconds=1),
+}
 
-    # Check if the input string ends with a unit or is purely numeric
-    # and extract the numeric part and the time unit
-    if time_str[-1].isdigit():
-        unit = ''
-        num_str = time_str[:]
-    else:
-        if time_str[-2].isdigit():
-            unit = time_str[-1]
-            num_str = time_str[:-1]
-        else:
-            unit = time_str[-2:]
-            num_str = time_str[:-2]
 
-    index = num_str.find(".")  # convert int or float string
-    if index != -1:
-        num = float(num_str)
-        raise ValueError(f"Float not supported at this time: {num}{unit}")
+def parse_time_unit(unit) -> timedelta:
+    parsed_unit = unit
+    if TypeAdapter(timedelta).validator.isinstance_python(unit):
+        parsed_unit = TypeAdapter(timedelta).validate_python(unit)
+    elif isinstance(unit, str):
+        parsed_unit = TIME_UNITS.get(unit)
+    if not isinstance(parsed_unit, timedelta):
+        raise ValueError(f"Invalid time unit {unit}")
+    if parsed_unit not in TIME_UNITS.values() or parsed_unit > TIME_UNITS['s']:
+        raise ValueError("Only time units of s, ds, cs, and ms are supported")
+    return parsed_unit
 
-    else:
-        num = int(num_str)
 
-    # Convert to seconds using the conversion factors
-    if unit in time_factors:
-        return num * time_factors[unit], 1
-    elif unit in downscale_factors:
-        downscale = downscale_factors[unit]
-        return num, downscale
-    else:
-        raise ValueError(f"Unknown time unit: {unit}")
+def parse_td(td, unit: str | timedelta = 's') -> timedelta:
+    """ Parse into a timedelta. Pass unit to interpret raw numbers as (default seconds) """
+    unit = parse_time_unit(unit)
+    if TypeAdapter(int).validator.isinstance_python(td):
+        return unit * TypeAdapter(int).validate_python(td)
+    if TypeAdapter(timedelta).validator.isinstance_python(td):
+        return TypeAdapter(timedelta).validate_python(td)
+    if isinstance(td, str):
+        re_match = re.fullmatch(r"(\d+)\s*(\w+)", td.strip())
+        if re_match and re_match[2] in TIME_UNITS:
+            num_str, unit_str = re_match.groups()
+            return int(num_str) * TIME_UNITS[unit_str]
+    raise ValueError(f"Invalid timedelta: {td}")
+
+
+def convert_to_time_unit(td, unit: str | timedelta = 's'):
+    """
+    Converts to integer number of time unit
+    Throws if the given time is less than the unit
+    """
+    num = parse_td(td, unit) / parse_time_unit(unit)
+    if (num != 0 and num < 1) or not num.is_integer():
+        raise ValueError(f"{td} is not divisible by time unit {unit}")
+    return int(num)
+
+
+def infer_time_unit(td) -> timedelta:
+    """ Infers the time unit the user meant for the input string """
+    parsed_td = parse_td(td)
+    time_unit = None
+    if isinstance(td, str):  # infer unit from string, e.g. 1s or 200ms
+        re_match = re.fullmatch(r"(\d+)\s*(\w+)", td.strip())
+        if re_match and re_match[2] in TIME_UNITS:
+            time_unit = TIME_UNITS[re_match[2]]
+    if not time_unit:
+        for unit in sorted(TIME_UNITS.values(), reverse=True):
+            if (parsed_td % unit).total_seconds() == 0:
+                time_unit = unit
+                break
+    return min(TIME_UNITS['s'], time_unit or TIME_UNITS['s'])
 
 
 def encrypt(name):
@@ -604,3 +627,76 @@ class ValueComparableEnum(Enum):
 
     def __hash__(self):  # required if you override __eq__
         return hash(self.value)
+
+
+ExpandedPath = A[Path, AfterValidator(lambda v: Path(v).expanduser().resolve())]
+""" Type that that expands ~ and environment variables in a path string """
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def pydantic_add_args(
+    parser: argparse.ArgumentParser, model_cls: type[T],
+    model_config: SettingsConfigDict | None = None,
+) -> Callable[[argparse.Namespace, dict | None], T]:
+    """
+    Add arguments to the parser from the model. Returns a function that can be used to parse the
+    model from the argparse args.
+
+    Normally you'd just configure Pydantic to just automatically create a BaseSettings object from
+    sys.argv and/or env variables. But we want a bit more control over the cli parser, and to use
+    the SimConfig model as a regular non-settings model in the simulation server. So here we do
+    some hacks to apply the args manually.
+    """
+    model_config_dict = SettingsConfigDict({
+        **(model_config or {}),
+        "cli_parse_args": False,  # Don't automatically parse args
+    })
+
+    class SettingsModel(model_cls, BaseSettings):
+        @classmethod
+        def settings_customise_sources(cls, settings_cls,
+                                       init_settings, env_settings, dotenv_settings, file_secret_settings,
+                                       ):
+            return (init_settings,)  # Don't load from env vars or anything else
+
+        model_config = model_config_dict
+
+    cli_settings_source = CliSettingsSource(SettingsModel, root_parser=parser)
+
+    def model_validate_args(args: argparse.Namespace, data: dict | None = None):
+        model = CliApp.run(SettingsModel,
+                           cli_args=args,
+                           cli_settings_source=cli_settings_source,
+                           **(data or {}),
+                           )
+        # Recreate model so we don't return the SettingsModel subclass
+        return model_cls.model_validate(model.model_dump())
+    return model_validate_args
+
+
+def yaml_dump(data):
+    """ Dumps yaml with pretty formatting """
+    class IndentDumper(yaml.Dumper):
+        def represent_data(self, data):
+            # Quote all strings with special characters to avoid confusion
+            if (
+                isinstance(data, str) and
+                (not re.fullmatch(r"[\w-]+", data) or data.isdigit()) and
+                "\n" not in data
+            ):
+                return self.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+            return super(IndentDumper, self).represent_data(data)
+
+        def increase_indent(self, flow=False, indentless=False):
+            # Indent lists
+            return super(IndentDumper, self).increase_indent(flow, False)
+
+    return yaml.dump(
+        data,
+        Dumper=IndentDumper,
+        sort_keys=False,
+        indent=2,
+        allow_unicode=True,
+    )

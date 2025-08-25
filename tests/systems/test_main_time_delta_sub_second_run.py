@@ -3,8 +3,7 @@ import subprocess
 import gc
 import pytest
 from tests.util import PROJECT_ROOT
-from raps.utils import convert_seconds_to_hhmmss
-from raps.utils import convert_to_seconds
+from raps.utils import convert_seconds_to_hhmmss, parse_td
 
 
 pytestmark = [
@@ -39,10 +38,8 @@ def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, random
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
-    time, downscale = convert_to_seconds(time_arg)
-    td, td_ds = convert_to_seconds(tdelta_arg)
-    #assert f"Time Simulated: {convert_seconds_to_hhmmss(int((time / td_ds) * downscale))}" in result.stdout
-    assert f"Time Simulated: {convert_seconds_to_hhmmss(time / downscale)}" in result.stdout
+    time = parse_td(time_arg).seconds
+    assert f"Time Simulated: {convert_seconds_to_hhmmss(time)}" in result.stdout
 
     subprocess.run(
         f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",

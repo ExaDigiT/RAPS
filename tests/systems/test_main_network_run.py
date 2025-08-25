@@ -24,7 +24,7 @@ def test_main_network_run(system, system_config, random_id):
         "python", "main.py",
         "--time", "1m",
         "--system", system,
-        "-net",
+        "--net",
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"

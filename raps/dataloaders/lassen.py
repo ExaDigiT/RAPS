@@ -23,7 +23,7 @@ Usage Instructions:
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 365d -t 1d
+    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --ff 365d -t 1d
 
     # For the network replay this command gives suiteable snapshots:
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
@@ -38,7 +38,7 @@ from tqdm import tqdm
 from datetime import timedelta
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, convert_to_seconds
+from ..utils import power_to_utilization, next_arrival_byconfkwargs, parse_td
 
 
 def load_data(path, **kwargs):
@@ -80,7 +80,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         time_to_simulate = 31536000  # a year
         time_to_simulate_timedelta = timedelta(seconds=time_to_simulate)  # timedelta
     else:
-        time_to_simulate_timedelta = timedelta(seconds=convert_to_seconds(time_to_simulate))  # timedelta
+        time_to_simulate_timedelta = parse_td(time_to_simulate)  # timedelta
 
     telemetry_start_timestamp = allocation_df['begin_timestamp'].min()
     telemetry_start_time = 0
@@ -190,7 +190,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         ib_tx_per_node = total_ib_tx / n  # average bytes per node
         ib_rx_per_node = total_ib_rx / n  # average bytes per node
 
-        # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. -ff 800d -t 1d )
+        # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. --ff 800d -t 1d )
         # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
         net_tx, net_rx = throughput_traces(ib_tx_per_node, ib_rx_per_node, samples)
 

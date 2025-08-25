@@ -9,33 +9,27 @@ statistics for systems such as MIT Supercloud, Setonix, Adastra, and LUMI.
 
 from tqdm import tqdm
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
-from raps.utils import convert_to_seconds, next_arrival
+from raps.utils import next_arrival
 from raps.workload import Workload
 from raps.telemetry import Telemetry
 from raps.power import PowerManager, compute_node_power
 from raps.flops import FLOPSManager
 from raps.engine import Engine
 from raps.ui import LayoutManager
-from raps.config import get_system_config, CONFIG_PATH
-from raps.args import args
+from raps.system_config import get_partition_configs
+from raps.sim_config import args
 import random
 import os
-import glob
 from raps.helpers import check_python_version
 check_python_version()
 
 
 # Load configurations for each partition
-partition_names = args.partitions
+multi_config = get_partition_configs(args.partitions)
+partition_names = multi_config.partition_names
+configs = [c.get_legacy() for c in multi_config.partitions]
+args.system = multi_config.system_name
 
-print(args.partitions)
-if '*' in args.partitions[0]:
-    paths = glob.glob(os.path.join(CONFIG_PATH, args.partitions[0].replace("'", "")))
-    partition_names = [os.path.join(*p.split(os.sep)[-2:]) for p in paths]
-
-    args.system = partition_names[0].split(os.sep)[0]
-
-configs = [get_system_config(partition).get_legacy() for partition in partition_names]
 args_dicts = [
     {**vars(args), 'config': config, 'partition': partition_names[i]}
     for i, config in enumerate(configs)
@@ -123,11 +117,11 @@ for i, (config, ad) in enumerate(zip(configs, args_dicts)):
 
 # Set simulation timesteps
 if args.fastforward:
-    fastfoward = convert_to_seconds(args.fastforward)
+    fastfoward = args.fastforward
 else:
     fastforward = 0
 if args.time:
-    timesteps = convert_to_seconds(args.time)
+    timesteps = args.time
 else:
     timesteps = 88200  # Default to 24 hours
 
@@ -135,7 +129,7 @@ timestep_start = fastforward
 timestep_end = timestep_start + timesteps
 
 if args.time_delta:
-    time_delta = convert_to_seconds(args.time_delta)
+    time_delta = args.time_delta
 else:
     time_delta = config['TRACE_QUANTA']
 
