@@ -74,31 +74,60 @@ class RAPSEnv(gym.Env):
 
         return self._get_state()
 
+    def _compute_reward(self, tick_data, alpha=1.0, beta=0.001, gamma=0.1):
+        completed = getattr(tick_data, "completed", None)
+        jobs_completed = len(completed) if completed else 0
+        power = getattr(tick_data, "power", 0.0) or 0.0
+        queue_len = len(self.engine.queue)
+
+        reward = alpha * jobs_completed - beta * power - gamma * queue_len
+
+        if self.args_dict.get("debug", False):
+            print(f"[t={self.engine.current_timestep}] jobs_completed={jobs_completed}, "
+                  f"power={power}, queue_len={queue_len}, reward={reward}")
+
+        return reward
+
     def step(self, action):
-        """
-        Apply scheduling action.
-        For now: action = index of job in queue to attempt scheduling.
-        """
-        # TODO: integrate action with real scheduling logic
-        reward = np.random.rand()
+        # 1. Jobs waiting in the queue
+        job_queue = list(self.engine.queue)
+        chosen_job = None
+
+        if job_queue and action < len(job_queue):
+            chosen_job = job_queue[action]
+
+            # 2. Let RAPS handle all scheduling logic
+            self.engine.scheduler.place_job_and_manage_queues(
+                chosen_job,
+                self.engine.queue,
+                self.engine.running,
+                self.engine.current_timestep,
+            )
+
+        # 3. Advance simulation by one tick
+        # Update bookkeeping so tick() doesn't crash
+        if not hasattr(self.engine, "num_active_nodes"):
+            self.engine.num_active_nodes = 0
+        if not hasattr(self.engine, "num_free_nodes"):
+            self.engine.num_free_nodes = self.config["AVAILABLE_NODES"]
+
+        self.engine.num_active_nodes = sum(len(j.scheduled_nodes) for j in self.engine.running)
+        self.engine.num_free_nodes = self.config["AVAILABLE_NODES"] - self.engine.num_active_nodes
+
+        tick_data = self.engine.tick()
+
+        # 4. Compute reward (throughput vs. power)
+        reward = self._compute_reward(tick_data)
+
+        # 5. Build next observation
+        obs = self._get_state()
         done = self.engine.current_timestep >= self.engine.timestep_end
 
-        obs = self._get_state()
-
-        # Compute info manually
-        running_nodes = sum(getattr(j, "nodes_required", 0)
-                            for j in self.engine.jobs
-                            if getattr(j, "start_time", None) is not None)
-        total_nodes = self.config.get("SC_NODES", 1)
-        utilization = running_nodes / total_nodes
-
         info = {
-            "utilization": utilization,
-            "power": getattr(self.power_manager, "total_power", 0.0),
-            "queue_length": len([j for j in self.engine.jobs if getattr(j, "start_time", None) is None]),
+            "scheduled_job": getattr(chosen_job, "id", None),
+            "power": getattr(tick_data, "power", None),
+            "completed": getattr(tick_data, "completed", []),
         }
-
-        self.engine.current_timestep += 1
         return obs, reward, done, info
 
     def _get_state(self):
