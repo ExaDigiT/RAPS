@@ -21,8 +21,8 @@ class RAPSEnv(gym.Env):
     def __init__(self, **kwargs):
         super().__init__()
         # Store everything in self.args
-        self.args_dict = kwargs # dict
-        self.cli_args = kwargs.get("args") # Namespace
+        self.args_dict = kwargs  # dict
+        self.cli_args = kwargs.get("args")  # Namespace
         self.config = kwargs.get("config")
         if self.cli_args is None:
             raise ValueError("RAPSEnv requires 'args' (argparse.Namespace) in kwargs")
@@ -37,25 +37,6 @@ class RAPSEnv(gym.Env):
         # --- workload (synthetic for now) ---
         wl = Workload(self.cli_args, self.config)
         jobs = wl.generate_jobs()
-        #print("***", jobs)
-
-        timestep_start = 0
-        #timestep_end = int(max(job.wall_time for job in jobs))
-        timestep_end = 100
-
-        # --- minimal engine instantiation ---
-        #self.engine = Engine(
-        #    power_manager=self.power_manager,
-        #    flops_manager=self.flops_manager,
-        #    telemetry=self.telemetry,
-        #    jobs=jobs,
-        #    timestep_start=timestep_start,
-        #    timestep_end=timestep_end,
-        #    time_delta=self.args.get("time_delta"),
-        #    continuous_workload=None,
-        #    args=self.args,
-        #    config=self.config
-        #)
 
         self.engine = Engine(
             power_manager=self.power_manager,
@@ -87,7 +68,7 @@ class RAPSEnv(gym.Env):
 
         self.engine.jobs = jobs
         self.engine.timestep_start = 0
-        #self.engine.timestep_end = int(max(job.wall_time for job in jobs))
+        # self.engine.timestep_end = int(max(job.wall_time for job in jobs))
         self.engine.timestep_end = 100
         self.engine.current_timestep = 0
 
@@ -98,16 +79,23 @@ class RAPSEnv(gym.Env):
         Apply scheduling action.
         For now: action = index of job in queue to attempt scheduling.
         """
-        # TODO: hook into Engine to apply scheduling
-        # Placeholder: random reward for scaffolding
+        # TODO: integrate action with real scheduling logic
         reward = np.random.rand()
         done = self.engine.current_timestep >= self.engine.timestep_end
 
         obs = self._get_state()
+
+        # Compute info manually
+        running_nodes = sum(getattr(j, "nodes_required", 0)
+                            for j in self.engine.jobs
+                            if getattr(j, "start_time", None) is not None)
+        total_nodes = self.config.get("SC_NODES", 1)
+        utilization = running_nodes / total_nodes
+
         info = {
-            "utilization": self.telemetry.utilization(),
-            "power": self.telemetry.power(),
-            "queue_length": self.telemetry.queue_length(),
+            "utilization": utilization,
+            "power": getattr(self.power_manager, "total_power", 0.0),
+            "queue_length": len([j for j in self.engine.jobs if getattr(j, "start_time", None) is None]),
         }
 
         self.engine.current_timestep += 1
@@ -115,33 +103,22 @@ class RAPSEnv(gym.Env):
 
     def _get_state(self):
         """Construct simple state representation from engine's job queue."""
-        # Example: take waiting jobs
-        job_queue = [j for j in self.engine.jobs if not j.started]
+        # Example: take waiting jobs (haven’t started yet)
+        job_queue = [j for j in self.engine.jobs if getattr(j, "start_time", None) is None]
 
         max_jobs, job_features = self.observation_space.shape
         state = np.zeros((max_jobs, job_features), dtype=np.float32)
 
         for i, job in enumerate(job_queue[:max_jobs]):
-            # fill with features of interest; adapt to what Job exposes
             features = [
                 getattr(job, "nodes_required", 0),
                 getattr(job, "wall_time", 0),
                 getattr(job, "priority", 0),
-                getattr(job, "wait_time", 0),
+                getattr(job, "wait_time", 0),  # may need to compute from current_timestep - qdt
             ]
-            state[i, :len(features)] = features
+            state[i, : len(features)] = features
 
         return state
-
-    #def _get_state(self):
-    #    """Very simple state vector: truncate/pad job queue."""
-    #    jobs = self.telemetry.get_job_queue_features()
-    #    max_jobs, job_features = self.observation_space.shape
-    #    state = np.zeros((max_jobs, job_features), dtype=np.float32)
-#
-#        for i, job in enumerate(jobs[:max_jobs]):
-#            state[i, : len(job)] = job
-#        return state
 
     def render(self, mode="human"):
         print("Timestep:", self.engine.current_timestep,
