@@ -12,7 +12,7 @@ pytestmark = [
 ]
 
 
-def test_main_run(system, system_config, random_id):
+def test_main_cooling_run(system, system_config, random_id):
     if not system_config.get("cooling", False):
         pytest.skip(f"{system} does not support cooling.")
 

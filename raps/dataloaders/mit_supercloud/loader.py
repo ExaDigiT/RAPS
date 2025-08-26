@@ -593,7 +593,7 @@ def load_data(local_dataset_path, **kwargs):
             time_limit=rec.get("time_limit", 0),
             start_time=t0 - start_ts,
             end_time=t1 - start_ts,
-            wall_time=max(0, t1-t0),
+            expected_run_time=max(0, t1-t0),
             trace_time=len(cpu_tr)*quanta,
             trace_start_time=0,
             trace_end_time=len(cpu_tr)*quanta,

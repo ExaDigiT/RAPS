@@ -12,7 +12,7 @@ pytestmark = [
 ]
 
 
-def test_main_run(request, system, system_config, random_id):
+def test_main_cooling_uncertainty_run(request, system, system_config, random_id):
     print(f"Markexpr: {request.config.option.markexpr}")
     if not system_config.get("uncertainty", False) or not system_config.get("cooling", False):
         pytest.skip(f"{system} does not support cooling or uncertainty.")

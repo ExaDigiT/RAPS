@@ -28,7 +28,7 @@ def test_main_withdata_run(system, system_config, system_file, random_id):
         "python", "main.py",
         "--time", "1m",
         "--system", system,
-        "-f", ','.join(file_list),
+        "-f", ','.join(str(p) for p in file_list),
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
