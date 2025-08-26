@@ -12,7 +12,7 @@ pytestmark = [
 ]
 
 
-def test_multi_part_sim_run(system, system_config, system_file):
+def test_multi_part_sim_withdata_run(system, system_config, system_file):
     if not system_config.get("multi-part-sim", False):
         pytest.skip(f"{system} does not support basic multi-part-sim run even without data.")
     if not system_config.get("withdata", False):

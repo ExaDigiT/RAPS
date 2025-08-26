@@ -70,10 +70,18 @@ class Telemetry:
         self.system = kwargs.get('system')
         self.config = kwargs.get('config')
         outname = kwargs.get('output')
-        if outname is None or outname == "":
-            self.dirname = create_casename()
-        else:
+        if outname:
             self.dirname = outname
+        elif kwargs.get("replay"):
+            # Try to extract date from given name to use as case directory
+            matched_date = re.search(r"\d{4}-\d{2}-\d{2}", kwargs['replay'][0])
+            if matched_date:
+                self.dirname = f"sim={matched_date.group(0)}"
+            else:
+                self.dirname = create_casename()
+        else:
+            self.dirname = create_casename()
+
         try:
             self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
         except ImportError as e:
@@ -287,15 +295,6 @@ class Telemetry:
                 break
 
         if trigger_custom_dataloader:  # custom data loader
-            # Try to extract date from given name to use as case directory
-            matched_date = re.search(r"\d{4}-\d{2}-\d{2}", args.replay[0])
-            if matched_date:
-                extracted_date = matched_date.group(0)
-                self.dirname = "sim=" + extracted_date
-            else:
-                extracted_date = f"Date not found, dirname is: {self.dirname}"
-                print(extracted_date)
-
             print(*args.replay)
             try:
                 jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)

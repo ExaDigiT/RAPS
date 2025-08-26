@@ -11,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_main_withdata_run(system, system_config, system_file, random_id):
+def test_telemetry_main_withdata_run(system, system_config, system_file, random_id):
     if not system_config.get("telemetry", False):
         pytest.skip(f"{system} does not support telemetry run.")
     if not system_config.get("withdata", False):

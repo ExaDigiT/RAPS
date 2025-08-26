@@ -11,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_multi_part_sim_run(system, system_config):
+def test_multi_part_sim_basic_run(system, system_config):
 
     if not system_config.get("multi-part-sim", False):
         pytest.skip(f"{system} does not support basic multi-part-sim run.")

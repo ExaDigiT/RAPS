@@ -11,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_main_run(system, system_config, random_id):
+def test_main_noui_run(system, system_config, random_id):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 

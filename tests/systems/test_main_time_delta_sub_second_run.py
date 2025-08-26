@@ -23,7 +23,7 @@ pytestmark = [
     ("100ms", "1ms"),
     ("100ms", "1s"),
 ], ids=["1ds","3ds","1cs","1ms","1cs-for-10ds","1ms-for-10cs","1ms-for-100ms","1s-for-100ms"])
-def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, random_id):
+def test_main_time_delta_sub_second_run(system, system_config, time_arg, tdelta_arg, random_id):
     if not system_config.get("time_delta", False):
         pytest.skip(f"{system} does not support time_delta run.")
 
