@@ -37,14 +37,13 @@ class RAPSEnv(gym.Env):
         self.flops_manager = FLOPSManager(**self.args_dict)
         self.telemetry = Telemetry(**self.args_dict)
 
-        # --- workload (synthetic for now) ---
-        wl = Workload(self.cli_args, self.config)
-        jobs = wl.generate_jobs()
+        # --- Build initial jobs & time bounds ---
+        self.jobs, self.timestep_start, self.timestep_end = self._build_jobs()
 
         self.engine = Engine(
             power_manager=self.power_manager,
             flops_manager=self.flops_manager,
-            jobs=jobs,
+            jobs=self.jobs,
             **self.args_dict
         )
 
@@ -71,11 +70,14 @@ class RAPSEnv(gym.Env):
             **self.config
         )
 
+        self.timestep_start = 0
+        self.timestep_end = self.config.get("SIM_END", 1000)
+
         self.generator = self.layout_manager.run_stepwise(
-            jobs,
-            timestep_start=0,
-            timestep_end=self.config.get("SIM_END", 1000),
-            time_delta=self.args_dict.get("time_delta", 1),
+            self.jobs,
+            timestep_start=self.timestep_start,
+            timestep_end=self.timestep_end,
+            time_delta=self.args_dict.get("time_delta"),
         )
 
         # --- RL spaces ---
@@ -86,16 +88,63 @@ class RAPSEnv(gym.Env):
         )
         self.action_space = spaces.Discrete(max_jobs)
 
-    def reset(self, **kwargs):
-        """Reset environment (new workload + engine)."""
-        wl = Workload(self.cli_args, self.config)
-        jobs = wl.generate_jobs()
+    def _build_jobs(self):
+        """
+        Build a job list either from synthetic workload (--workload)
+        or from telemetry replay (--replay).
+        Returns: jobs, timestep_start, timestep_end
+        """
+        # --- Case 1: Telemetry replay ---
+        if self.cli_args and getattr(self.cli_args, "replay"):
+            result = self.telemetry.load_jobs_times_args_from_files(
+                files=self.cli_args.replay,
+                args=self.cli_args,
+                config=self.config,
+            )
 
-        self.engine.jobs = jobs
-        self.engine.timestep_start = 0
-        # self.engine.timestep_end = int(max(job.wall_time for job in jobs))
-        self.engine.timestep_end = 100
-        self.engine.current_timestep = 0
+            # Handle 3-tuple vs 4-tuple return
+            if len(result) == 3:
+                jobs, start_time, end_time = result
+            elif len(result) == 4:
+                jobs, start_time, end_time, _ = result
+            else:
+                raise ValueError(f"Unexpected telemetry return format: {len(result)} values")
+
+            # Flatten partitioned jobs if necessary
+            if jobs and isinstance(jobs[0], list):
+                jobs = [job for sublist in jobs for job in sublist]
+
+            return jobs, start_time, end_time
+
+        # --- Case 2: Synthetic workload generation ---
+        elif self.cli_args and getattr(self.cli_args, "workload"):
+            wl = Workload(self.cli_args, self.config)
+            jobs = wl.generate_jobs()
+
+            # For synthetic jobs, compute timestep_end from submit + run_time
+            timestep_start = 0
+            timestep_end = max(
+                (getattr(job, "end_time", None) or getattr(job, "expected_run_time", 0) + job.submit_time)
+                for job in jobs
+            )
+            return jobs, timestep_start, timestep_end
+
+        # --- Error: neither replay nor workload specified ---
+        else:
+            raise ValueError("RAPSEnv requires either --workload or --replay to build jobs.")
+
+    def reset(self, **kwargs):
+        self.engine.jobs = self.jobs
+        self.engine.timestep_start = self.timestep_start
+        self.engine.timestep_end = self.timestep_end
+        self.engine.current_timestep = self.timestep_start
+
+        self.generator = self.layout_manager.run_stepwise(
+            self.jobs,
+            timestep_start=self.timestep_start,
+            timestep_end=self.timestep_end,
+            time_delta=self.args_dict.get("time_delta", 1),
+        )
 
         return self._get_state()
 
