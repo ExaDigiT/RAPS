@@ -62,16 +62,17 @@ For MIT Supercloud
     python -m raps.dataloaders.mit_supercloud.cli download --start 2021-05-21T13:00 --end 2021-05-21T14:00
 
     # Load data and run simulation - will save data as part-cpu.npz and part-gpu.npz files
-    python multi-part-sim.py -x 'mit_supercloud/*' -f $DPATH --system mit_supercloud \
-                             --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    python multi-part-sim.py -x mit_supercloud -f $DPATH --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    # or simply
+    python multi-part-sim.py experiments/mit.yaml
     # Note: if no start, end dates provided will default to run 24 hours between
     # 2021-05-21T00:00 to 2021-05-22T00:00 set by defaults in raps/dataloaders/mit_supercloud/utils.py
 
     # Re-run simulation using npz files (much faster load)
-    python multi-part-sim.py -x mit_supercloud/* -f part-*.npz --system mit_supercloud
+    python multi-part-sim.py -x mit_supercloud -f part-*.npz
 
     # Synthetic tests for verification studies:
-    python multi-part-sim.py -x 'mit_supercloud/*' -w multitenant
+    python multi-part-sim.py -x mit_supercloud -w multitenant
 
 For Lumi
 
