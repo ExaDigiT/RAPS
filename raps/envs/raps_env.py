@@ -53,6 +53,13 @@ class RAPSEnv(gym.Env):
             **self.config
         )
 
+        self.generator = self.layout_manager.run_stepwise(
+            jobs,
+            timestep_start=0,
+            timestep_end=self.config.get("SIM_END", 1000),
+            time_delta=self.args_dict.get("time_delta", 1),
+        )
+
         # --- RL spaces ---
         max_jobs = 100
         job_features = 4  # [nodes, runtime, priority, wait_time]
@@ -77,7 +84,7 @@ class RAPSEnv(gym.Env):
     def _compute_reward(self, tick_data, alpha=1.0, beta=0.001, gamma=0.1):
         completed = getattr(tick_data, "completed", None)
         jobs_completed = len(completed) if completed else 0
-        power = getattr(tick_data, "power", 0.0) or 0.0
+        power = self.power_manager.history[-1][1]
         queue_len = len(self.engine.queue)
 
         reward = alpha * jobs_completed - beta * power - gamma * queue_len
@@ -89,43 +96,29 @@ class RAPSEnv(gym.Env):
         return reward
 
     def step(self, action):
-        # 1. Jobs waiting in the queue
         job_queue = list(self.engine.queue)
         chosen_job = None
 
         if job_queue and action < len(job_queue):
             chosen_job = job_queue[action]
-
-            # 2. Let RAPS handle all scheduling logic
             self.engine.scheduler.place_job_and_manage_queues(
-                chosen_job,
-                self.engine.queue,
-                self.engine.running,
-                self.engine.current_timestep,
+                chosen_job, self.engine.queue, self.engine.running, self.engine.current_timestep
             )
 
-        # 3. Advance simulation by one tick
-        # Update bookkeeping so tick() doesn't crash
-        if not hasattr(self.engine, "num_active_nodes"):
-            self.engine.num_active_nodes = 0
-        if not hasattr(self.engine, "num_free_nodes"):
-            self.engine.num_free_nodes = self.config["AVAILABLE_NODES"]
+        # Advance simulation by one step via generator
+        try:
+            tick_data = next(self.generator)
+        except StopIteration:
+            # Simulation finished
+            return self._get_state(), 0.0, True, {}
 
-        self.engine.num_active_nodes = sum(len(j.scheduled_nodes) for j in self.engine.running)
-        self.engine.num_free_nodes = self.config["AVAILABLE_NODES"] - self.engine.num_active_nodes
-
-        tick_data = self.engine.tick()
-
-        # 4. Compute reward (throughput vs. power)
         reward = self._compute_reward(tick_data)
-
-        # 5. Build next observation
         obs = self._get_state()
-        done = self.engine.current_timestep >= self.engine.timestep_end
+        done = self.engine.current_timestep >= min(self.engine.timestep_end, 1000)
 
         info = {
             "scheduled_job": getattr(chosen_job, "id", None),
-            "power": getattr(tick_data, "power", None),
+            "power": getattr(tick_data, "power", 0.0),
             "completed": getattr(tick_data, "completed", []),
         }
         return obs, reward, done, info
