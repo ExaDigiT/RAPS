@@ -42,7 +42,8 @@ class ExclusiveNodeResourceManager:
         """Assigns full nodes to a job (replay or count-based)."""
         # Ensure enough free nodes
         if len(self.available_nodes) < job.nodes_required:
-            raise ValueError(f"Not enough available nodes to schedule job {job.id}")
+            raise ValueError(f"Not enough available nodes to schedule job {job.id}",
+                             f"{len(self.available_nodes)} < {job.nodes_required}")
 
         if policy == PolicyType.REPLAY and job.scheduled_nodes:
             # Telemetry replay: use the exact nodes

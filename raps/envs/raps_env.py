@@ -8,6 +8,9 @@ from raps.flops import FLOPSManager
 from raps.telemetry import Telemetry
 from raps.workload import Workload
 from raps.ui import LayoutManager
+from raps.schedulers.rl import Scheduler
+# from raps.resmgr.default import MultiTenantResourceManager as ResourceManager
+from raps.resmgr.default import ExclusiveNodeResourceManager as ResourceManager
 
 
 class RAPSEnv(gym.Env):
@@ -44,6 +47,21 @@ class RAPSEnv(gym.Env):
             jobs=jobs,
             **self.args_dict
         )
+
+        resmgr = ResourceManager(
+            total_nodes=self.config["TOTAL_NODES"],
+            down_nodes=self.config.get("DOWN_NODES", []),
+            config=self.config
+        )
+
+        # Plug in RL scheduler
+        self.scheduler = Scheduler(
+            config=self.config,
+            policy="fcfs",   # or None if you want no heuristic fallback
+            resource_manager=resmgr,
+            env=self
+        )
+        self.engine.scheduler = self.scheduler
 
         self.layout_manager = LayoutManager(
             self.args_dict.get("layout"), engine=self.engine,
@@ -96,14 +114,7 @@ class RAPSEnv(gym.Env):
         return reward
 
     def step(self, action):
-        job_queue = list(self.engine.queue)
         chosen_job = None
-
-        if job_queue and action < len(job_queue):
-            chosen_job = job_queue[action]
-            self.engine.scheduler.place_job_and_manage_queues(
-                chosen_job, self.engine.queue, self.engine.running, self.engine.current_timestep
-            )
 
         # Advance simulation by one step via generator
         try:
@@ -112,7 +123,13 @@ class RAPSEnv(gym.Env):
             # Simulation finished
             return self._get_state(), 0.0, True, {}
 
+        # Store action for scheduler to pick up
+        self.scheduler.pending_action = action
+
+        # Advance one step (scheduler.schedule() is called inside generator)
+        tick_data = next(self.generator)
         reward = self._compute_reward(tick_data)
+
         obs = self._get_state()
         done = self.engine.current_timestep >= min(self.engine.timestep_end, 1000)
 
