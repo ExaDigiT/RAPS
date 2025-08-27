@@ -300,6 +300,18 @@ def load_data(local_dataset_path, **kwargs):
     cpu_only = (part == "part-cpu")
     mixed = (part == "part-gpu")
 
+    # handle single-partition configs (e.g., mit_supercloud.yaml)
+    if not cpu_only and not mixed:
+        config = kwargs.get("config")
+        gpus_per_node = config.get("gpus_per_node")
+
+        if gpus_per_node == 0:
+            cpu_only = True
+            part = "part-cpu"
+        else:
+            mixed = True
+            part = "part-gpu"
+
     # create nodelist mapping
     if cpu_only:
         with open(os.path.join(NL_PATH, "cpu_nodes.txt")) as f:
