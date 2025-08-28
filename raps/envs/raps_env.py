@@ -40,6 +40,8 @@ def print_stats(stats, step=0):
         if section in stats:
             for k, v in stats[section].items():
                 if k.lower() in wanted_keys:
+                    if k.lower() == "jobs still running" and isinstance(v, list):
+                        v = len(v)
                     logger.record(wanted_keys[k.lower()], v)
 
     logger.dump(step=step)
@@ -103,7 +105,7 @@ class RAPSEnv(gym.Env):
         )
 
         self.timestep_start = 0
-        self.timestep_end = self.config.get("SIM_END", 1000)
+        self.timestep_end = getattr(self.cli_args, "episode_length")
 
         self.generator = self.layout_manager.run_stepwise(
             self.jobs,
@@ -180,7 +182,29 @@ class RAPSEnv(gym.Env):
 
         return self._get_state()
 
-    def _compute_reward(self, tick_data, alpha=1.0, beta=0.001, gamma=0.1):
+    def _compute_reward(self, tick_data):
+        """
+        Reward function: minimize carbon footprint per job completed.
+        Encourages the agent to complete jobs while keeping emissions low.
+        """
+        reward = 0.0
+
+        # Jobs completed this tick
+        jobs_completed = len(getattr(tick_data, "completed", []))
+
+        # Carbon emitted so far (metric tons CO2)
+        carbon_so_far = getattr(self.engine, "carbon emissions", 0.0)
+
+        if jobs_completed > 0:
+            # Reward is higher when more jobs finish with less carbon
+            reward = jobs_completed / (carbon_so_far + 1e-6)
+        else:
+            # Small penalty if no jobs finished (encourages progress)
+            reward = -0.01
+
+        return reward
+
+    def _compute_reward2(self, tick_data, alpha=10.0, beta=1.0, gamma=2.0):
         completed = getattr(tick_data, "completed", None)
         jobs_completed = len(completed) if completed else 0
         power = self.power_manager.history[-1][1]
@@ -188,40 +212,46 @@ class RAPSEnv(gym.Env):
 
         reward = alpha * jobs_completed - beta * power - gamma * queue_len
 
-        if self.args_dict.get("debug", False):
-            print(f"[t={self.engine.current_timestep}] jobs_completed={jobs_completed}, "
-                  f"power={power}, queue_len={queue_len}, reward={reward}")
+        print(f"[t={self.engine.current_timestep}] jobs_completed={jobs_completed}, "
+              f"power={power}, queue_len={queue_len}, reward={reward}")
 
         return reward
 
     def step(self, action):
-        chosen_job = None
+        queue = self.engine.queue
+        invalid_action = False
 
-        # Advance simulation by one step via generator
-        try:
-            tick_data = next(self.generator)
-        except StopIteration:
-            # Simulation finished
-            return self._get_state(), 0.0, True, {}
+        # If queue empty or index out of range → invalid
+        if len(queue) == 0 or action >= len(queue):
+            invalid_action = True
+        else:
+            job = queue[int(action)]
+            available = len(self.engine.scheduler.resource_manager.available_nodes)
+            if job.nodes_required <= available:
+                # Valid scheduling
+                self.engine.scheduler.place_job_and_manage_queues(
+                    job, queue, self.engine.running, self.engine.current_timestep
+                )
+            else:
+                invalid_action = True
 
-        # Store action for scheduler to pick up
-        self.scheduler.pending_action = action
-
-        # Advance one step (scheduler.schedule() is called inside generator)
+        # advance simulation by one tick
         tick_data = next(self.generator)
-        reward = self._compute_reward(tick_data)
+
+        # compute reward
+        if invalid_action:
+            reward = -1.0
+        else:
+            reward = self._compute_reward(tick_data)
+
+        # Print stats
+        stats = self.get_stats()
+        print_stats(stats)
 
         obs = self._get_state()
-        done = self.engine.current_timestep >= min(self.engine.timestep_end, 1000)
-        if done:
-            stats = self.get_stats()
-            print_stats(stats)
+        done = self.engine.current_timestep >= self.engine.timestep_end
+        info = {}
 
-        info = {
-            "scheduled_job": getattr(chosen_job, "id", None),
-            "power": getattr(tick_data, "power", 0.0),
-            "completed": getattr(tick_data, "completed", []),
-        }
         return obs, reward, done, info
 
     def _get_state(self):

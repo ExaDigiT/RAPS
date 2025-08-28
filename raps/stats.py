@@ -32,13 +32,13 @@ def get_engine_stats(engine: Engine):
     stats = {
         'time simulated': time_simulated,
         'num_samples': num_samples,
-        'average power': f'{average_power_mw:.2f} MW',
-        'min loss': f'{min_loss_mw:.2f} MW',
+        'average power': f'{average_power_mw:.4f} MW',
+        'min loss': f'{min_loss_mw:.4f} MW',
         'average loss': f'{average_loss_mw:.2f} MW',
         'max loss': f'{max_loss_mw:.2f} MW',
         'system power efficiency': f'{efficiency * 100:.2f}%',
         'total energy consumed': f'{total_energy_consumed:.2f} MW-hr',
-        'carbon emissions': f'{emissions:.2f} metric tons CO2',
+        'carbon emissions': f'{emissions:.4f} metric tons CO2',
         'total cost': f'${total_cost:.2f}'
     }
 

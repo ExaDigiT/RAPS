@@ -208,6 +208,10 @@ class SimConfig(BaseModel):
     maxqueue: int = 50
     """ Specify the max queue length for continuous job generation """
 
+    # Reinforcment Learning
+    episode_length: int = 1000
+    """ Number of timesteps per RL episode (default 1000) """
+
     @model_validator(mode="before")
     def _parse_times(cls, data):
         time_fields = [
