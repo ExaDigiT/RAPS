@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import os
 from gym import spaces
 
 from raps.engine import Engine
@@ -12,6 +13,34 @@ from raps.schedulers.rl import Scheduler
 # from raps.resmgr.default import MultiTenantResourceManager as ResourceManager
 from raps.resmgr.default import ExclusiveNodeResourceManager as ResourceManager
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
+
+
+def print_stats(stats):
+    os.system("clear")
+    wanted_keys = [
+        "time simulated",
+        "average power",
+        "system power efficiency",
+        "total energy consumed",
+        "carbon emissions",
+        "jobs completed",
+        "throughput",
+        "jobs still running"
+    ]
+
+    # merge just engine_stats + job_stats
+    combined = {}
+    for section in ["engine_stats", "job_stats"]:
+        if section in stats:
+            for k, v in stats[section].items():
+                if k.lower() in wanted_keys:
+                    pretty_key = k.replace("_", " ").title()
+                    combined[pretty_key] = v
+
+    # align only left column, leave right "ragged"
+    max_key_len = max(len(k) for k in combined.keys())
+    for k, v in combined.items():
+        print(f"{k.ljust(max_key_len)} | {v}")
 
 
 class RAPSEnv(gym.Env):
@@ -182,6 +211,9 @@ class RAPSEnv(gym.Env):
 
         obs = self._get_state()
         done = self.engine.current_timestep >= min(self.engine.timestep_end, 1000)
+        if done:
+            stats = self.get_stats()
+            print_stats(stats)
 
         info = {
             "scheduled_job": getattr(chosen_job, "id", None),
