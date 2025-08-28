@@ -282,14 +282,14 @@ class Telemetry:
 
                 if hasattr(args, 'scale') and args.scale:
                     for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-                        job['nodes_required'] = random.randint(1, args.scale)
-                        job['scheduled_nodes'] = None  # Setting to None triggers scheduler to assign nodes
+                        job.nodes_required = random.randint(1, args.scale)
+                        job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
 
                 if hasattr(args, 'arrival') and args.arrival == 'poisson':
                     print("available nodes:", config['AVAILABLE_NODES'])
                     for job in tqdm(jobs, desc="Rescheduling jobs"):
-                        job['scheduled_nodes'] = None
-                        job['submit_time'] = next_arrival_byconfargs(config, args)
+                        job.scheduled_nodes = None
+                        job.submit_time = next_arrival_byconfargs(config, args)
             else:
                 trigger_custom_dataloader = True
                 break
