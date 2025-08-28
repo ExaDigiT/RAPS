@@ -1,6 +1,5 @@
 import os
 import subprocess
-import gc
 import pytest
 from tests.util import PROJECT_ROOT, DATA_PATH
 
@@ -12,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_main_withdata_run(system, system_config, system_file, random_id):
+def test_main_withdata_run(system, system_config, system_file, sim_output):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main even without data.")
     if not system_config.get("withdata", False):
@@ -30,15 +29,6 @@ def test_main_withdata_run(system, system_config, system_file, random_id):
         "--time", "1m",
         "--system", system,
         "-f", ','.join(str(p) for p in file_list),
-        "-o", random_id
+        "-o", sim_output
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
-
-    subprocess.run(
-        f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",
-        shell=True,
-        check=True
-    )
-
-    del result
-    gc.collect()
