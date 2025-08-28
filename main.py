@@ -31,7 +31,7 @@ CLI_CONFIG = SettingsConfigDict(
 )
 
 
-def main():
+def main(cli_args: list[str] | None = None):
     parser = argparse.ArgumentParser(
         description="""
             ExaDigiT Resource Allocator & Power Simulator (RAPS)
@@ -153,7 +153,7 @@ def main():
 
     # TODO: move telemetry and other misc scripts into here
 
-    args = parser.parse_args()
+    args = parser.parse_args(cli_args)
     args.func(args)
 
 
