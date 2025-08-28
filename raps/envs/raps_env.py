@@ -11,6 +11,7 @@ from raps.ui import LayoutManager
 from raps.schedulers.rl import Scheduler
 # from raps.resmgr.default import MultiTenantResourceManager as ResourceManager
 from raps.resmgr.default import ExclusiveNodeResourceManager as ResourceManager
+from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
 
 class RAPSEnv(gym.Env):
@@ -212,3 +213,11 @@ class RAPSEnv(gym.Env):
         print("Timestep:", self.engine.current_timestep,
               "Utilization:", self.telemetry.utilization(),
               "Power:", self.telemetry.power())
+
+    def get_stats(self):
+        return {
+            "engine_stats": get_engine_stats(self.engine),
+            "job_stats": get_job_stats(self.engine),
+            "scheduler_stats": get_scheduler_stats(self.engine),
+            "network_stats": get_network_stats(self.engine)
+        }

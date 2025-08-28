@@ -363,23 +363,25 @@ class Engine:
         return simulation_complete
 
     def tick(self, *, time_delta=1, replay=False):
-        # Tick runs all simulations of interest at the given time delta interval.
-        #
-        # The simulations which are needed for simulations consistency at each time step
-        # (inside: the main simulation loop of run_simulation) are not part of tick.
-        #
-        # Tick contains:
-        # For each running job:
-        #  - CPU utilization
-        #  - GPU utilization
-        #  - Network utilization
-        #
-        # From these the systems (across all nodes)
-        #  - System Utilization
-        #  - Power
-        #  - Cooling
-        #  - System Performance
-        # is simulated.
+        """
+        Tick runs all simulations of interest at the given time delta interval.
+
+        The simulations which are needed for simulations consistency at each time step
+        (inside: the main simulation loop of run_simulation) are not part of tick.
+
+        Tick contains:
+        For each running job:
+         - CPU utilization
+         - GPU utilization
+         - Network utilization
+
+        From these the systems (across all nodes)
+         - System Utilization
+         - Power
+         - Cooling
+         - System Performance
+        is simulated.
+        """
 
         scheduled_nodes = []
         cpu_utils = []

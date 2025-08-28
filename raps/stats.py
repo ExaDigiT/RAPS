@@ -46,7 +46,10 @@ def get_engine_stats(engine: Engine):
         # Multitenancy Stats
         total_jobs_loaded = engine.total_initial_jobs  # Assuming this is passed to __init__
         stats['total jobs loaded'] = total_jobs_loaded
-        stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
+        if total_jobs_loaded > 0:
+            stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
+        else:
+            stats['jobs completed percentage'] = "0%"
 
     if engine.node_occupancy_history:
         # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
