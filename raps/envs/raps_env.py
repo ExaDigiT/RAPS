@@ -1,6 +1,5 @@
 import gym
 import numpy as np
-import os
 from gym import spaces
 
 from raps.engine import Engine
@@ -14,33 +13,36 @@ from raps.schedulers.rl import Scheduler
 from raps.resmgr.default import ExclusiveNodeResourceManager as ResourceManager
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
+from stable_baselines3.common.logger import Logger, HumanOutputFormat
+import sys
 
-def print_stats(stats):
-    os.system("clear")
-    wanted_keys = [
-        "time simulated",
-        "average power",
-        "system power efficiency",
-        "total energy consumed",
-        "carbon emissions",
-        "jobs completed",
-        "throughput",
-        "jobs still running"
-    ]
+logger = Logger(
+    folder=None,  # no log file, just stdout
+    output_formats=[HumanOutputFormat(sys.stdout)]
+)
 
-    # merge just engine_stats + job_stats
-    combined = {}
+
+def print_stats(stats, step=0):
+    """prints SB3-style stats output"""
+
+    wanted_keys = {
+        "time simulated": "engine/Time Simulated",
+        "average power": "engine/Average Power",
+        "system power efficiency": "engine/System Power Efficiency",
+        "total energy consumed": "engine/Total Energy Consumed",
+        "carbon emissions": "engine/Carbon Emissions",
+        "jobs completed": "jobs/Jobs Completed",
+        "throughput": "jobs/Throughput",
+        "jobs still running": "jobs/Jobs Still Running",
+    }
+
     for section in ["engine_stats", "job_stats"]:
         if section in stats:
             for k, v in stats[section].items():
                 if k.lower() in wanted_keys:
-                    pretty_key = k.replace("_", " ").title()
-                    combined[pretty_key] = v
+                    logger.record(wanted_keys[k.lower()], v)
 
-    # align only left column, leave right "ragged"
-    max_key_len = max(len(k) for k in combined.keys())
-    for k, v in combined.items():
-        print(f"{k.ljust(max_key_len)} | {v}")
+    logger.dump(step=step)
 
 
 class RAPSEnv(gym.Env):
