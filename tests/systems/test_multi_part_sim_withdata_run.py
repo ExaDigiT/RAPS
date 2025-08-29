@@ -22,15 +22,15 @@ def test_multi_part_sim_withdata_run(system, system_config, system_file):
     else:
         file_list = [DATA_PATH / system / system_file]
     for file in file_list:
-        assert os.path.isfile(file) or os.path.isdir(file), f"File `{file}' does not exist. does ./data exist or is RAPS_DATA_DIR set?"
+        assert os.path.isfile(file) or os.path.isdir(file), \
+            f"File `{file}' does not exist. does ./data exist or is RAPS_DATA_DIR set?"
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "multi-part-sim.py",
+        "python", "main.py", "run-multi-part",
         "--time", "1h",
         "-x", f"{system}/*",
         "-f", *file_list,
-        #"--noui"
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     del result

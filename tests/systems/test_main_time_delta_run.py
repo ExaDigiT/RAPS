@@ -21,18 +21,17 @@ pytestmark = [
     ("10h", "1h"),
     ("10h", "3h"),
     ("3d", "1d")
-], ids=["1","1s","10s","1m","1h","3h","1d"])
+], ids=["1", "1s", "10s", "1m", "1h", "3h", "1d"])
 def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, random_id):
     if not system_config.get("time_delta", False):
         pytest.skip(f"{system} does not support time_delta run.")
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "-t", time_arg,
         "--time-delta", tdelta_arg,
         "--system", system,
-        #--"-f", system_file,
         "--noui",
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)

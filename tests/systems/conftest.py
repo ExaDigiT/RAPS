@@ -99,7 +99,7 @@ def system_config(system):
             "time_delta": True,
             "net": False,
         },
-        "lassen":{
+        "lassen": {
             "main": True,
             "telemetry": False,  # Takes very long!
             "multi-part-sim": False,
@@ -111,7 +111,7 @@ def system_config(system):
             "time_delta": True,
             "net": True,
         },
-        "marconi100":{
+        "marconi100": {
             "main": True,
             "telemetry": True,
             "multi-part-sim": False,
@@ -182,16 +182,16 @@ def system_config(system):
 @pytest.fixture
 def system_file(system):
     files = {
-        "40frontiers":[],
-        "adastraMI250":["AdastaJobsMI250_15days.parquet"],
-        "frontier":["slurm/joblive/date=2024-01-18/","jobprofile/date=2024-01-18/"],
-        "fugaku":["21_04.parquet"],
-        "gcloudv2":["/v2/google_cluster_data_2011_sample"],
-        "lassen":["Lassen-Supercomputer-Job-Dataset"],
-        "marconi100":["job_table.parquet"],
-        "mit_supercloud":["202201"],
-        "setonix":[""],
-        "summit":[],
-        "lumi":[]
+        "40frontiers": [],
+        "adastraMI250": ["AdastaJobsMI250_15days.parquet"],
+        "frontier": ["slurm/joblive/date=2024-01-18/", "jobprofile/date=2024-01-18/"],
+        "fugaku": ["21_04.parquet"],
+        "gcloudv2": ["/v2/google_cluster_data_2011_sample"],
+        "lassen": ["Lassen-Supercomputer-Job-Dataset"],
+        "marconi100": ["job_table.parquet"],
+        "mit_supercloud": ["202201"],
+        "setonix": [""],
+        "summit": [],
+        "lumi": []
     }
-    return files.get(system,files)
+    return files.get(system, files)

@@ -21,16 +21,15 @@ def test_multi_part_sim_network_run(system, system_config, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "multi-part-sim.py",
+        "python", "main.py", "run-multi-part",
         "--time", "1h",
         "-x", f"{system}/*",
         "--net",
-        #"--noui"
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
 
-    #TODO:
-    #Cleanup files after test!
+    # TODO:
+    # Cleanup files after test!
 
     del result
     gc.collect()

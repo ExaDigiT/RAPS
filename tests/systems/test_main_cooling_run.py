@@ -18,7 +18,7 @@ def test_main_cooling_run(system, system_config, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1h",
         "--system", system,
         "-c",

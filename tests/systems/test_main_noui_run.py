@@ -17,7 +17,7 @@ def test_main_noui_run(system, system_config, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
         "--noui",

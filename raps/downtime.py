@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from raps.job import JobState
-from raps.sim_config import args, sim_config
 import numpy as np
 
 
@@ -15,6 +14,7 @@ class Downtime:
                  first_downtime,
                  downtime_interval,
                  downtime_length,
+                 debug=False
                  ):
         self.skip = False
         if downtime_length == 0 or downtime_interval == 0 or \
@@ -25,6 +25,7 @@ class Downtime:
         self.start: int = first_downtime
         self.end: int = 0
         self.down: bool = False
+        self.debug = debug
 
     def check_and_trigger(self, *,
                           timestep: int,
@@ -46,7 +47,7 @@ class Downtime:
     def simulate_down(self, *,
                       engine: Engine
                       ):
-        if args.debug:
+        if self.debug:
             print("Simulated downtime: before downtime start")
             print(f"Running: {len(engine.running)}, queued: {len(engine.queue)}")
 
@@ -66,7 +67,7 @@ class Downtime:
 
         engine.queue += engine.running
         engine.running = []
-        if args.debug:
+        if self.debug:
             print("Simulated downtime: after downtime start")
             print(f"Running: {len(engine.running)}, queued: {len(engine.queue)}")
         self.down = True

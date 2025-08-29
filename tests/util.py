@@ -13,10 +13,13 @@ def find_project_root():
 
 PROJECT_ROOT = find_project_root()
 CONFIG_PATH = PROJECT_ROOT / "config"
-DATA_PATH = Path(os.getenv("RAPS_DATA_DIR",PROJECT_ROOT / "data")).resolve()
+DATA_PATH = Path(os.getenv("RAPS_DATA_DIR", PROJECT_ROOT / "data")).resolve()
 
-#Maybe usefull but now all systems are listed explicitly!
-system_list = [entry for entry in os.listdir(CONFIG_PATH) if os.path.isfile(os.path.join(CONFIG_PATH,entry,'system.json'))]
+# Maybe usefull but now all systems are listed explicitly!
+system_list = [
+    entry for entry in os.listdir(CONFIG_PATH)
+    if os.path.isfile(os.path.join(CONFIG_PATH, entry, 'system.json'))
+]
 
 
 def requires_all_markers(request, required_markers):

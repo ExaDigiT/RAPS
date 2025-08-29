@@ -5,3 +5,4 @@ venv
 *.npz
 *.prof
 simulation_results/
+models/*.fmu

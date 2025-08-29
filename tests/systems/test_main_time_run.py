@@ -27,10 +27,9 @@ def test_main_time_run(system, system_config, time_args, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", time_args,
         "--system", system,
-        #--"-f", system_file,
         "--noui",
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)

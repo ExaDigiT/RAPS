@@ -39,6 +39,7 @@ import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
 from raps.utils import create_file_indexed
+from raps.sim_config import SimConfig
 
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",
@@ -799,18 +800,23 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
     plt.show()
 
 
-def run_workload():
-    from raps.sim_config import args, args_dict
-    from raps.system_config import get_system_config
-    config = get_system_config(args.system).get_legacy()
-    if args.replay:
+def run_workload(sim_config: SimConfig):
+    args = sim_config.get_legacy_args()
+    args_dict = sim_config.get_legacy_args()
+    config = sim_config.system_configs[0].get_legacy()
+
+    if sim_config.replay:
         td = Telemetry(**args_dict)
-        jobs, _, _, _ = td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
+        jobs, _, _, _ = td.load_jobs_times_args_from_files(files=sim_config.replay, args=args, config=config)
     else:
         workload = Workload(args, config)
-        jobs = getattr(workload, args.workload)(args=args)
-    plot_job_hist(jobs, config=config, dist_split=args.multimodal, gantt_nodes=args.gantt_nodes)
-    if args.output:
+        jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args)
+    plot_job_hist(jobs,
+                  config=config,
+                  dist_split=sim_config.multimodal,
+                  gantt_nodes=sim_config.gantt_nodes)
+
+    if sim_config.output:
         timestep_start = min([x.submit_time for x in jobs])
         timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.expected_run_time for x in jobs]))
         filename = create_file_indexed('wl', create=False, ending="npz").split(".npz")[0]
@@ -970,7 +976,3 @@ def continuous_job_generation(*, engine, timestep, jobs):
     if len(engine.queue) <= engine.continuous_workload.args.maxqueue:
         new_jobs = engine.continuous_workload.generate_jobs()
         jobs.extend(new_jobs)
-
-
-if __name__ == "__main__":
-    run_workload()
