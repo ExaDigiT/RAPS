@@ -8,7 +8,7 @@ from pathlib import Path
 class NetworkModel:
     """ """
 
-    def __init__(self, *, available_nodes, config, **kwargs):
+    def __init__(self, *, available_nodes, config):
         self.topology = config.get("TOPOLOGY")
         # if fat-tree, build the graph once
         if self.topology == "fat-tree":

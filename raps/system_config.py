@@ -3,6 +3,7 @@ import glob
 import fnmatch
 from typing import Any, Literal
 from pathlib import Path
+from functools import cached_property
 import yaml
 from pydantic import BaseModel, computed_field, model_validator, field_validator
 from raps.raps_config import raps_config
@@ -41,27 +42,27 @@ class SystemSystemConfig(BaseModel):
         return self
 
     @computed_field
-    @property
+    @cached_property
     def num_racks(self) -> int:
         return self.num_cdus * self.racks_per_cdu - len(self.missing_racks)
 
     @computed_field
-    @property
+    @cached_property
     def sc_shape(self) -> list[int]:
         return [self.num_cdus, self.racks_per_cdu, self.nodes_per_rack]
 
     @computed_field
-    @property
+    @cached_property
     def total_nodes(self) -> int:
         return self.num_cdus * self.racks_per_cdu * self.nodes_per_rack
 
     @computed_field
-    @property
+    @cached_property
     def blades_per_chassis(self) -> int:
         return int(self.nodes_per_rack / self.chassis_per_rack / self.nodes_per_blade)
 
     @computed_field
-    @property
+    @cached_property
     def power_df_header(self) -> list[str]:
         power_df_header = ["CDU"]
         for i in range(1, self.racks_per_cdu + 1):
@@ -73,7 +74,7 @@ class SystemSystemConfig(BaseModel):
         return power_df_header
 
     @computed_field
-    @property
+    @cached_property
     def available_nodes(self) -> int:
         return self.total_nodes - len(self.down_nodes)
 
@@ -120,7 +121,7 @@ class SystemSchedulerConfig(BaseModel):
     trace_quanta: int
     min_wall_time: int
     max_wall_time: int
-    ui_update_freq: int
+    ui_update_freq: int  # TODO should be moved to raps_config
     max_nodes_per_job: int
     job_end_probs: dict[JobEndStates, float]
     multitenant: bool = False

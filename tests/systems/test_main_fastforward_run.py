@@ -24,11 +24,10 @@ def test_main_fastforward_run(system, system_config, ff_arg, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "-t 1",
         "--fastforward", ff_arg,
         "--system", system,
-        #--"-f", system_file,
         "--noui",
         "-o", random_id
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)

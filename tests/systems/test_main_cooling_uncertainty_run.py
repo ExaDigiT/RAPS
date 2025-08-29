@@ -19,7 +19,7 @@ def test_main_cooling_uncertainty_run(request, system, system_config, random_id)
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "3m",
         "--system", system,
         "-c",

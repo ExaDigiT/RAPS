@@ -1,18 +1,13 @@
 import argparse
-import sys
-import yaml
+from functools import cached_property
 from datetime import timedelta
-from pathlib import Path
 from typing import Literal
 from raps.schedulers.default import PolicyType, BackfillType
-
 from raps.utils import (
-    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath,
-    pydantic_add_args, yaml_dump, parse_td,
+    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, parse_td,
 )
-
-from pydantic import BaseModel, model_validator, computed_field
-from pydantic_settings import SettingsConfigDict
+from raps.system_config import SystemConfig, get_partition_configs
+from pydantic import BaseModel, model_validator
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
@@ -44,13 +39,12 @@ class SimConfig(BaseModel):
     Step size (unit specified by `time_unit`, default seconds).
     Can pass a string like 15s, 1m, 1h, 1ms
     """
-    time_unit: timedelta
+    time_unit: timedelta = timedelta(seconds=1)
     """
     Units all time delta ints are measured in (default seconds)
     """
 
-    @computed_field
-    @property
+    @cached_property
     def downscale(self) -> int:
         return int(timedelta(seconds=1) / self.time_unit)
 
@@ -65,7 +59,7 @@ class SimConfig(BaseModel):
     uncertainties: bool = False
     """ Use float-with-uncertainties (much slower) """
 
-    seed: bool = False
+    seed: int | None = None
     """ Set RNG seed for deterministic simulation """
     output: ExpandedPath | None = None
     """ Output power, cooling, and loss models for later analysis. Argument specifies name. """
@@ -209,7 +203,10 @@ class SimConfig(BaseModel):
     """ Specify the max queue length for continuous job generation """
 
     @model_validator(mode="before")
-    def _parse_times(cls, data):
+    def _validate_before(cls, data):
+        # This is called with the raw input, before Pydantic parses it, so data is just a dict and
+        # contain any data types.
+
         time_fields = [
             "time_delta", "time", "fastforward",
             "downtime_first", "downtime_interval", "downtime_length",
@@ -236,7 +233,8 @@ class SimConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _validate(self):
+    def _validate_after(self):
+        # This is called after Pydantic has parsed everything into the model
         if self.system and self.partitions:
             raise ValueError("system and partitions are mutually exclusive")
         elif not self.system and not self.partitions:
@@ -245,10 +243,39 @@ class SimConfig(BaseModel):
         if not self.replay and not self.workload:
             self.workload = "random"
 
+        if self.cooling:
+            self.layout = "layout2"
+
         if self.jobsize_is_power_of is not None and self.jobsize_is_of_degree is not None:
             raise ValueError("jobsize_is_power_of and jobsize_is_of_degree are mutually exclusive")
 
+        if self.plot and not self.output:
+            raise ValueError("plot requires an output directory to be set")
+
+        if self.live and not self.replay and self.time is None:
+            raise ValueError("--time must be set, specifing how long we want to predict")
+
         return self
+
+    @property
+    def system_name(self) -> str:
+        """
+        Name of the system.
+        Note, this is different than system, as system can be a file or None if partition is set.
+        """
+        return self._multi_partition_system_config.system_name
+
+    @property
+    def system_configs(self) -> list[SystemConfig]:
+        """
+        Return the SystemConfigs for the selected systems.
+        Will be a single element array unless multiple `partitions` are selected.
+        """
+        return self._multi_partition_system_config.partitions
+
+    @cached_property
+    def _multi_partition_system_config(self):
+        return get_partition_configs(self.partitions if self.partitions else [self.system])
 
     def get_legacy_args(self):
         """
@@ -265,6 +292,7 @@ class SimConfig(BaseModel):
         args_dict = self.model_dump(mode="json")
         # validate has been renamed to power_scope
         args_dict['validate'] = args_dict["power_scope"] == "node"
+        args_dict['downscale'] = self.downscale
 
         # Convert Path objects to str
         if args_dict['output']:
@@ -276,56 +304,3 @@ class SimConfig(BaseModel):
 
         args_dict['sim_config'] = self
         return args_dict
-
-
-def parse_args(cli_args=None) -> SimConfig:
-    parser = argparse.ArgumentParser(
-        description="Resource Allocator & Power Simulator (RAPS)",
-        allow_abbrev=False,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "config_file", nargs="?", default=None,
-        help=(
-            'YAML sim config file, can be used to configure an experiment instead of using CLI ' +
-            'flags. Pass "-" to read from stdin.'
-        )
-    )
-
-    model_validate_args = pydantic_add_args(parser, SimConfig, model_config=SettingsConfigDict(
-        cli_implicit_flags=True,
-        cli_kebab_case=True,
-        cli_shortcuts={
-            "partitions": "x",
-            "cooling": "c",
-            "simulate-network": "net",
-            "fastforward": "ff",
-            "time": "t",
-            "debug": "d",
-            "numjobs": "n",
-            "verbose": "v",
-            "output": "o",
-            "uncertainties": "u",
-            "plot": "p",
-            "replay": "f",
-            "workload": "w",
-        },
-    ))
-
-    args = parser.parse_args(cli_args)
-    if args.config_file == "-":
-        config_file_data = yaml.safe_load(sys.stdin.read())
-    elif args.config_file:
-        config_file_data = yaml.safe_load(Path(args.config_file).read_text())
-    else:
-        config_file_data = {}
-
-    return model_validate_args(args, config_file_data)
-
-
-sim_config = parse_args()
-args = sim_config.get_legacy_args()
-args_dict = sim_config.get_legacy_args_dict()
-
-if __name__ == "__main__":
-    print(yaml_dump(sim_config.model_dump(mode="json")))

@@ -23,11 +23,12 @@ def test_main_network_withdata_run(system, system_config, system_file, random_id
     else:
         file_list = [DATA_PATH / system / system_file]
     for file in file_list:
-        assert os.path.isfile(file) or os.path.isdir(file), "File does not exist. does ./data exist or is RAPS_DATA_DIR set?"
+        assert os.path.isfile(file) or os.path.isdir(file), \
+            "File does not exist. does ./data exist or is RAPS_DATA_DIR set?"
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
         "-f", *file_list,

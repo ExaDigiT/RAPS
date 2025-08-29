@@ -14,7 +14,7 @@ Plotter
 """
 
 import itertools
-
+from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import MaxNLocator
@@ -95,7 +95,7 @@ class Plotter(BasePlotter):
         The path to save the plot.
     """
 
-    def __init__(self, xlabel='', ylabel='', title='', save_path='out.svg', uncertainties=False):
+    def __init__(self, xlabel='', ylabel='', title='', save_path: Path | str = 'out.svg', uncertainties=False):
         """
         Constructs all the necessary attributes for the Plotter object.
 

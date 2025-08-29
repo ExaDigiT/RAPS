@@ -576,7 +576,3 @@ class LayoutManager:
                         self.update_progress_bar(1)
         finally:
             os.system("stty sane")
-
-    def run_stepwise(self, jobs, timestep_start, timestep_end, time_delta):
-        """ Prepares the UI and returns a generator for the simulation """
-        return self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)

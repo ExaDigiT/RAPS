@@ -6,42 +6,13 @@ parsing parquet files, and generating job state information.
 The module defines a `Telemetry` class for managing telemetry data and several
 helper functions for data encryption and conversion between node name and index formats.
 """
-import re
 import sys
 import random
 import argparse
-# import itertools
+from pathlib import Path
 # import json
-import os.path
 from typing import Optional
 from types import ModuleType
-
-
-if __name__ == "__main__":
-    # from raps.sim_config import args, args_dict
-    parser = argparse.ArgumentParser(description='Telemetry data validator')
-    parser.add_argument('--jid', type=str, default='*', help='Replay job id')
-    parser.add_argument('-f', '--replay', nargs='+', type=str,
-                        help='Either: path/to/joblive path/to/jobprofile'
-                             ' -or- filename.npz (overrides --workload option)')
-    parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs', 'nodes'], help='Output plots')
-    parser.add_argument("--is-results-file", action='store_true', default=False, help='Output plots')
-    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False,
-                        # duplicate in workload!
-                        help="Print Gannt with nodes required as line thickness (default false)")
-    parser.add_argument('-t', '--time', type=str, default=None,
-                        help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
-    parser.add_argument('--system', type=str, default='frontier', help='System config to use')
-    choices = ['prescribed', 'poisson']
-    parser.add_argument('--arrival', default=choices[0], type=str, choices=choices,
-                        help=f"Modify arrival distribution ({choices[1]}) "
-                        f"or use the original submit times ({choices[0]})")
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-    parser.add_argument('-o', '--output', type=str, default=None, help='Store output in --output <arg> file.')
-    parser.add_argument("--live", action="store_true", help="Grab data from live system.")
-
-    args = parser.parse_args()
-    args_dict = vars(args)
 
 import importlib
 import numpy as np
@@ -57,8 +28,7 @@ from raps.plotting import (
     plot_nodes_gantt,
     plot_network_histogram
 )
-from raps.utils import next_arrival_byconfargs, create_casename, convert_to_time_unit
-# from raps.sim_config import args, args_dict
+from raps.utils import next_arrival_byconfargs, convert_to_time_unit
 
 
 class Telemetry:
@@ -69,18 +39,6 @@ class Telemetry:
         self.kwargs = kwargs
         self.system = kwargs.get('system')
         self.config = kwargs.get('config')
-        outname = kwargs.get('output')
-        if outname:
-            self.dirname = outname
-        elif kwargs.get("replay"):
-            # Try to extract date from given name to use as case directory
-            matched_date = re.search(r"\d{4}-\d{2}-\d{2}", kwargs['replay'][0])
-            if matched_date:
-                self.dirname = f"sim={matched_date.group(0)}"
-            else:
-                self.dirname = create_casename()
-        else:
-            self.dirname = create_casename()
 
         try:
             self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
@@ -119,8 +77,7 @@ class Telemetry:
             timestep_end = int(data['timestep_end'])
         else:
             timestep_end = np.inf
-            print(timestep_end)
-            exit()
+            raise ValueError("Invalid timestep_end in snapshot")
         if 'args' in data:
             args_from_file = data['args'].tolist()
         else:
@@ -254,7 +211,7 @@ class Telemetry:
         jobs = []
         trigger_custom_dataloader = False
         for i, file in enumerate(files):
-            file = os.path.normpath(file.lstrip('"').rstrip('"'))
+            file = str(Path(file))
             if hasattr(args, 'is_results_file') and args.is_results_file:
                 if file.endswith(".csv"):
                     jobs, timestep_start, timestep, _ = self.load_csv_results(file)
@@ -295,17 +252,12 @@ class Telemetry:
                 break
 
         if trigger_custom_dataloader:  # custom data loader
-            print(*args.replay)
             try:
                 jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
             except AssertionError:
                 raise ValueError("Forgot --is-results-file ?")
             timestep_start = min(timestep_start, timestep_start_from_data)
             timestep_end = max(timestep_end, timestep_end_from_data)
-            self.save_snapshot(jobs=jobs,
-                               timestep_start=timestep_start,
-                               timestep_end=timestep_end,
-                               args=args, filename=self.dirname)
         if args.time:
             timestep_end = timestep_start + convert_to_time_unit(args.time)
         elif not timestep_end:
@@ -314,7 +266,30 @@ class Telemetry:
         return jobs, timestep_start, timestep_end, args
 
 
-def run_telemetry():
+def run_telemetry_add_args(parser: argparse.ArgumentParser):
+    parser.add_argument('--jid', type=str, default='*', help='Replay job id')
+    parser.add_argument('-f', '--replay', nargs='+', type=str,
+                        help='Either: path/to/joblive path/to/jobprofile'
+                             ' -or- filename.npz (overrides --workload option)')
+    parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs', 'nodes'], help='Output plots')
+    parser.add_argument("--is-results-file", action='store_true', default=False, help='Output plots')
+    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False,
+                        # duplicate in workload!
+                        help="Print Gannt with nodes required as line thickness (default false)")
+    parser.add_argument('-t', '--time', type=str, default=None,
+                        help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
+    parser.add_argument('--system', type=str, default='frontier', help='System config to use')
+    choices = ['prescribed', 'poisson']
+    parser.add_argument('--arrival', default=choices[0], type=str, choices=choices,
+                        help=f"Modify arrival distribution ({choices[1]}) "
+                        f"or use the original submit times ({choices[0]})")
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('-o', '--output', type=str, default=None, help='Store output in --output <arg> file.')
+    parser.add_argument("--live", action="store_true", help="Grab data from live system.")
+
+
+def run_telemetry(args):
+    args_dict = vars(args)
     config = get_system_config(args.system).get_legacy()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
@@ -324,8 +299,10 @@ def run_telemetry():
         jobs, timestep_start, timestep_end = \
             td.load_jobs_times_args_from_live_system()
         if args.output:
-            td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
-                             timestep_end=timestep_end, args=args, filename=td.dirname)
+            td.save_snapshot(
+                jobs=jobs, timestep_start=timestep_start,
+                timestep_end=timestep_end, args=args, filename=args.output,
+            )
 
     elif args.replay:
         jobs, timestep_start, timestep_end, _ = \
@@ -334,8 +311,8 @@ def run_telemetry():
                                                config=config)
 
     else:
-        parser.print_help()
-        exit()
+        print("Either --live or --replay is required")
+        sys.exit(1)
 
     timesteps = timestep_end - timestep_start
 
@@ -416,14 +393,10 @@ def run_telemetry():
             plot_network_histogram(ax=ax, data=net_means)
     if args.output is not None:
         if args.output == "":
-            filename = f"{td.dirname}.svg"
+            filename = f"{args.output}.svg"
         else:
             filename = args.output
         plt.savefig(f'{filename}')
         print(f"Saved to: {filename}")
     else:
         plt.show()
-
-
-if __name__ == "__main__":
-    run_telemetry()

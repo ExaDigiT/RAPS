@@ -13,29 +13,26 @@ def flatten(dist):
     name, args = dist
     return [name, *args]
 
-def _build_args(dist_name, params):
-    return [dist_name, *params]
-
 
 jobdist_case = [
     ("weibull", ["--jobsize-weibull-shape", "0.75", "--jobsize-weibull-scale", "16"]),
     ("normal", ["--jobsize-normal-stddev", "100", "--jobsize-normal-mean", "16"]),
-    ("uniform",[]),
+    ("uniform", []),
 ]
 cpudist_case = [
     ("weibull", ["--cpuutil-weibull-shape", "0.75", "--cpuutil-weibull-scale", "16"]),
     ("normal", ["--cpuutil-normal-stddev", "100", "--cpuutil-normal-mean", "16"]),
-    ("uniform",[]),
+    ("uniform", []),
 ]
 gpudist_case = [
     ("weibull", ["--gpuutil-weibull-shape", "0.75", "--gpuutil-weibull-scale", "16"]),
     ("normal", ["--gpuutil-normal-stddev", "100", "--gpuutil-normal-mean", "16"]),
-    ("uniform",[]),
+    ("uniform", []),
 ]
 wtimedist_case = [
     ("weibull", ["--walltime-weibull-shape", "0.75", "--walltime-weibull-scale", "16"]),
     ("normal", ["--walltime-normal-stddev", "100", "--walltime-normal-mean", "16"]),
-    ("uniform",[]),
+    ("uniform", []),
 ]
 additional_params_cases = [
     "",  # nothing
@@ -47,16 +44,16 @@ additional_params_cases = [
 
 
 @pytest.mark.parametrize(
-    "jobdist", jobdist_case, ids=lambda d:d[0]
+    "jobdist", jobdist_case, ids=lambda d: d[0]
 )
 @pytest.mark.parametrize(
-    "cpudist", cpudist_case, ids=lambda d:d[0]
+    "cpudist", cpudist_case, ids=lambda d: d[0]
 )
 @pytest.mark.parametrize(
-    "gpudist", gpudist_case, ids=lambda d:d[0]
+    "gpudist", gpudist_case, ids=lambda d: d[0]
 )
 @pytest.mark.parametrize(
-    "wtimedist", wtimedist_case, ids=lambda d:d[0]
+    "wtimedist", wtimedist_case, ids=lambda d: d[0]
 )
 @pytest.mark.parametrize(
     "additional_params", additional_params_cases, ids=lambda p: (p or "none")
@@ -75,7 +72,7 @@ def test_workload_synthetic_run(
     # Build the command line.  Each distribution tuple expands into:
     #   dist_name, <flag1>, <value1>, ...
     cmd = [
-        "python", "raps/workload.py",
+        "python", "main.py", "workload",
         "--system", system,
         "-w", "synthetic",
         "--jobsize-distribution", *flatten(jobdist),
@@ -90,7 +87,7 @@ def test_workload_synthetic_run(
         cmd.extend(additional_params)
 
     cmd1 = ["python", "-c \"exit()\""]
-    result = subprocess.run(cmd1,capture_output=True,text=True,stdin=subprocess.DEVNULL)
+    result = subprocess.run(cmd1, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     try:
         result = subprocess.run(
             cmd,

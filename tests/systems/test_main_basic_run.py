@@ -11,13 +11,13 @@ pytestmark = [
 ]
 
 
-def test_main_basic_run(system, system_config,random_id):
+def test_main_basic_run(system, system_config, random_id):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
         "-o", random_id

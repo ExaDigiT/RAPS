@@ -1,298 +1,160 @@
 """
-Main driver for simulating the RAPS single-partition (homogeneous)
-system in the ExaDigiT digital twin. Supports synthetic workload
-generation or telemetry replay, dynamic power modeling (including
-conversion losses), and optional coupling to a thermo-fluids cooling
-model. Produces performance, utilization, and energy metrics, with
-optional plots and output files for analysis and validation.
+ExaDigiT Resource Allocator & Power Simulator (RAPS)
 """
-import json
-import numpy as np
-import random
-import pandas as pd
-import os
-import time
-import math
-#
+import yaml
+import argparse
+import sys
+from pathlib import Path
 from raps.helpers import check_python_version
-#
-from raps.system_config import get_system_config
-from raps.constants import OUTPUT_PATH, SEED
-from raps.cooling import ThermoFluidsModel
-from raps.ui import LayoutManager
-from raps.flops import FLOPSManager
-from raps.plotting import Plotter
-from raps.power import (
-    PowerManager,
-    compute_node_power,
-    compute_node_power_validate
-)
-from raps.power import (
-    compute_node_power_uncertainties,
-    compute_node_power_validate_uncertainties
-)
-from raps.engine import Engine
-from raps.telemetry import Telemetry
-from raps.workload import Workload
-from raps.account import Accounts
-from raps.weather import Weather
-from raps.utils import write_dict_to_file
-from raps.stats import (
-    get_engine_stats,
-    get_job_stats,
-    get_scheduler_stats,
-    get_network_stats,
-    print_formatted_report
-)
-
-from raps.sim_config import args, args_dict
+from raps.sim_config import SimConfig
+from raps.run_sim import run_sim, run_multi_part_sim
+from raps.workload import run_workload
+from raps.telemetry import run_telemetry, run_telemetry_add_args
+from raps.utils import pydantic_add_args, yaml_dump
+from pydantic_settings import SettingsConfigDict
 
 check_python_version()
 
 
+def read_sim_yaml(config_file: str):
+    if config_file == "-":
+        return yaml.safe_load(sys.stdin.read())
+    elif config_file:
+        return yaml.safe_load(Path(config_file).read_text())
+    else:
+        return {}
+
+
+CLI_CONFIG = SettingsConfigDict(
+    cli_implicit_flags=True,
+    cli_kebab_case=True,
+)
+
+
 def main():
-    if args.verbose or args.debug:
-        print(args)
-
-    config = get_system_config(args.system).get_legacy()
-
-    if args.seed:
-        random.seed(SEED)
-        np.random.seed(SEED)
-
-    if args.cooling:
-        cooling_model = ThermoFluidsModel(**config)
-        cooling_model.initialize()
-        args.layout = "layout2"
-
-        if args_dict['start']:
-            cooling_model.weather = Weather(args_dict['start'], config=config)
-    else:
-        cooling_model = None
-
-    if args.validate:
-        if args.uncertainties:
-            power_manager = PowerManager(compute_node_power_validate_uncertainties, **config)
-        else:
-            power_manager = PowerManager(compute_node_power_validate, **config)
-    else:
-        if args.uncertainties:
-            power_manager = PowerManager(compute_node_power_uncertainties, **config)
-        else:
-            power_manager = PowerManager(compute_node_power, **config)
-    args_dict['config'] = config
-    flops_manager = FLOPSManager(**args_dict)
-
-    if args.live and not args.replay:
-        assert args.time is not None, {"--time must be set, specifing how long we want to predict"}
-        td = Telemetry(**args_dict)
-        jobs, timestep_start, timestep_end = \
-            td.load_jobs_times_args_from_live_system()
-        if args.output is not None:
-            td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
-                             timestep_end=timestep_end, args=args, filename=td.dirname)
-
-    elif args.replay:
-
-        td = Telemetry(**args_dict)
-        jobs, timestep_start, timestep_end, args_from_file = \
-            td.load_jobs_times_args_from_files(files=args.replay, args=args, config=config)
-        # TODO: Merge args and args_from_files? see telemetry.py:97
-
-    else:  # Synthetic jobs
-        wl = Workload(args, config)
-        jobs = wl.generate_jobs()
-
-        if args.verbose:
-            for job in jobs:
-                print('jobid:', job.id, '\tlen(gpu_trace):',
-                      len(job.gpu_trace) if isinstance(job.gpu_trace, list)
-                      else job.gpu_trace, '\twall_time(s):',
-                      job.wall_time)
-            time.sleep(2)
-
-        timestep_start = 0
-        if hasattr(jobs[0], 'end_time'):
-            timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
-        else:
-            timestep_end = 88200  # 24 hours
-
-        td = Telemetry(**args_dict)
-        td.save_snapshot(jobs=jobs, timestep_start=timestep_start,
-                         timestep_end=timestep_end, args=args, filename=td.dirname)
-
-    if args.fastforward is not None:
-        timestep_start = timestep_start + args.fastforward
-
-    if args.time is not None:
-        timestep_end = timestep_start + args.time
-
-    if args.time_delta is not None:
-        time_delta = args.time_delta
-    else:
-        time_delta = 1
-
-    if args.continuous_job_generation:
-        continuous_workload = wl
-    else:
-        continuous_workload = None
-
-    sc = Engine(
-        power_manager=power_manager,
-        flops_manager=flops_manager,
-        cooling_model=cooling_model,
-        continuous_workload=continuous_workload,
-        jobs=jobs,
-        **args_dict,
+    parser = argparse.ArgumentParser(
+        description="""
+            ExaDigiT Resource Allocator & Power Simulator (RAPS)
+        """,
+        allow_abbrev=False,
     )
+    subparsers = parser.add_subparsers(required=True)
 
-    DIR_NAME = td.dirname
-    OPATH = OUTPUT_PATH / DIR_NAME
-    print("Output directory is: ", OPATH)
-    sc.opath = OPATH
+    # Shortcut for common sim args
+    sim_shortcuts = {
+        "partitions": "x",
+        "cooling": "c",
+        "simulate-network": "net",
+        "fastforward": "ff",
+        "time": "t",
+        "debug": "d",
+        "numjobs": "n",
+        "verbose": "v",
+        "output": "o",
+        "uncertainties": "u",
+        "plot": "p",
+        "replay": "f",
+        "workload": "w",
+    }
 
-    if args.accounts:
-        job_accounts = Accounts(jobs)
-        if args.accounts_json:
-            loaded_accounts = Accounts.from_json_filename(args.accounts_json)
-            accounts = Accounts.merge(loaded_accounts, job_accounts)
-        else:
-            accounts = job_accounts
-        sc.accounts = accounts
+    # ==== raps run ====
+    cmd_run = subparsers.add_parser("run", description="""
+        Run single-partition (homogeneous) systems. Supports synthetic workload generation or
+        telemetry replay, dynamic power modeling (including conversion losses), and optional
+        coupling to a thermo-fluids cooling model. Produces performance, utilization, and
+        energy metrics, with optional plots and output files for analysis and validation.
+    """)
+    cmd_run.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    cmd_run_validate = pydantic_add_args(cmd_run, SimConfig, model_config={
+        **CLI_CONFIG,
+        "cli_shortcuts": sim_shortcuts,
+    })
 
-    if args.plot or args.output is not None:
-        try:
-            os.makedirs(OPATH)
-        except OSError as error:
-            print(f"Error creating directory: {error}")
+    def cmd_run_func(args):
+        sim_config = cmd_run_validate(args, read_sim_yaml(args.config_file))
+        run_sim(sim_config)
+    cmd_run.set_defaults(func=cmd_run_func)
 
-    if args.verbose:
-        print(jobs)
+    # ==== raps run-multi-part ====
+    # It might make sense to combine these into a single entrypoint. Though the multi-part run
+    # #doesn't support UI or the same output options.
+    cmd_run_multi_part = subparsers.add_parser("run-multi-part", description="""
+        Simulates multi-partition (heterogeneous) systems. Supports replaying telemetry or
+        generating synthetic workloads across CPU-only, GPU, and mixed partitions. Initializes
+        per-partition power, FLOPS, and scheduling models, then advances simulations in lockstep.
+        Outputs per-partition performance, utilization, and energy statistics for systems such as
+        MIT Supercloud, Setonix, Adastra, and LUMI.
+    """)
+    cmd_run_multi_part.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    cmd_run_multi_part_validate = pydantic_add_args(cmd_run_multi_part, SimConfig, model_config={
+        **CLI_CONFIG,
+        "cli_shortcuts": sim_shortcuts,
+    })
 
-    total_timesteps = timestep_end - timestep_start
+    def cmd_run_multi_part_func(args):
+        sim_config = cmd_run_multi_part_validate(args, read_sim_yaml(args.config_file))
+        run_multi_part_sim(sim_config)
+    cmd_run_multi_part.set_defaults(func=cmd_run_multi_part_func)
 
-    downscale = args.downscale
-    downscale_str = ""if downscale == 1 else f"/{downscale}"
-    print(f"Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str}"
-          f" seconds from {timestep_start} to {timestep_end}.")
-    print(f"Simulation time delta: {time_delta}{downscale_str} s,"
-          f"Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.")
-    layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug,
-                                   total_timesteps=total_timesteps,
-                                   args_dict=args_dict, **config)
-    layout_manager.run(jobs, timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta)
+    # ==== raps show ====
+    cmd_show = subparsers.add_parser("show", description="""
+        Outputs the given CLI args as a YAML config file that can be used to re-run the same
+        simulation.
+    """)
+    cmd_show.add_argument("config_file", nargs="?", default=None, help="""
+        Input YAML sim config file. Can be used to slightly modify an existing sim config.
+    """)
+    cmd_show.add_argument("--show-defaults", default=False, help="""
+        If true, include defaults in the output YAML
+    """)
+    cmd_show_validate = pydantic_add_args(cmd_show, SimConfig, model_config={
+        **CLI_CONFIG,
+        "cli_shortcuts": sim_shortcuts,
+    })
 
-    engine_stats = get_engine_stats(sc)
-    job_stats = get_job_stats(sc)
-    scheduler_stats = get_scheduler_stats(sc)
-    if sc.simulate_network:
-        network_stats = get_network_stats(sc)
-    else:
-        network_stats = None
+    def cmd_show_func(args):
+        sim_config = cmd_show_validate(args, read_sim_yaml(args.config_file))
+        sim_config = sim_config.model_dump(mode="json",
+                                           exclude_defaults=not args.show_defaults)
+        print(yaml_dump(sim_config), end="")
+    cmd_show.set_defaults(func=cmd_show_func)
 
-    print_formatted_report(engine_stats=engine_stats,
-                           job_stats=job_stats,
-                           scheduler_stats=scheduler_stats,
-                           network_stats=network_stats
-                           )
+    # ==== raps workload ====
+    # TODO: Separate the arguments for this command
+    cmd_workload = subparsers.add_parser("workload", description="""
+        Saves workload as a snapshot.
+    """)
+    cmd_workload.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    cmd_workload_validate = pydantic_add_args(cmd_workload, SimConfig, model_config={
+        **CLI_CONFIG,
+        "cli_shortcuts": sim_shortcuts,
+    })
 
-    if downscale_str:
-        downscale_str = "1" + downscale_str
+    def cmd_workload_func(args):
+        sim_config = cmd_workload_validate(args, read_sim_yaml(args.config_file))
+        run_workload(sim_config)
+    cmd_show.set_defaults(func=cmd_workload_func)
 
-    if args.plot:
-        if 'power' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power (kW)', 'Power History',
-                         OPATH / f'power.{args.imtype}',
-                         uncertainties=args.uncertainties)
-            x, y = zip(*power_manager.history)
-            pl.plot_history(x, y)
+    # ==== raps telemetry ====
+    cmd_telemetry = subparsers.add_parser("telemetry", description="""
+        Telemetry data validator
+    """)
+    run_telemetry_add_args(cmd_telemetry)
+    cmd_telemetry.set_defaults(func=run_telemetry)
 
-        if 'util' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'System Utilization (%)',
-                         'System Utilization History', OPATH / f'util.{args.imtype}')
-            x, y = zip(*sc.sys_util_history)
-            pl.plot_history(x, y)
+    # TODO: move telemetry and other misc scripts into here
 
-        if 'loss' in args.plot:
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (kW)', 'Power Loss History',
-                         OPATH / f'loss.{args.imtype}',
-                         uncertainties=args.uncertainties)
-            x, y = zip(*power_manager.loss_history)
-            pl.plot_history(x, y)
-
-            pl = Plotter(f"Time ({downscale_str}s)", 'Power Losses (%)', 'Power Loss History',
-                         OPATH / f'loss_pct.{args.imtype}',
-                         uncertainties=args.uncertainties)
-            x, y = zip(*power_manager.loss_history_percentage)
-            pl.plot_history(x, y)
-
-        if 'pue' in args.plot:
-            if cooling_model:
-                ylabel = 'pue'
-                title = 'FMU ' + ylabel + 'History'
-                pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / f'pue.{args.imtype}',
-                             uncertainties=args.uncertainties)
-                df = pd.DataFrame(cooling_model.fmu_history)
-                df.to_parquet('cooling_model.parquet', engine='pyarrow')
-                pl.plot_history(df['time'], df[ylabel])
-            else:
-                print('Cooling model not enabled... skipping output of plot')
-
-        if 'temp' in args.plot:
-            if cooling_model:
-                ylabel = 'Tr_pri_Out[1]'
-                title = 'FMU ' + ylabel + 'History'
-                pl = Plotter(f"Time ({downscale_str}s)", ylabel, title, OPATH / 'temp.svg')
-                df = pd.DataFrame(cooling_model.fmu_history)
-                df.to_parquet('cooling_model.parquet', engine='pyarrow')
-                pl.plot_compare(df['time'], df[ylabel])
-            else:
-                print('Cooling model not enabled... skipping output of plot')
-
-    if args.output is not None:
-
-        if args.uncertainties:
-            # Parquet cannot handle annotated ufloat format AFAIK
-            print('Data dump not implemented using uncertainties!')
-        else:
-            if cooling_model:
-                df = pd.DataFrame(cooling_model.fmu_history)
-                df.to_parquet(OPATH / 'cooling_model.parquet', engine='pyarrow')
-
-            df = pd.DataFrame(power_manager.history)
-            df.to_parquet(OPATH / 'power_history.parquet', engine='pyarrow')
-
-            df = pd.DataFrame(power_manager.loss_history)
-            df.to_parquet(OPATH / 'loss_history.parquet', engine='pyarrow')
-
-            df = pd.DataFrame(sc.sys_util_history)
-            df.to_parquet(OPATH / 'util.parquet', engine='pyarrow')
-
-            # Schedule history
-            job_history = pd.DataFrame(sc.get_job_history_dict())
-            job_history.to_csv(OPATH / "job_history.csv", index=False)
-
-            scheduler_running_history = pd.DataFrame(sc.get_scheduler_running_history())
-            scheduler_running_history.to_csv(OPATH / "running_history.csv", index=False)
-            scheduler_queue_history = pd.DataFrame(sc.get_scheduler_running_history())
-            scheduler_queue_history.to_csv(OPATH / "queue_history.csv", index=False)
-
-            try:
-                with open(OPATH / 'stats.out', 'w') as f:
-                    json.dump(engine_stats, f, indent=4)
-                    json.dump(job_stats, f, indent=4)
-            except TypeError:  # Is this the correct error code?
-                write_dict_to_file(engine_stats, OPATH / 'stats.out')
-                write_dict_to_file(job_stats, OPATH / 'stats.out')
-
-            if args.accounts:
-                try:
-                    with open(OPATH / 'accounts.json', 'w') as f:
-                        json_string = json.dumps(sc.accounts.to_dict())
-                        f.write(json_string)
-                except TypeError:
-                    write_dict_to_file(sc.accounts.to_dict(), OPATH / 'accounts.json')
-        print("Output directory is: ", OPATH)  # If output is enabled, the user wants this information as last output
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":

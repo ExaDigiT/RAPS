@@ -21,7 +21,7 @@ def test_main_network_run(system, system_config, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
         "--net",
