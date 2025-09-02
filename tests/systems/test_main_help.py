@@ -1,6 +1,5 @@
 import os
 import subprocess
-import gc
 import pytest
 from tests.util import PROJECT_ROOT
 
@@ -11,7 +10,7 @@ pytestmark = [
 ]
 
 
-def test_main_help(system, system_config, random_id):
+def test_main_help(system, system_config):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
@@ -23,6 +22,3 @@ def test_main_help(system, system_config, random_id):
 
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     assert "usage:" in result.stdout
-
-    del result
-    gc.collect()

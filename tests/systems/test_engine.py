@@ -1,4 +1,3 @@
-import gc
 import pytest
 from raps.engine import Engine
 from raps.sim_config import SimConfig
@@ -15,7 +14,7 @@ pytestmark = [
 ]
 
 
-def test_engine(system, system_config):
+def test_engine(system, system_config, sim_output):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
@@ -35,5 +34,3 @@ def test_engine(system, system_config):
 
     assert engine_stats['time simulated'] == '0:02:00'
     # TODO: More specific tests of values
-
-    gc.collect()
