@@ -20,7 +20,7 @@ def test_telemetry_main_withdata_run(system, system_config, system_files, sim_ou
     result = subprocess.run([
         "python", "main.py", "telemetry",
         "--system", system,
-        "-f", *system_files,
+        "-f", ','.join(system_files),
         "-o", sim_output,
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"

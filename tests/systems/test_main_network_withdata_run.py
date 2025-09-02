@@ -22,7 +22,7 @@ def test_main_network_withdata_run(system, system_config, system_files, sim_outp
         "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
-        "-f", *system_files,
+        "-f", ','.join(system_files),
         "--net",
         "-o", sim_output
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)

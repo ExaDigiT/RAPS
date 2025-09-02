@@ -6,9 +6,9 @@ parsing parquet files, and generating job state information.
 The module defines a `Telemetry` class for managing telemetry data and several
 helper functions for data encryption and conversion between node name and index formats.
 """
+from typing import Literal
 import sys
 import random
-import argparse
 from pathlib import Path
 # import json
 from typing import Optional
@@ -18,6 +18,7 @@ import importlib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pydantic import BaseModel
 # from rich.progress import track
 
 from raps.system_config import get_system_config
@@ -28,7 +29,9 @@ from raps.plotting import (
     plot_nodes_gantt,
     plot_network_histogram
 )
-from raps.utils import next_arrival_byconfargs, convert_to_time_unit
+from raps.utils import (
+    next_arrival_byconfargs, convert_to_time_unit, pydantic_add_args, SubParsers, ExpandedPath,
+)
 
 
 class Telemetry:
@@ -266,30 +269,50 @@ class Telemetry:
         return jobs, timestep_start, timestep_end, args
 
 
-def run_telemetry_add_args(parser: argparse.ArgumentParser):
-    parser.add_argument('--jid', type=str, default='*', help='Replay job id')
-    parser.add_argument('-f', '--replay', nargs='+', type=str,
-                        help='Either: path/to/joblive path/to/jobprofile'
-                             ' -or- filename.npz (overrides --workload option)')
-    parser.add_argument('-p', '--plot', type=str, default=None, choices=['jobs', 'nodes'], help='Output plots')
-    parser.add_argument("--is-results-file", action='store_true', default=False, help='Output plots')
-    parser.add_argument("--gantt-nodes", default=False, action='store_true', required=False,
-                        # duplicate in workload!
-                        help="Print Gannt with nodes required as line thickness (default false)")
-    parser.add_argument('-t', '--time', type=str, default=None,
-                        help='Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d')
-    parser.add_argument('--system', type=str, default='frontier', help='System config to use')
-    choices = ['prescribed', 'poisson']
-    parser.add_argument('--arrival', default=choices[0], type=str, choices=choices,
-                        help=f"Modify arrival distribution ({choices[1]}) "
-                        f"or use the original submit times ({choices[0]})")
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-    parser.add_argument('-o', '--output', type=str, default=None, help='Store output in --output <arg> file.')
-    parser.add_argument("--live", action="store_true", help="Grab data from live system.")
+class TelemetryArgs(BaseModel):
+    jid: str = '*'
+    """ Replay job id """
+    replay: list[ExpandedPath] | None = None
+    """ path/to/joblive path/to/jobprofile  -or- filename.npz (overrides --workload option) """
+    plot: list[Literal["jobs", "nodes"]] | None = None
+    """ Output plots """
+    is_results_file: bool = False
+    gantt_nodes: bool = False
+    """ Print Gannt with nodes required as line thickness (default false) """
+    time: str | None = None
+    """ Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d """
+    system: str = 'frontier'
+    """ System config to use """
+    arrival: Literal['prescribed', 'poisson'] = "prescribed"
+    """ Modify arrival distribution ({choices[1]}) or use the original submit times """
+    verbose: bool = False
+    output: str | None = None
+    """ Store output in --output <arg> file. """
+    live: bool = False
+    """ Grab data from live system. """
 
 
-def run_telemetry(args):
-    args_dict = vars(args)
+shortcuts = {
+    "replay": "f",
+    "plot": "p",
+    "time": "t",
+    "verbose": "v",
+    "output": "o",
+}
+
+
+def run_telemetry_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("telemetry", description="""
+        Telemetry data validator
+    """)
+    model_validate = pydantic_add_args(parser, TelemetryArgs, {
+        "cli_shortcuts": shortcuts,
+    })
+    parser.set_defaults(impl=lambda args: run_telemetry(model_validate(args, {})))
+
+
+def run_telemetry(args: TelemetryArgs):
+    args_dict = args.model_dump()
     config = get_system_config(args.system).get_legacy()
     args_dict['config'] = config
     td = Telemetry(**args_dict)
