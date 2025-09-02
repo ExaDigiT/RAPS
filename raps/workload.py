@@ -38,7 +38,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
-from raps.utils import create_file_indexed
+from raps.utils import create_file_indexed, SubParsers, pydantic_add_args
 from raps.sim_config import SimConfig
 
 
@@ -947,6 +947,22 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
     ax_b.yaxis.set_inverted(True)
 
     plt.show()
+
+
+def run_workload_add_parser(subparsers: SubParsers):
+    from raps.run_sim import shortcuts
+    # TODO: Separate the arguments for this command
+    parser = subparsers.add_parser("workload", description="""
+        Saves workload as a snapshot.
+    """)
+    parser.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+        "cli_shortcuts": shortcuts,
+    })
+    parser.set_defaults(impl=lambda args: run_workload(model_validate(args, {})))
 
 
 def run_workload(sim_config: SimConfig):

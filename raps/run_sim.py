@@ -6,11 +6,13 @@ These functions just handle rendering the terminal UI and outputting results to 
 import json
 import pandas as pd
 import sys
+import yaml
+from pathlib import Path
 from raps.ui import LayoutManager
 from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
-from raps.utils import write_dict_to_file
+from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, yaml_dump
 from raps.stats import (
     get_engine_stats,
     get_job_stats,
@@ -20,6 +22,51 @@ from raps.stats import (
 )
 
 from raps.sim_config import SimConfig
+
+
+def read_yaml(config_file: str):
+    if config_file == "-":
+        return yaml.safe_load(sys.stdin.read())
+    elif config_file:
+        return yaml.safe_load(Path(config_file).read_text())
+    else:
+        return {}
+
+
+shortcuts = {
+    "partitions": "x",
+    "cooling": "c",
+    "simulate-network": "net",
+    "fastforward": "ff",
+    "time": "t",
+    "debug": "d",
+    "numjobs": "n",
+    "verbose": "v",
+    "output": "o",
+    "uncertainties": "u",
+    "plot": "p",
+    "replay": "f",
+    "workload": "w",
+}
+
+
+def run_sim_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("run", description="""
+        Run single-partition (homogeneous) systems. Supports synthetic workload generation or
+        telemetry replay, dynamic power modeling (including conversion losses), and optional
+        coupling to a thermo-fluids cooling model. Produces performance, utilization, and
+        energy metrics, with optional plots and output files for analysis and validation.
+    """)
+    parser.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+        "cli_shortcuts": shortcuts,
+    })
+    parser.set_defaults(
+        impl=lambda args: run_sim(model_validate(args, read_yaml(args.config_file)))
+    )
 
 
 def run_sim(sim_config: SimConfig):
@@ -174,6 +221,26 @@ def run_sim(sim_config: SimConfig):
         print("Output directory is: ", out)  # If output is enabled, the user wants this information as last output
 
 
+def run_multi_part_sim_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("run-multi-part", description="""
+        Simulates multi-partition (heterogeneous) systems. Supports replaying telemetry or
+        generating synthetic workloads across CPU-only, GPU, and mixed partitions. Initializes
+        per-partition power, FLOPS, and scheduling models, then advances simulations in lockstep.
+        Outputs per-partition performance, utilization, and energy statistics for systems such as
+        MIT Supercloud, Setonix, Adastra, and LUMI.
+    """)
+    parser.add_argument("config_file", nargs="?", default=None, help="""
+        YAML sim config file, can be used to configure an experiment instead of using CLI
+        flags. Pass "-" to read from stdin.
+    """)
+    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+        "cli_shortcuts": shortcuts,
+    })
+    parser.set_defaults(
+        impl=lambda args: run_multi_part_sim(model_validate(args, read_yaml(args.config_file)))
+    )
+
+
 def run_multi_part_sim(sim_config: SimConfig):
     multi_engine, jobs, timestep_start, timestep_end, time_delta = MultiPartEngine.from_sim_config(sim_config)
 
@@ -234,3 +301,30 @@ def run_multi_part_sim(sim_config: SimConfig):
             scheduler_stats=scheduler_stats,
             network_stats=network_stats,
         )
+
+
+def show_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("show", description="""
+        Outputs the given CLI args as a YAML config file that can be used to re-run the same
+        simulation.
+    """)
+    parser.add_argument("config_file", nargs="?", default=None, help="""
+        Input YAML sim config file. Can be used to slightly modify an existing sim config.
+    """)
+    parser.add_argument("--show-defaults", default=False, help="""
+        If true, include defaults in the output YAML
+    """)
+    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+        "cli_shortcuts": shortcuts,
+    })
+
+    def impl(args):
+        sim_config = model_validate(args, read_yaml(args.config_file))
+        show(sim_config, show_defaults=args.show_defaults)
+
+    parser.set_defaults(impl=impl)
+
+
+def show(sim_config: SimConfig, show_defaults=False):
+    data = sim_config.model_dump(mode="json", exclude_defaults=not show_defaults)
+    print(yaml_dump(data), end="")

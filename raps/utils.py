@@ -20,7 +20,7 @@ import uuid
 import json
 import argparse
 from pathlib import Path
-from typing import Annotated as A, TypeVar, Callable
+from typing import Annotated as A, TypeVar, Callable, TypeAlias
 from pydantic import BaseModel, TypeAdapter, AfterValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
 import yaml
@@ -650,6 +650,8 @@ def pydantic_add_args(
     some hacks to apply the args manually.
     """
     model_config_dict = SettingsConfigDict({
+        "cli_implicit_flags": True,
+        "cli_kebab_case": True,
         **(model_config or {}),
         "cli_parse_args": False,  # Don't automatically parse args
     })
@@ -674,6 +676,10 @@ def pydantic_add_args(
         # Recreate model so we don't return the SettingsModel subclass
         return model_cls.model_validate(model.model_dump())
     return model_validate_args
+
+
+SubParsers: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
+""" Alias for the result of argparse parser.add_subparsers """
 
 
 def yaml_dump(data):

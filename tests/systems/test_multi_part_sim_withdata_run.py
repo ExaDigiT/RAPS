@@ -23,6 +23,6 @@ def test_multi_part_sim_withdata_run(system, system_config, system_files):
         "python", "main.py", "run-multi-part",
         "--time", "1h",
         "-x", f"{system}/*",
-        "-f", *system_files,
+        "-f", ','.join(system_files),
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
