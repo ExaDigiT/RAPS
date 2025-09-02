@@ -158,7 +158,7 @@ class SimConfig(BaseModel):
 
     # Synthetic workloads
     scheduler: Literal[
-        "default", "scheduleflow", "nrel", "anl", "flux", "experimental", "multitenant",
+        "default", "scheduleflow", "fastsim", "anl", "flux", "experimental", "multitenant",
     ] = "default"
     """ Scheduler name """
     policy: PolicyType | None = None

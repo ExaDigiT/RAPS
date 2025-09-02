@@ -24,6 +24,7 @@ from raps.utils import summarize_ranges, convert_seconds_to_hhmmss, convert_seco
 from raps.constants import ELLIPSES
 from raps.engine import TickData, Engine
 
+MAX_ROWS = 30
 
 class LayoutManager:
     def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, args_dict=None, **config):
@@ -153,7 +154,7 @@ class LayoutManager:
             table.add_column(col, justify="center")
 
         # Add data rows
-        for job in jobs:
+        for job in jobs[:MAX_ROWS]:
             # Number of requested nodes as a string
             # n_nodes = str(job.nodes_required)  # Unused
 
@@ -271,7 +272,7 @@ class LayoutManager:
         else:
             # For the curious: If the simulation time in seconds is large than
             # unix timestamp for Jan 2000 this is a unix timestamp,
-            time_str = f"{datetime.fromtimestamp(time_in_s).strftime("%Y-%m-%d %H:%M")}"
+            time_str = f"{datetime.fromtimestamp(time_in_s).strftime('%Y-%m-%d %H:%M')}"
         if timestep_start != 0:  # append time simulated
             time_str += f"\nSim: {convert_seconds_to_hhmm(time_in_s - timestep_start)}"
 
