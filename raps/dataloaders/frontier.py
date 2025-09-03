@@ -10,12 +10,13 @@
     python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 """
 import time
+from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt
+from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt, DataLoaderResult
 
 
 def aging_boost(nnodes):
@@ -325,7 +326,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
             job = Job(job_info)
             jobs.append(job)
-    return jobs, telemetry_start, telemetry_end
+    return DataLoaderResult(
+        jobs = jobs,
+        telemetry_start = telemetry_start,
+        telemetry_end = telemetry_end,
+        start_date = telemetry_start_timestamp,
+    )
 
 
 def load_live_data(**kwargs):
@@ -537,7 +543,12 @@ def load_live_data(**kwargs):
         job = Job(job_info)
         jobs.append(job)
 
-    return jobs, telemetry_start, telemetry_end
+    return DataLoaderResult(
+        jobs = jobs,
+        telemetry_start = telemetry_start,
+        telemetry_end = telemetry_end,
+        start_date = datetime.fromtimestamp(telemetry_start, timezone.utc),
+    )
 
 
 def xname_to_index(xname: str, config: dict):

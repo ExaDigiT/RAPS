@@ -21,7 +21,7 @@ import json
 import argparse
 from pathlib import Path
 from typing import Annotated as A, TypeVar, Callable, TypeAlias
-from pydantic import BaseModel, TypeAdapter, AfterValidator
+from pydantic import BaseModel, TypeAdapter, AfterValidator, ConfigDict, AwareDatetime
 from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
 import yaml
 from raps.job import Job
@@ -633,6 +633,9 @@ ExpandedPath = A[Path, AfterValidator(lambda v: Path(v).expanduser().resolve())]
 """ Type that that expands ~ and environment variables in a path string """
 
 
+SmartTimedelta = A[timedelta, AfterValidator(parse_td)]
+""" Can be passed as ISO 8601 format like PT5M, or a string like 9s, or a number of seconds """
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -705,4 +708,96 @@ def yaml_dump(data):
         sort_keys=False,
         indent=2,
         allow_unicode=True,
+    )
+
+
+class DataLoaderResult(BaseModel):
+    """
+    Result of a dataloader load_data() function.
+
+    jobs:
+        The list of parsed jobs.
+
+    telemetry_start
+        the first timestep in which the simulation be executed.
+
+    telemetry_end
+        the last timestep in which the simulation can be executed.
+
+    start_date
+        The actual date that telemetry_start represents.
+    ----
+    Explanation regarding times:
+
+    The loaded dataframe contains
+    a first timestamp with associated data
+    and a last timestamp with associated data
+
+    These form the maximum extent of the simuluation time.
+    telemetry_start and telemetry_end.
+
+            [                                    ]
+            ^                                    ^
+            telemetry_start          telemetry_end
+
+    These values form the maximum extent of the simulation.
+    telemetry_start is typically 0, but any int can be used as long as all the times in the
+    jobs are relative to the telemetry_start.
+
+    Next is the actual extent of the simulation:
+
+            [                                   ]
+                ^                   ^
+                simulation_start    simulation_end
+
+    The simulation will start at telemetry_start by default, but the user can specify an explicit
+    simulation start time.
+
+    Additionally, jobs can have started before telemetry_start,
+    And can have a recorded ending after simulation_end,
+            [                                   ]
+    ^                                                ^
+    first_start_timestamp           last_end_timestamp
+
+    This means that the time between first_start_timestamp and telemetry_start
+    has no associated values in the traces!
+    The missing values after simulation_end can be ignored, as the simulatuion
+    will have stoped before.
+
+    However, the times before telemetry_start have to be padded to generate
+    correct offsets within their data!
+    Within the simulation a job's current time is specified as the difference
+    between its start_time and the current timestep of the simulation.
+
+    With this each job's
+    - submit_time
+    - time_limit
+    - start_time  # Maybe Null
+    - end_time  # Maybe Null
+    - expected_run_time (end_time - start_time)  # Maybe Null
+    - current_run_time (How long did the job run already, when loading)  # Maybe zero
+    - trace_time (lenght of each trace in seconds)  # Maybe Null
+    - trace_start_time (time offset in seconds after which the trace starts)  # Maybe Null
+    - trace_end_time (time offset in seconds after which the trace ends)  # Maybe Null
+    - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta) # Maybe Null
+    has to be set for use within the simulation
+
+    The values trace_start_time are similar to the telemetry_start and
+    telemetry_stop but may different due to missing data, for each job.
+
+    The returned values are these:
+        - The list of parsed jobs. (as a Job object)
+        - telemetry_start: int (in seconds)
+        - telemetry_end: int (in seconds)
+        - start_date: datetime
+    """
+    jobs: list[Job]
+    telemetry_start: int
+    telemetry_end: int
+    # TODO: It might make more sense to make start_timestep/end_timestep always unix time, then we
+    # wouldn't need this extra start_date field.
+    start_date: AwareDatetime
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed = True,
     )

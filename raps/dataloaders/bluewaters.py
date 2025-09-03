@@ -32,7 +32,9 @@ import math
 import re
 import pandas as pd
 from pathlib import Path
+from datetime import datetime, timezone
 from raps.telemetry import Job, job_dict
+from raps.utils import DataLoaderResult
 
 
 def throughput_traces(total_tx, total_rx, intervals):
@@ -325,7 +327,11 @@ def load_data(local_dataset_path, **kwargs):
         j.trace_end_time -= t0
 
     # pprint(jobs)
-    simulation_start = 0
-    simulation_end = max((j.end_time for j in jobs), default=0)
+    telemetry_start = 0
+    telemetry_end = max((j.end_time for j in jobs), default=0)
 
-    return jobs, simulation_start, simulation_end
+    return DataLoaderResult(
+        jobs=jobs,
+        telemetry_start=telemetry_start, telemetry_end=telemetry_end,
+        start_date=datetime.fromtimestamp(t0, timezone.utc),
+    )

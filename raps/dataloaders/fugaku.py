@@ -17,6 +17,7 @@
 import pandas as pd
 from tqdm import tqdm
 from ..job import job_dict, Job
+from ..utils import DataLoaderResult
 
 
 def load_data(path, **kwargs):
@@ -167,7 +168,11 @@ def load_data_from_df(df, **kwargs):
         job = Job(job_info)
         job_list.append(job)
 
-    return job_list, telemetry_start, telemetry_end
+    return DataLoaderResult(
+        jobs=job_list,
+        telemetry_start = telemetry_start, telemetry_end = telemetry_end,
+        start_date = telemetry_start_timestamp,
+    )
 
 
 def node_index_to_name(index: int, config: dict):

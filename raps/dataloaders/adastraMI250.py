@@ -24,7 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import next_arrival_byconfkwargs
+from ..utils import next_arrival_byconfkwargs, DataLoaderResult
 
 
 def load_data(jobs_path, **kwargs):
@@ -205,7 +205,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             count_jobs_notOK += 1
 
     print("jobs not added: ", count_jobs_notOK)
-    return jobs, telemetry_start_time, telemetry_end_time
+    return DataLoaderResult(
+        jobs = jobs,
+        telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
+        start_date=telemetry_start_timestamp,
+    )
 
 
 def xname_to_index(xname: str, config: dict):
