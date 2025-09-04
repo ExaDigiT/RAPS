@@ -13,14 +13,14 @@ from pathlib import Path
 # import json
 from typing import Optional
 from types import ModuleType
-
 import importlib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 # from rich.progress import track
 
+from raps.sim_config import SimConfig
 from raps.system_config import get_system_config
 from raps.job import Job, job_dict
 import matplotlib.pyplot as plt
@@ -31,7 +31,46 @@ from raps.plotting import (
 )
 from raps.utils import (
     next_arrival_byconfargs, convert_to_time_unit, pydantic_add_args, SubParsers, ExpandedPath,
+    DataLoaderResult, yaml_dump,
 )
+
+
+# TODO: should reuse this model in SimConfig
+class TelemetryArgs(BaseModel):
+    jid: str = '*'
+    """ Replay job id """
+    replay: list[ExpandedPath] | None = None
+    """ path/to/joblive path/to/jobprofile  -or- filename.npz (overrides --workload option) """
+    plot: list[Literal["jobs", "nodes"]] | None = None
+    """ Output plots """
+    gantt_nodes: bool = False
+    """ Print Gannt with nodes required as line thickness (default false) """
+    time: str | None = None
+    """ Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d """
+    system: str = 'frontier'
+    """ System config to use """
+    arrival: Literal['prescribed', 'poisson'] = "prescribed"
+    """ Modify arrival distribution ({choices[1]}) or use the original submit times """
+    verbose: bool = False
+    output: str | None = None
+    """ Store output in --output <arg> file. """
+    live: bool = False
+    """ Grab data from live system. """
+
+    @model_validator(mode="after")
+    def _validate_after(self):
+        if not self.live and not self.replay:
+            raise ValueError("Either --live or --replay is required")
+        return self
+
+
+shortcuts = {
+    "replay": "f",
+    "plot": "p",
+    "time": "t",
+    "verbose": "v",
+    "output": "o",
+}
 
 
 class Telemetry:
@@ -49,16 +88,18 @@ class Telemetry:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
 
-    def save_snapshot(self, *, jobs: list, timestep_start: int, timestep_end: int, args: dict, filename: str):
+    def save_snapshot(self, *, dest: str, result: DataLoaderResult, args: SimConfig|TelemetryArgs):
         """Saves a snapshot of the jobs to a compressed file. """
-        list_of_job_dicts = []
-        for job in jobs:
-            list_of_job_dicts.append(job.__dict__)
-        np.savez_compressed(filename, jobs=list_of_job_dicts, timestep_start=timestep_start,
-                            timestep_end=timestep_end, args=args)
+        np.savez_compressed(dest,
+            jobs=[vars(j) for j in result.jobs],
+            telemetry_start=result.telemetry_start,
+            telemetry_end=result.telemetry_end,
+            start_date=result.start_date,
+            args=args,
+        )
 
-    def load_snapshot(self, snapshot: str, downscale=1) -> list:
-        """Reads a snapshot from a compressed file and return 4 values: joblist, timestep_start, timestep_end and args.
+    def load_snapshot(self, snapshot: str | Path) -> tuple[DataLoaderResult, SimConfig|TelemetryArgs]:
+        """Reads a snapshot from a compressed file
 
         :param str snapshot: Filename
         :returns:
@@ -68,75 +109,19 @@ class Telemetry:
             - args, which were used to generate the loaded snapshot
         """
         data = np.load(snapshot, allow_pickle=True, mmap_mode='r')
-        jobs = []
-        list_of_job_dicts = data['jobs'].tolist()
-        for job_info in list_of_job_dicts:
-            jobs.append(Job(job_info))
-        if 'timestep_start' in data:
-            timestep_start = int(data['timestep_start'])
-        else:
-            timestep_start = 0
-        if 'timestep_end' in data:
-            timestep_end = int(data['timestep_end'])
-        else:
-            timestep_end = np.inf
-            raise ValueError("Invalid timestep_end in snapshot")
-        if 'args' in data:
-            args_from_file = data['args'].tolist()
-        else:
-            args_from_file = None
+        jobs = [Job(j) for j in data['jobs']]
+        telemetry_start = data['telemetry_start'].item()
+        telemetry_end = data['telemetry_end'].item()
+        start_date = data['start_date'].item()
+        args = data['args'].item()
 
-        return jobs, \
-            timestep_start, \
-            timestep_end, \
-            args_from_file
+        result = DataLoaderResult(
+            jobs=jobs,
+            telemetry_start=telemetry_start, telemetry_end=telemetry_end,
+            start_date=start_date,
+        )
 
-    def load_csv_results(self, file):
-        jobs = []
-        time_start = 0
-        time_end = 0
-        for line in pd.read_csv(file, chunksize=1):
-            job_info = job_dict(nodes_required=line.get('num_nodes').item(),
-                                name=line.get('name').item(),
-                                account=line.get('account').item(),
-                                current_state=line.get('current_state').item(),
-                                end_state=line.get('end_state').item(),
-                                scheduled_nodes=line.get('scheduled_nodes').item(),
-                                id=line.get('id').item(),
-                                priority=line.get('priority').item(),
-                                partition=line.get('partition').item(),
-                                cpu_cores_required=line.get('cpu_cores_required').item(),
-                                gpu_units_required=line.get('gpu_units_required').item(),
-                                allocated_cpu_cores=line.get('allocated_cpu_cores').item(),
-                                allocated_gpu_units=line.get('allocated_gpu_units').item(),
-
-                                cpu_trace=line.get('cpu_trace'),
-                                gpu_trace=line.get('cpu_trace'),
-                                ntx_trace=line.get('cpu_trace'),
-                                nrx_trace=line.get('cpu_trace'),
-                                submit_time=line.get('submit_time').item(),
-                                time_limit=line.get('time_limit').item(),
-                                start_time=line.get('start_time').item(),
-                                end_time=line.get('end_time').item(),
-                                expected_run_time=line.get('expected_run_time').item(),
-                                current_run_time=line.get('current_run_time').item(),
-                                trace_time=line.get('trace_time'),
-                                # trace_start_time=line.get('trace_start_time').item(),
-                                trace_start_time=line.get('trace_start_time'),
-                                # trace_end_time=line.get('trace_end_time').item(),
-                                trace_end_time=line.get('trace_end_time'),
-                                trace_quanta=line.get('trace_quanta').item(),
-                                trace_missing_values=line.get('trace_missing_values'),
-                                downscale=line.get('downscale'),
-                                )
-            job = Job(job_info)
-            jobs.append(job)
-        # if hasattr(data,'args'):
-        #    args_from_file = data["args"].item()  # This should be empty  as csv contains no args.
-        # else:
-        #    args_from_file = None
-
-        return jobs, time_start, time_end, None
+        return result, args
 
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
@@ -147,43 +132,6 @@ class Telemetry:
         """Load telemetry data using custom data loaders."""
         assert self.dataloader
         return self.dataloader.load_live_data(**self.kwargs)
-
-    def load_data_from_df(self, *args, **kwargs):
-        """Load telemetry data using custom data loaders."""
-        assert self.dataloader
-        return self.dataloader.load_data_from_df(*args, **kwargs)
-
-    def load_data_from_csv(self, file, *args, **kwargs):
-        jobs = []
-        df = pd.read_csv(file, chunksize=1, header='infer')
-        for d in df:
-            # print(d['name'].astype(str))
-            job_info = job_dict(nodes_required=None,
-                                name=d['name'].astype(str).item(),
-                                account=d['account'].astype(str).item(),
-                                cpu_trace=None,
-                                gpu_trace=None,
-                                ntx_trace=None,
-                                nrx_trace=None,
-                                end_state=d['state'].astype(str).item(),
-                                scheduled_nodes=d['scheduled_nodes'].item(),
-                                id=d['id'].astype(int).item(),
-                                priority=None,
-                                partition=None,
-                                submit_time=d['submit_time'].astype(int).item(),
-                                time_limit=None,
-                                start_time=d['start_time'].astype(int).item(),
-                                end_time=d['end_time'].astype(int).item(),
-                                wall_time=d['end_time'].astype(int).item() - d['start_time'].astype(int).item(),
-                                trace_time=None,
-                                trace_start_time=None,
-                                trace_end_time=None,
-                                trace_missing_values=None
-                                )
-            jobs.append(job_info)
-        minstarttime = min([x['start_time'] for x in jobs])
-        maxendtime = max([x['end_time'] for x in jobs])
-        return jobs, minstarttime, maxendtime, None
 
     def node_index_to_name(self, index: int):
         """ Convert node index into a name"""
@@ -200,105 +148,39 @@ class Telemetry:
         assert self.dataloader
         return self.dataloader.cdu_pos(index, config=self.config)
 
-    def load_jobs_times_args_from_live_system(self):
-        jobs, timestep_start, timestep_end = self.load_live_data()
-        #  data_args = None
-        return jobs, timestep_start, timestep_end
+    def load_from_live_system(self):
+        result = self.load_live_data()
+        return result
 
-    def load_jobs_times_args_from_files(self, *, files, args, config, downscale=1):
+    def load_from_files(self, *, files, args, config):
         """ Load all files as combined jobs """
-        # Read telemetry data (either npz file or via custom data loader)
-        # TODO: Merge args? See main.py:79
-        timestep_end = 0
-        timestep_start = sys.maxsize
-        jobs = []
-        trigger_custom_dataloader = False
-        for i, file in enumerate(files):
-            file = str(Path(file))
-            if hasattr(args, 'is_results_file') and args.is_results_file:
-                if file.endswith(".csv"):
-                    jobs, timestep_start, timestep, _ = self.load_csv_results(file)
+        assert len(files) >= 1
+        files = [Path(f) for f in files]
 
-            elif file.endswith(".npz"):  # Replay .npz file
-                print(f"Loading {file}...")
-                jobs_from_file, timestep_start_from_file, timestep_end_from_file, args_from_file = self.load_snapshot(
-                    file)
-                if args_from_file is not None:
-                    print(f"File was generated with:"
-                          f"\n--system {args_from_file.system} ")
-                    if hasattr(args_from_file, 'fastforward'):
-                        print(f"--ff {args_from_file.fastforward} ")
-                    if hasattr(args_from_file, 'time'):
-                        print(f"-t {args_from_file.time}")
-                    print(f"All Args:\n{args_from_file}"
-                          "\nTo use these set them from the commandline!")
-                else:
-                    print("No generation arguments extracted from input file!")
-                    # Args are usually extracted to tell the users how to reporduce results.
-                    # They are not processed and re-set to said arguments automatily
-                jobs.extend(jobs_from_file)
-                timestep_start = min(timestep_start, timestep_start_from_file)
-                timestep_end = max(timestep_end, timestep_end_from_file)
+        if str(files[0]).endswith(".npz"):
+            file = files[0]
+            print(f"Loading {file}")
+            result, args = self.load_snapshot(file)
+            print(f"File was generated with: --system {args.system}")
 
-                if hasattr(args, 'scale') and args.scale:
-                    for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-                        job['nodes_required'] = random.randint(1, args.scale)
-                        job['scheduled_nodes'] = None  # Setting to None triggers scheduler to assign nodes
+            # TODO: should move this logic into a separate method and out of the individual dataloaders
+            if hasattr(args, 'scale') and args.scale:
+                for job in tqdm(result.jobs, desc=f"Scaling jobs to {args.scale} nodes"):
+                    job.nodes_required = random.randint(1, args.scale)
+                    job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
 
-                if hasattr(args, 'arrival') and args.arrival == 'poisson':
-                    print("available nodes:", config['AVAILABLE_NODES'])
-                    for job in tqdm(jobs, desc="Rescheduling jobs"):
-                        job['scheduled_nodes'] = None
-                        job['submit_time'] = next_arrival_byconfargs(config, args)
-            else:
-                trigger_custom_dataloader = True
-                break
-
-        if trigger_custom_dataloader:  # custom data loader
-            try:
-                jobs, timestep_start_from_data, timestep_end_from_data = self.load_data(args.replay)
-            except AssertionError:
-                raise ValueError("Forgot --is-results-file ?")
-            timestep_start = min(timestep_start, timestep_start_from_data)
-            timestep_end = max(timestep_end, timestep_end_from_data)
+            if hasattr(args, 'arrival') and args.arrival == 'poisson':
+                print("available nodes:", config['AVAILABLE_NODES'])
+                for job in tqdm(result.jobs, desc="Rescheduling jobs"):
+                    job.scheduled_nodes = None
+                    job.submit_time = next_arrival_byconfargs(config, args)
+                    job.start_time = None
+                    job.end_time = None
+        else: # custom data loader
+            result = self.load_data(args.replay)
         if args.time:
-            timestep_end = timestep_start + convert_to_time_unit(args.time)
-        elif not timestep_end:
-            timestep_end = int(max(job.wall_time + job.start_time for job in jobs)) + 1
-
-        return jobs, timestep_start, timestep_end, args
-
-
-class TelemetryArgs(BaseModel):
-    jid: str = '*'
-    """ Replay job id """
-    replay: list[ExpandedPath] | None = None
-    """ path/to/joblive path/to/jobprofile  -or- filename.npz (overrides --workload option) """
-    plot: list[Literal["jobs", "nodes"]] | None = None
-    """ Output plots """
-    is_results_file: bool = False
-    gantt_nodes: bool = False
-    """ Print Gannt with nodes required as line thickness (default false) """
-    time: str | None = None
-    """ Length of time to simulate, e.g., 123, 123s, 27m, 3h, 7d """
-    system: str = 'frontier'
-    """ System config to use """
-    arrival: Literal['prescribed', 'poisson'] = "prescribed"
-    """ Modify arrival distribution ({choices[1]}) or use the original submit times """
-    verbose: bool = False
-    output: str | None = None
-    """ Store output in --output <arg> file. """
-    live: bool = False
-    """ Grab data from live system. """
-
-
-shortcuts = {
-    "replay": "f",
-    "plot": "p",
-    "time": "t",
-    "verbose": "v",
-    "output": "o",
-}
+            result.telemetry_end = result.telemetry_start + convert_to_time_unit(args.time)
+        return result
 
 
 def run_telemetry_add_parser(subparsers: SubParsers):
@@ -318,24 +200,15 @@ def run_telemetry(args: TelemetryArgs):
     td = Telemetry(**args_dict)
 
     if args.live and not args.replay:
-        td = Telemetry(**args_dict)
-        jobs, timestep_start, timestep_end = \
-            td.load_jobs_times_args_from_live_system()
-        if args.output:
-            td.save_snapshot(
-                jobs=jobs, timestep_start=timestep_start,
-                timestep_end=timestep_end, args=args, filename=args.output,
-            )
-
-    elif args.replay:
-        jobs, timestep_start, timestep_end, _ = \
-            td.load_jobs_times_args_from_files(files=args.replay,
-                                               args=args,
-                                               config=config)
-
+        result = td.load_from_live_system()
     else:
-        print("Either --live or --replay is required")
-        sys.exit(1)
+        result = td.load_from_files(files=args.replay, args=args, config=config)
+    jobs = result.jobs
+    timestep_start = result.telemetry_start
+    timestep_end = result.telemetry_end
+
+    if args.output:
+        td.save_snapshot(dest = args.output, result = result, args = args)
 
     timesteps = timestep_end - timestep_start
 

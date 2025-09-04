@@ -972,7 +972,7 @@ def run_workload(sim_config: SimConfig):
 
     if sim_config.replay:
         td = Telemetry(**args_dict)
-        jobs, _, _, _ = td.load_jobs_times_args_from_files(files=sim_config.replay, args=args, config=config)
+        jobs = td.load_from_files(files=sim_config.replay, args=args, config=config).jobs
     else:
         workload = Workload(args, config)
         jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args)

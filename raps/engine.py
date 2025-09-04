@@ -266,8 +266,9 @@ class Engine:
 
         if sim_config.live and not sim_config.replay:
             td = Telemetry(**sim_config_dict)
-            jobs, timestep_start, timestep_end = \
-                td.load_jobs_times_args_from_live_system()
+            result = td.load_from_live_system()
+            jobs = result.jobs
+            timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
         elif sim_config.replay:
             # TODO: this will have issues if running separate systems or custom systems
             partition_short = partition.split("/")[-1] if partition else None
@@ -286,10 +287,12 @@ class Engine:
             else:
                 replay_files = sim_config.replay
 
-            jobs, timestep_start, timestep_end, args_from_file = td.load_jobs_times_args_from_files(
+            result = td.load_from_files(
                 files=replay_files,
                 args=sim_config_args, config=system_config_dict,
             )
+            jobs = result.jobs
+            timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
         else:  # Synthetic jobs
             wl = Workload(sim_config_args, system_config_dict)
             jobs = wl.generate_jobs()
