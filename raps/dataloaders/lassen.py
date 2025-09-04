@@ -198,16 +198,10 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         priority = row.get('priority', 0)
         partition = row.get('partition', "0")
 
-        if arrival == 'poisson':  # Modify the submit times according to Poisson process
-            scheduled_nodes = None
-            submit_time = fastforward + next_arrival_byconfkwargs(config, kwargs)
-            start_time = submit_time  # Pretend Job could start immediately # Alternative: None
-            end_time = submit_time + wall_time  # Alternative: None
-        else:  # Prescribed replay
-            scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
-            submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
-            start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
-            end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
+        scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
+        submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
+        start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
+        end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
 
         time_limit = row['time_limit']
 

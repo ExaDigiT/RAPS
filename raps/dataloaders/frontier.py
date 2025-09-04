@@ -267,20 +267,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if '' in xnames:
             continue
 
-        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
-            scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config, kwargs)
-            start_time = None  # ?
-            end_time = None  # ?
-            priority = aging_boost(nodes_required)
-
-        else:  # Prescribed replay
-            scheduled_nodes = []
-            # priority = 0  # not used for replay
-            priority = aging_boost(nodes_required)
-            for xname in xnames:
-                indices = xname_to_index(xname, config)
-                scheduled_nodes.append(indices)
+        scheduled_nodes = []
+        # priority = 0  # not used for replay
+        priority = aging_boost(nodes_required)
+        for xname in xnames:
+            indices = xname_to_index(xname, config)
+            scheduled_nodes.append(indices)
 
         # Throw out jobs that are not valid!
         if gpu_trace.size == 0:

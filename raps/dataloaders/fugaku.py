@@ -135,13 +135,6 @@ def load_data_from_df(df, **kwargs):
         trace_missing_values = False  # Sane Choice?
         trace_quanta = config['TRACE_QUANTA']
 
-        # Should we still have this?
-        # if arrival == 'poisson':  # Modify the arrival times of according to Poisson distribution
-        #     time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        # else:
-        #     time_offset = (submit_time - min_time).total_seconds()  # Compute time offset in seconds
-        # Removed from job_dict: time_offset=time_offset,
-
         # Create job dictionary
         job_info = job_dict(
             nodes_required=nodes_required,

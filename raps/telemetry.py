@@ -148,11 +148,11 @@ class Telemetry:
         assert self.dataloader
         return self.dataloader.cdu_pos(index, config=self.config)
 
-    def load_from_live_system(self):
+    def load_from_live_system(self) -> WorkloadResult:
         result = self.load_live_data()
         return result
 
-    def load_from_files(self, *, files, args, config):
+    def load_from_files(self, files) -> WorkloadResult:
         """ Load all files as combined jobs """
         assert len(files) >= 1
         files = [Path(f) for f in files]
@@ -162,25 +162,24 @@ class Telemetry:
             print(f"Loading {file}")
             result, args_from_file = self.load_snapshot(file)
             print(f"File was generated with: --system {args_from_file.system}")
-
-            # TODO: should move this logic into a separate method and out of the individual dataloaders
-            if hasattr(args, 'scale') and args.scale:
-                for job in tqdm(result.jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-                    job.nodes_required = random.randint(1, args.scale)
-                    job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
-
-            if hasattr(args, 'arrival') and args.arrival == 'poisson':
-                print("available nodes:", config['AVAILABLE_NODES'])
-                for job in tqdm(result.jobs, desc="Rescheduling jobs"):
-                    job.scheduled_nodes = None
-                    job.submit_time = next_arrival_byconfargs(config, args)
-                    job.start_time = None
-                    job.end_time = None
         else: # custom data loader
-            result = self.load_data(args.replay)
-        if args.time:
-            result.telemetry_end = result.telemetry_start + convert_to_time_unit(args.time)
+            result = self.load_data(files)
+        self.update_jobs(result.jobs)
         return result
+
+    def update_jobs(self, jobs: list[Job]):
+        """ Updates jobs with new scale or random start times """
+        if self.kwargs.get("scale") is not None:
+            for job in jobs:
+                job.nodes_required = random.randint(1, self.kwargs['scale'])
+                job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
+
+        if self.kwargs['arrival'] == "poisson":
+            for job in jobs:
+                job.scheduled_nodes = None
+                job.submit_time = next_arrival_byconfargs(self.config, self.kwargs)
+                job.start_time = None
+                job.end_time = None
 
 
 def run_telemetry_add_parser(subparsers: SubParsers):
@@ -202,7 +201,7 @@ def run_telemetry(args: TelemetryArgs):
     if args.live and not args.replay:
         result = td.load_from_live_system()
     else:
-        result = td.load_from_files(files=args.replay, args=args, config=config)
+        result = td.load_from_files(args.replay)
     jobs = result.jobs
     timestep_start = result.telemetry_start
     timestep_end = result.telemetry_end

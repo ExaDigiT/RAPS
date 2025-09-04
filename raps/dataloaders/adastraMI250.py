@@ -146,15 +146,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         priority = int(jobs_df.loc[jidx, 'priority'])
 
-        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
-            scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config, kwargs)
-        else:  # Prescribed replay
-            scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
+        scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
-            submit_timestamp = jobs_df.loc[jidx, 'submit_time']
-            diff = submit_timestamp - telemetry_start_timestamp
-            submit_time = int(diff.total_seconds())
+        submit_timestamp = jobs_df.loc[jidx, 'submit_time']
+        diff = submit_timestamp - telemetry_start_timestamp
+        submit_time = int(diff.total_seconds())
 
         time_limit = jobs_df.loc[jidx, 'time_limit']  # in seconds
 
