@@ -10,12 +10,11 @@ import os
 import select
 import time
 import random
-import math
 from raps.job import Job, JobState
 from raps.policy import PolicyType
 from raps.utils import (
     summarize_ranges,
-    get_current_utilization
+    get_current_utilization,
 )
 from raps.resmgr import ResourceManager
 from raps.schedulers import load_scheduler
@@ -266,9 +265,7 @@ class Engine:
 
         if sim_config.live and not sim_config.replay:
             td = Telemetry(**sim_config_dict)
-            result = td.load_from_live_system()
-            jobs = result.jobs
-            timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
+            workload_result = td.load_from_live_system()
         elif sim_config.replay:
             # TODO: this will have issues if running separate systems or custom systems
             partition_short = partition.split("/")[-1] if partition else None
@@ -287,22 +284,17 @@ class Engine:
             else:
                 replay_files = sim_config.replay
 
-            result = td.load_from_files(
+            workload_result = td.load_from_files(
                 files=replay_files,
                 args=sim_config_args, config=system_config_dict,
             )
-            jobs = result.jobs
-            timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
         else:  # Synthetic jobs
             wl = Workload(sim_config_args, system_config_dict)
-            jobs = wl.generate_jobs()
-            timestep_start = 0
-            if hasattr(jobs[0], 'end_time'):
-                timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
-            else:
-                timestep_end = 88200  # 24 hours
-
+            workload_result = wl.generate_jobs()
             td = Telemetry(**sim_config_dict)
+        
+        jobs = workload_result.jobs
+        timestep_start, timestep_end = workload_result.telemetry_start, workload_result.telemetry_end
 
         # TODO refactor how stat/end/fastforward/time work
         if sim_config.fastforward is not None:
@@ -342,7 +334,7 @@ class Engine:
             system_config=system_config,
         )
 
-        return engine, jobs, timestep_start, timestep_end, time_delta
+        return engine, workload_result, time_delta
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """

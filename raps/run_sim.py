@@ -76,18 +76,18 @@ def run_sim(sim_config: SimConfig):
         print("Use run-multi-part to run multi-partition simulations")
         sys.exit(1)
 
-    engine, jobs, timestep_start, timestep_end, time_delta = Engine.from_sim_config(sim_config)
+    engine, workload_result, time_delta = Engine.from_sim_config(sim_config)
 
     out = sim_config.output
     if out:
         out.mkdir(parents=True)
         engine.telemetry.save_snapshot(
-            jobs=jobs,
-            timestep_start=timestep_start,
-            timestep_end=timestep_end,
-            args=sim_config.get_legacy_args(), filename=str(out),
+            dest = str(out),
+            result = workload_result,
+            args=sim_config,
         )
-
+    jobs = workload_result.jobs
+    timestep_start, timestep_end = workload_result.telemetry_start, workload_result.telemetry_end
     total_timesteps = timestep_end - timestep_start
 
     downscale = sim_config.downscale
@@ -242,7 +242,7 @@ def run_multi_part_sim_add_parser(subparsers: SubParsers):
 
 
 def run_multi_part_sim(sim_config: SimConfig):
-    multi_engine, jobs, timestep_start, timestep_end, time_delta = MultiPartEngine.from_sim_config(sim_config)
+    multi_engine, workload_results, timestep_start, timestep_end, time_delta = MultiPartEngine.from_sim_config(sim_config)
 
     # TODO: The mit_supercloud dataloader seems to be outputting the wrong timesteps? mit_supercloud
     # is the only multi-partition system with replay, so just manually overriding the timesteps here
@@ -253,11 +253,11 @@ def run_multi_part_sim(sim_config: SimConfig):
     if sim_config.output:
         for part, engine in multi_engine.engines.items():
             engine.telemetry.save_snapshot(
-                jobs=jobs[part],
-                timestep_start=timestep_start, timestep_end=timestep_end,
-                filename=part.split('/')[-1],
-                args=sim_config.get_legacy_args(),
+                dest=str(sim_config.output / part.split('/')[-1]),
+                result=workload_results[part],
+                args=sim_config,
             )
+    jobs = {p: w.jobs for p, w in workload_results.items()}
 
     ui_update_freq = sim_config.system_configs[0].scheduler.ui_update_freq
     gen = multi_engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)

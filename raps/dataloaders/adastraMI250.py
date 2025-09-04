@@ -208,7 +208,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     return WorkloadResult(
         jobs = jobs,
         telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
-        start_date=telemetry_start_timestamp,
+        start_date=telemetry_start_timestamp.tz_localize("UTC"),
     )
 
 

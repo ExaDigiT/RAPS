@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from raps.engine import Engine, TickData
 from raps.sim_config import SimConfig
+from raps.utils import WorkloadResult
 
 
 class MultiPartEngine:
@@ -17,29 +18,29 @@ class MultiPartEngine:
             if len(root_systems) > 1:
                 raise ValueError("Replay for multi-system runs is not supported")
 
-        jobs_by_partition = {}
+        workloads_by_partition: dict[str, WorkloadResult] = {}
         engines: dict[str, Engine] = {}
 
         timestep_start, timestep_end, time_delta = 0, 0, 0
         for partition in sim_config.system_configs:
             name = partition.system_name
-            engine, jobs, timestep_start, timestep_end, time_delta = Engine.from_sim_config(
+            engine, workload_result, time_delta = Engine.from_sim_config(
                 sim_config, partition=name,
             )
-            for job in jobs:
+            for job in workload_result.jobs:
                 job.partition = name
-            jobs_by_partition[name] = jobs
+            workloads_by_partition[name] = workload_result
             engines[name] = engine
-        total_initial_jobs = sum(len(j) for j in jobs_by_partition.values())
+        total_initial_jobs = sum(len(j.jobs) for j in workloads_by_partition.values())
         for engine in engines.values():
             engine.total_initial_jobs = total_initial_jobs
 
         multi_engine = MultiPartEngine(
             engines=engines,
-            jobs=jobs_by_partition,
+            jobs={p: w.jobs for p, w in workloads_by_partition.items()},
         )
 
-        return multi_engine, jobs_by_partition, timestep_start, timestep_end, time_delta
+        return multi_engine, workloads_by_partition, timestep_start, timestep_end, time_delta
 
     def run_simulation(self, jobs: dict, timestep_start, timestep_end, time_delta=1
                        ) -> Iterable[dict[str, TickData | None]]:

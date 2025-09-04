@@ -160,8 +160,8 @@ class Telemetry:
         if str(files[0]).endswith(".npz"):
             file = files[0]
             print(f"Loading {file}")
-            result, args = self.load_snapshot(file)
-            print(f"File was generated with: --system {args.system}")
+            result, args_from_file = self.load_snapshot(file)
+            print(f"File was generated with: --system {args_from_file.system}")
 
             # TODO: should move this logic into a separate method and out of the individual dataloaders
             if hasattr(args, 'scale') and args.scale:
