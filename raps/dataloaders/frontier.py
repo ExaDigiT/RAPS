@@ -16,7 +16,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt, WorkloadResult
+from ..utils import power_to_utilization, encrypt, WorkloadResult
 
 
 def aging_boost(nnodes):
@@ -137,7 +137,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     """
     config = kwargs.get('config')
     encrypt_bool = kwargs.get('encrypt')
-    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     debug = kwargs.get('debug')
@@ -319,10 +318,10 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
             job = Job(job_info)
             jobs.append(job)
     return WorkloadResult(
-        jobs = jobs,
-        telemetry_start = telemetry_start,
-        telemetry_end = telemetry_end,
-        start_date = telemetry_start_timestamp,
+        jobs=jobs,
+        telemetry_start=telemetry_start,
+        telemetry_end=telemetry_end,
+        start_date=telemetry_start_timestamp,
     )
 
 
@@ -536,10 +535,10 @@ def load_live_data(**kwargs):
         jobs.append(job)
 
     return WorkloadResult(
-        jobs = jobs,
-        telemetry_start = telemetry_start,
-        telemetry_end = telemetry_end,
-        start_date = datetime.fromtimestamp(telemetry_start, timezone.utc),
+        jobs=jobs,
+        telemetry_start=telemetry_start,
+        telemetry_end=telemetry_end,
+        start_date=datetime.fromtimestamp(telemetry_start, timezone.utc),
     )
 
 

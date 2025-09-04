@@ -607,7 +607,7 @@ def load_data(local_dataset_path, **kwargs):
         print(f"- {reason}: {count}")
 
     return WorkloadResult(
-        jobs = jobs_list,
+        jobs=jobs_list,
         telemetry_start=0, telemetry_end=int(end_ts - start_ts),
         start_date=datetime.fromtimestamp(start_ts, timezone.utc),
     )

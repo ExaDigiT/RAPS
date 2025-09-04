@@ -38,7 +38,7 @@ from tqdm import tqdm
 from datetime import timedelta
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, parse_td, WorkloadResult
+from ..utils import power_to_utilization, parse_td, WorkloadResult
 
 
 def load_data(path, **kwargs):
@@ -60,7 +60,6 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     config = kwargs.get('config')
     jid = kwargs.get('jid', '*')
     validate = kwargs.get('validate')
-    arrival = kwargs.get('arrival')
     verbose = kwargs.get('verbose')
     fastforward = kwargs.get('fastforward')  # int in seconds
 

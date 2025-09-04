@@ -7,7 +7,6 @@ The module defines a `Telemetry` class for managing telemetry data and several
 helper functions for data encryption and conversion between node name and index formats.
 """
 from typing import Literal
-import sys
 import random
 from pathlib import Path
 # import json
@@ -16,7 +15,6 @@ from types import ModuleType
 import importlib
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from pydantic import BaseModel, model_validator
 # from rich.progress import track
 
@@ -30,8 +28,7 @@ from raps.plotting import (
     plot_network_histogram
 )
 from raps.utils import (
-    next_arrival_byconfargs, convert_to_time_unit, pydantic_add_args, SubParsers, ExpandedPath,
-    WorkloadResult,
+    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadResult,
 )
 
 
@@ -89,17 +86,17 @@ class Telemetry:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
 
-    def save_snapshot(self, *, dest: str, result: WorkloadResult, args: SimConfig|TelemetryArgs):
+    def save_snapshot(self, *, dest: str, result: WorkloadResult, args: SimConfig | TelemetryArgs):
         """Saves a snapshot of the jobs to a compressed file. """
         np.savez_compressed(dest,
-            jobs=[vars(j) for j in result.jobs],
-            telemetry_start=result.telemetry_start,
-            telemetry_end=result.telemetry_end,
-            start_date=result.start_date,
-            args=args,
-        )
+                            jobs=[vars(j) for j in result.jobs],
+                            telemetry_start=result.telemetry_start,
+                            telemetry_end=result.telemetry_end,
+                            start_date=result.start_date,
+                            args=args,
+                            )
 
-    def load_snapshot(self, snapshot: str | Path) -> tuple[WorkloadResult, SimConfig|TelemetryArgs]:
+    def load_snapshot(self, snapshot: str | Path) -> tuple[WorkloadResult, SimConfig | TelemetryArgs]:
         """Reads a snapshot from a compressed file
 
         :param str snapshot: Filename
@@ -210,7 +207,7 @@ class Telemetry:
             print(f"Loading {file}")
             result, args_from_file = self.load_snapshot(file)
             print(f"File was generated with: --system {args_from_file.system}")
-        else: # custom data loader
+        else:  # custom data loader
             result = self.load_data(files)
         self.update_jobs(result.jobs)
         return result
@@ -259,7 +256,7 @@ def run_telemetry(args: TelemetryArgs):
         timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
 
     if args.output:
-        td.save_snapshot(dest = args.output, result = result, args = args)
+        td.save_snapshot(dest=args.output, result=result, args=args)
 
     timesteps = timestep_end - timestep_start
 

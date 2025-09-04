@@ -163,8 +163,8 @@ def load_data_from_df(df, **kwargs):
 
     return WorkloadResult(
         jobs=job_list,
-        telemetry_start = telemetry_start, telemetry_end = telemetry_end,
-        start_date = telemetry_start_timestamp,
+        telemetry_start=telemetry_start, telemetry_end=telemetry_end,
+        start_date=telemetry_start_timestamp,
     )
 
 

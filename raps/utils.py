@@ -798,7 +798,7 @@ class WorkloadResult(BaseModel):
     # TODO: It might make more sense to make start_timestep/end_timestep always unix time, then we
     # wouldn't need this extra start_date field.
     start_date: AwareDatetime
-    
+
     model_config = ConfigDict(
-        arbitrary_types_allowed = True,
+        arbitrary_types_allowed=True,
     )

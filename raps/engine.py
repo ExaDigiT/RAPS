@@ -40,8 +40,8 @@ from raps.downtime import Downtime
 from raps.weather import Weather
 from raps.sim_config import SimConfig
 from raps.system_config import SystemConfig
-
 from bisect import bisect_right
+
 
 @dataclasses.dataclass
 class TickData:
@@ -289,7 +289,7 @@ class Engine:
             wl = Workload(sim_config_args, system_config_dict)
             workload_result = wl.generate_jobs()
             td = Telemetry(**sim_config_dict)
-        
+
         jobs = workload_result.jobs
 
         # TODO refactor how stat/end/fastforward/time work
@@ -547,7 +547,10 @@ class Engine:
             job.running_time = self.current_timestep - job.start_time
 
             if job.current_state != JobState.RUNNING:
-                raise ValueError(f"Job {job.id} is in running list, but state is not RUNNING: job.state == {job.current_state}")
+                raise ValueError(
+                    f"Job {job.id} is in running list, " +
+                    "but state is not RUNNING: job.state == {job.current_state}"
+                )
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if job.running_time > job.time_limit and job.end_time is not None:

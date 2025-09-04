@@ -82,8 +82,8 @@ def run_sim(sim_config: SimConfig):
     if out:
         out.mkdir(parents=True)
         engine.telemetry.save_snapshot(
-            dest = str(out),
-            result = workload_result,
+            dest=str(out),
+            result=workload_result,
             args=sim_config,
         )
     jobs = workload_result.jobs
@@ -242,7 +242,8 @@ def run_multi_part_sim_add_parser(subparsers: SubParsers):
 
 
 def run_multi_part_sim(sim_config: SimConfig):
-    multi_engine, workload_results, timestep_start, timestep_end, time_delta = MultiPartEngine.from_sim_config(sim_config)
+    multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
+        MultiPartEngine.from_sim_config(sim_config)
 
     # TODO: The mit_supercloud dataloader seems to be outputting the wrong timesteps? mit_supercloud
     # is the only multi-partition system with replay, so just manually overriding the timesteps here

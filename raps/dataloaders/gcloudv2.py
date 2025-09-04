@@ -2,7 +2,7 @@ import os
 import re
 from datetime import datetime
 from tqdm import tqdm
-from typing import List, Optional, Generator, Tuple, Any, Union
+from typing import List, Optional, Generator, Any, Union
 
 import numpy as np
 import pandas as pd
@@ -335,7 +335,7 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any):
     telemetry_start = 0
     telemetry_end = int(max(usage_map_end.values()) - t0)
     return WorkloadResult(
-        jobs = jobs,
+        jobs=jobs,
         telemetry_start=telemetry_start, telemetry_end=telemetry_end,
         # gcloud dataset timestamps are already relative, and it doesn't list a start exact date.
         start_date=datetime.fromisoformat("2011-05-02T00:00:00Z"),

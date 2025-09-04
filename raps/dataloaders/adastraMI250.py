@@ -24,7 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import next_arrival_byconfkwargs, WorkloadResult
+from ..utils import WorkloadResult
 
 
 def load_data(jobs_path, **kwargs):
@@ -58,7 +58,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     """
     count_jobs_notOK = 0
     config = kwargs.get('config')
-    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
 
@@ -202,7 +201,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
     print("jobs not added: ", count_jobs_notOK)
     return WorkloadResult(
-        jobs = jobs,
+        jobs=jobs,
         telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
         start_date=telemetry_start_timestamp.tz_localize("UTC"),
     )

@@ -68,7 +68,7 @@ class Workload:
         # The respective funciton of this class is called.
         jobs = getattr(self, self.args.workload)(args=self.args)
         return WorkloadResult(
-            jobs = jobs,
+            jobs=jobs,
             telemetry_start=0, telemetry_end=self.args.time,
             start_date=self.args.start,
         )
