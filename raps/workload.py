@@ -67,9 +67,10 @@ class Workload:
         # This function calls the job generation function as specified by the workload keyword.
         # The respective funciton of this class is called.
         jobs = getattr(self, self.args.workload)(args=self.args)
+        timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
         return WorkloadData(
             jobs=jobs,
-            telemetry_start=0, telemetry_end=self.args.time,
+            telemetry_start=0, telemetry_end=timestep_end,
             start_date=self.args.start,
         )
 
