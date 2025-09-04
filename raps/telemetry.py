@@ -42,6 +42,7 @@ class TelemetryArgs(BaseModel):
     replay: list[ExpandedPath] | None = None
     """ path/to/joblive path/to/jobprofile  -or- filename.npz (overrides --workload option) """
     plot: list[Literal["jobs", "nodes"]] | None = None
+    is_results_file: bool = False
     """ Output plots """
     gantt_nodes: bool = False
     """ Print Gannt with nodes required as line thickness (default false) """
@@ -123,6 +124,53 @@ class Telemetry:
 
         return result, args
 
+    def load_csv_results(self, file):
+        jobs = []
+        time_start = 0
+        time_end = 0
+        for line in pd.read_csv(file, chunksize=1):
+            job_info = job_dict(nodes_required=line.get('num_nodes').item(),
+                                name=line.get('name').item(),
+                                account=line.get('account').item(),
+                                current_state=line.get('current_state').item(),
+                                end_state=line.get('end_state').item(),
+                                scheduled_nodes=line.get('scheduled_nodes').item(),
+                                id=line.get('id').item(),
+                                priority=line.get('priority').item(),
+                                partition=line.get('partition').item(),
+                                cpu_cores_required=line.get('cpu_cores_required').item(),
+                                gpu_units_required=line.get('gpu_units_required').item(),
+                                allocated_cpu_cores=line.get('allocated_cpu_cores').item(),
+                                allocated_gpu_units=line.get('allocated_gpu_units').item(),
+
+                                cpu_trace=line.get('cpu_trace'),
+                                gpu_trace=line.get('cpu_trace'),
+                                ntx_trace=line.get('cpu_trace'),
+                                nrx_trace=line.get('cpu_trace'),
+                                submit_time=line.get('submit_time').item(),
+                                time_limit=line.get('time_limit').item(),
+                                start_time=line.get('start_time').item(),
+                                end_time=line.get('end_time').item(),
+                                expected_run_time=line.get('expected_run_time').item(),
+                                current_run_time=line.get('current_run_time').item(),
+                                trace_time=line.get('trace_time'),
+                                # trace_start_time=line.get('trace_start_time').item(),
+                                trace_start_time=line.get('trace_start_time'),
+                                # trace_end_time=line.get('trace_end_time').item(),
+                                trace_end_time=line.get('trace_end_time'),
+                                trace_quanta=line.get('trace_quanta').item(),
+                                trace_missing_values=line.get('trace_missing_values'),
+                                downscale=line.get('downscale'),
+                                )
+            job = Job(job_info)
+            jobs.append(job)
+        # if hasattr(data,'args'):
+        #    args_from_file = data["args"].item()  # This should be empty  as csv contains no args.
+        # else:
+        #    args_from_file = None
+
+        return jobs, time_start, time_end
+
     def load_data(self, files):
         """Load telemetry data using custom data loaders."""
         assert self.dataloader
@@ -198,13 +246,17 @@ def run_telemetry(args: TelemetryArgs):
     args_dict['config'] = config
     td = Telemetry(**args_dict)
 
+    if args.is_results_file and args.replay:
+        file = str(args.replay[0])
+        jobs, timestep_start, timestep_end = td.load_csv_results(file)
     if args.live and not args.replay:
         result = td.load_from_live_system()
+        jobs = result.jobs
+        timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
     else:
         result = td.load_from_files(args.replay)
-    jobs = result.jobs
-    timestep_start = result.telemetry_start
-    timestep_end = result.telemetry_end
+        jobs = result.jobs
+        timestep_start, timestep_end = result.telemetry_start, result.telemetry_end
 
     if args.output:
         td.save_snapshot(dest = args.output, result = result, args = args)
