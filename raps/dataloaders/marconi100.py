@@ -28,7 +28,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, DataLoaderResult
+from ..utils import power_to_utilization, next_arrival_byconfkwargs, WorkloadResult
 
 
 def load_data(jobs_path, **kwargs):
@@ -233,7 +233,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             job = Job(job_info)
             jobs.append(job)
 
-    return DataLoaderResult(
+    return WorkloadResult(
         jobs = jobs,
         telemetry_start=telemetry_start, telemetry_end=telemetry_end,
         start_date=telemetry_start_timestamp,

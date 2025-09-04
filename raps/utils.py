@@ -711,9 +711,10 @@ def yaml_dump(data):
     )
 
 
-class DataLoaderResult(BaseModel):
+class WorkloadResult(BaseModel):
     """
-    Result of a dataloader load_data() function.
+    Represents a workload, a list of jobs with some metadata. Returned by dataloaders load_data()
+    function, and by Workload.generate_jobs().
 
     jobs:
         The list of parsed jobs.

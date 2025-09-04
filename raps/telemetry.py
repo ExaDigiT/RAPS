@@ -31,7 +31,7 @@ from raps.plotting import (
 )
 from raps.utils import (
     next_arrival_byconfargs, convert_to_time_unit, pydantic_add_args, SubParsers, ExpandedPath,
-    DataLoaderResult, yaml_dump,
+    WorkloadResult,
 )
 
 
@@ -88,7 +88,7 @@ class Telemetry:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
 
-    def save_snapshot(self, *, dest: str, result: DataLoaderResult, args: SimConfig|TelemetryArgs):
+    def save_snapshot(self, *, dest: str, result: WorkloadResult, args: SimConfig|TelemetryArgs):
         """Saves a snapshot of the jobs to a compressed file. """
         np.savez_compressed(dest,
             jobs=[vars(j) for j in result.jobs],
@@ -98,7 +98,7 @@ class Telemetry:
             args=args,
         )
 
-    def load_snapshot(self, snapshot: str | Path) -> tuple[DataLoaderResult, SimConfig|TelemetryArgs]:
+    def load_snapshot(self, snapshot: str | Path) -> tuple[WorkloadResult, SimConfig|TelemetryArgs]:
         """Reads a snapshot from a compressed file
 
         :param str snapshot: Filename
@@ -115,7 +115,7 @@ class Telemetry:
         start_date = data['start_date'].item()
         args = data['args'].item()
 
-        result = DataLoaderResult(
+        result = WorkloadResult(
             jobs=jobs,
             telemetry_start=telemetry_start, telemetry_end=telemetry_end,
             start_date=start_date,
