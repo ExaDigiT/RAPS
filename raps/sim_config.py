@@ -202,6 +202,9 @@ class SimConfig(BaseModel):
     maxqueue: int = 50
     """ Specify the max queue length for continuous job generation """
 
+    filter: str | None = None
+    """job filter \"traffic > 1e8\" """
+
     @model_validator(mode="before")
     def _validate_before(cls, data):
         # This is called with the raw input, before Pydantic parses it, so data is just a dict and

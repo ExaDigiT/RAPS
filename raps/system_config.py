@@ -1,6 +1,6 @@
-import functools
 import glob
 import fnmatch
+import functools
 from typing import Any, Literal
 from pathlib import Path
 from functools import cached_property
@@ -141,7 +141,7 @@ class SystemCoolingConfig(BaseModel):
 
 
 class SystemNetworkConfig(BaseModel):
-    topology: Literal["fat-tree", "dragonfly", "torus3d"]
+    topology: Literal["capacity", "fat-tree", "dragonfly", "torus3d"]
     network_max_bw: float
     latency: float | None = None
 

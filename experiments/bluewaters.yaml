@@ -1,0 +1,6 @@
+system: bluewaters
+replay:
+  - /opt/data/bluewaters
+start: "20170328"
+simulate_network: True
+filter: "traffic > 1e8"
