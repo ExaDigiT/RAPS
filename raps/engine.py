@@ -265,7 +265,7 @@ class Engine:
 
         if sim_config.live and not sim_config.replay:
             td = Telemetry(**sim_config_dict)
-            workload_result = td.load_from_live_system()
+            workload_data = td.load_from_live_system()
         elif sim_config.replay:
             # TODO: this will have issues if running separate systems or custom systems
             partition_short = partition.split("/")[-1] if partition else None
@@ -284,20 +284,20 @@ class Engine:
             else:
                 replay_files = sim_config.replay
 
-            workload_result = td.load_from_files(replay_files)
+            workload_data = td.load_from_files(replay_files)
         else:  # Synthetic jobs
             wl = Workload(sim_config_args, system_config_dict)
-            workload_result = wl.generate_jobs()
+            workload_data = wl.generate_jobs()
             td = Telemetry(**sim_config_dict)
 
-        jobs = workload_result.jobs
+        jobs = workload_data.jobs
 
         # TODO refactor how stat/end/fastforward/time work
         if sim_config.fastforward is not None:
-            workload_result.telemetry_start = workload_result.telemetry_start + sim_config.fastforward
+            workload_data.telemetry_start = workload_data.telemetry_start + sim_config.fastforward
 
         if sim_config.time is not None:
-            workload_result.telemetry_end = workload_result.telemetry_end + sim_config.time
+            workload_data.telemetry_end = workload_data.telemetry_end + sim_config.time
 
         if sim_config.time_delta is not None:
             time_delta = sim_config.time_delta
@@ -330,7 +330,7 @@ class Engine:
             system_config=system_config,
         )
 
-        return engine, workload_result, time_delta
+        return engine, workload_data, time_delta
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """

@@ -76,18 +76,18 @@ def run_sim(sim_config: SimConfig):
         print("Use run-multi-part to run multi-partition simulations")
         sys.exit(1)
 
-    engine, workload_result, time_delta = Engine.from_sim_config(sim_config)
+    engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
 
     out = sim_config.output
     if out:
         out.mkdir(parents=True)
         engine.telemetry.save_snapshot(
             dest=str(out),
-            result=workload_result,
+            result=workload_data,
             args=sim_config,
         )
-    jobs = workload_result.jobs
-    timestep_start, timestep_end = workload_result.telemetry_start, workload_result.telemetry_end
+    jobs = workload_data.jobs
+    timestep_start, timestep_end = workload_data.telemetry_start, workload_data.telemetry_end
     total_timesteps = timestep_end - timestep_start
 
     downscale = sim_config.downscale

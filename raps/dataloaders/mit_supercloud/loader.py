@@ -118,7 +118,7 @@ from typing import Dict, Union, Optional
 from collections import Counter
 from datetime import datetime, timezone
 from raps.job import job_dict, Job
-from raps.utils import summarize_ranges, WorkloadResult
+from raps.utils import summarize_ranges, WorkloadData
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 
@@ -606,7 +606,7 @@ def load_data(local_dataset_path, **kwargs):
     for reason, count in skip_counts.items():
         print(f"- {reason}: {count}")
 
-    return WorkloadResult(
+    return WorkloadData(
         jobs=jobs_list,
         telemetry_start=0, telemetry_end=int(end_ts - start_ts),
         start_date=datetime.fromtimestamp(start_ts, timezone.utc),

@@ -34,7 +34,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
 from raps.telemetry import Job, job_dict
-from raps.utils import WorkloadResult
+from raps.utils import WorkloadData
 
 
 def throughput_traces(total_tx, total_rx, intervals):
@@ -330,7 +330,7 @@ def load_data(local_dataset_path, **kwargs):
     telemetry_start = 0
     telemetry_end = max((j.end_time for j in jobs), default=0)
 
-    return WorkloadResult(
+    return WorkloadData(
         jobs=jobs,
         telemetry_start=telemetry_start, telemetry_end=telemetry_end,
         start_date=datetime.fromtimestamp(t0, timezone.utc),

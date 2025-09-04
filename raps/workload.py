@@ -31,7 +31,7 @@ from raps.utils import (
     next_arrival_byconfargs,
     truncated_weibull,
     truncated_weibull_float,
-    WorkloadResult,
+    WorkloadData,
 )
 import math
 import random
@@ -67,7 +67,7 @@ class Workload:
         # This function calls the job generation function as specified by the workload keyword.
         # The respective funciton of this class is called.
         jobs = getattr(self, self.args.workload)(args=self.args)
-        return WorkloadResult(
+        return WorkloadData(
             jobs=jobs,
             telemetry_start=0, telemetry_end=self.args.time,
             start_date=self.args.start,

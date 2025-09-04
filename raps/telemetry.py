@@ -28,7 +28,7 @@ from raps.plotting import (
     plot_network_histogram
 )
 from raps.utils import (
-    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadResult,
+    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadData,
 )
 
 
@@ -86,7 +86,7 @@ class Telemetry:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
 
-    def save_snapshot(self, *, dest: str, result: WorkloadResult, args: SimConfig | TelemetryArgs):
+    def save_snapshot(self, *, dest: str, result: WorkloadData, args: SimConfig | TelemetryArgs):
         """Saves a snapshot of the jobs to a compressed file. """
         np.savez_compressed(dest,
                             jobs=[vars(j) for j in result.jobs],
@@ -96,7 +96,7 @@ class Telemetry:
                             args=args,
                             )
 
-    def load_snapshot(self, snapshot: str | Path) -> tuple[WorkloadResult, SimConfig | TelemetryArgs]:
+    def load_snapshot(self, snapshot: str | Path) -> tuple[WorkloadData, SimConfig | TelemetryArgs]:
         """Reads a snapshot from a compressed file
 
         :param str snapshot: Filename
@@ -113,7 +113,7 @@ class Telemetry:
         start_date = data['start_date'].item()
         args = data['args'].item()
 
-        result = WorkloadResult(
+        result = WorkloadData(
             jobs=jobs,
             telemetry_start=telemetry_start, telemetry_end=telemetry_end,
             start_date=start_date,
@@ -193,11 +193,11 @@ class Telemetry:
         assert self.dataloader
         return self.dataloader.cdu_pos(index, config=self.config)
 
-    def load_from_live_system(self) -> WorkloadResult:
+    def load_from_live_system(self) -> WorkloadData:
         result = self.load_live_data()
         return result
 
-    def load_from_files(self, files) -> WorkloadResult:
+    def load_from_files(self, files) -> WorkloadData:
         """ Load all files as combined jobs """
         assert len(files) >= 1
         files = [Path(f) for f in files]
