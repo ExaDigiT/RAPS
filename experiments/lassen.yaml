@@ -1,6 +1,6 @@
 system: lassen
 replay:
-  - ~/data/lassen/Lassen-Supercomputer-Job-Dataset
+  - /opt/data/lassen/Lassen-Supercomputer-Job-Dataset
 policy: fcfs
 backfill: firstfit
 fastforward: 365d

@@ -350,24 +350,16 @@ class Engine:
         Adds running jobs to the queue, and removes them from the jobs_to_submit
         jobs_to_submit still holds the jobs that need be submitted in the future.
         """
-        if self.debug:
-            print(f"[DEBUG] add_running_jobs_to_queue: current_time={self.current_timestep}")
         # Build a list of jobs whose start_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if
                          job.start_time is not None
                          and job.start_time < self.current_timestep]
-        if self.debug:
-            print(f"[DEBUG] add_running_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if
                              job.start_time is None
                              or job.start_time >= self.current_timestep]
-        if self.debug:
-            print(f"[DEBUG] add_running_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
-        if self.debug:
-            print(f"[DEBUG] add_running_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
 
     def add_eligible_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -379,20 +371,12 @@ class Engine:
         - true if new jobs are present
         - false if no new jobs are present
         """
-        if self.debug:
-            print(f"[DEBUG] add_eligible_jobs_to_queue: current_time={self.current_timestep}")
         # Build a list of jobs whose submit_time is <= current_time.
         eligible_jobs = [job for job in jobs_to_submit if job.submit_time <= self.current_timestep]
-        if self.debug:
-            print(f"[DEBUG] add_eligible_jobs_to_queue: Found {len(eligible_jobs)} eligible jobs.")
         # Remove those jobs from jobs_to_submit:
         jobs_to_submit[:] = [job for job in jobs_to_submit if job.submit_time > self.current_timestep]
-        if self.debug:
-            print(f"[DEBUG] add_eligible_jobs_to_queue: {len(jobs_to_submit)} jobs remaining in jobs_to_submit.")
         # Convert them to Job instances and build list of eligible jobs.
         self.queue += eligible_jobs
-        if self.debug:
-            print(f"[DEBUG] add_eligible_jobs_to_queue: self.queue now has {len(self.queue)} jobs.")
         if eligible_jobs != []:
             return True
         else:
@@ -544,14 +528,10 @@ class Engine:
         net_utils = []
         net_tx_list = []
         net_rx_list = []
-        if self.debug:
-            print(f"Current Time: {self.current_timestep}")
 
         slowdown_factors = []
 
         for job in self.running:
-            if self.debug:
-                print(f"JobID: {job.id}")
 
             job.running_time = self.current_timestep - job.start_time
 

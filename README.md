@@ -169,6 +169,33 @@ See instructions in [server/README.md](https://code.ornl.gov/exadigit/simulation
 
 See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulation-dashboard)
 
+## Running Tests
+
+RAPS uses [pytest](https://docs.pytest.org/) for its test suite.  
+Before running tests, ensure that you have a valid data directory available (e.g., `/opt/data`) and set the environment variable `RAPS_DATA_DIR` to point to it.
+
+### Run all tests
+```bash
+RAPS_DATA_DIR=/opt/data pytest -n auto -x
+```
+
+By default, tests are parallelized with `pytest-xdist` (`-n auto`) to speed up execution.
+The `-x` flag stops execution after the first failure. Add `-v` to run in verbose mode.
+
+### Run only network-related tests
+
+```bash
+RAPS_DATA_DIR=/opt/data pytest -n auto -x -m network
+```
+
+See `pytest.ini` for the different options for `-m`.
+
+### Run a specific test file
+
+```bash
+RAPS_DATA_DIR=/opt/data pytest tests/systems/test_engine.py
+```
+
 ### Contributing Code
 
 Install pre-commit hooks as set by the project:
