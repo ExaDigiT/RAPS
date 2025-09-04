@@ -203,14 +203,22 @@ class Telemetry:
         files = [Path(f) for f in files]
 
         if str(files[0]).endswith(".npz"):
-            file = files[0]
-            print(f"Loading {file}")
-            result, args_from_file = self.load_snapshot(file)
-            print(f"File was generated with: --system {args_from_file.system}")
+            data: WorkloadData | None = None
+            for file in files:
+                print(f"Loading {file}")
+                new_data, args_from_file = self.load_snapshot(file)
+                print(f"File was generated with: --system {args_from_file.system}")
+                if not data:
+                    data = new_data
+                else:
+                    data.jobs.extend(new_data.jobs)
+                    data.telemetry_start = min(data.telemetry_start, new_data.telemetry_start)
+                    data.telemetry_end = min(data.telemetry_end, new_data.telemetry_end)
+                    data.start_date = min(data.start_date, new_data.start_date)
         else:  # custom data loader
-            result = self.load_data(files)
-        self.update_jobs(result.jobs)
-        return result
+            data = self.load_data(files)
+        self.update_jobs(data.jobs)
+        return data
 
     def update_jobs(self, jobs: list[Job]):
         """ Updates jobs with new scale or random start times """
