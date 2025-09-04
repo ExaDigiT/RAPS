@@ -297,7 +297,7 @@ class Engine:
             workload_data.telemetry_start = workload_data.telemetry_start + sim_config.fastforward
 
         if sim_config.time is not None:
-            workload_data.telemetry_end = workload_data.telemetry_end + sim_config.time
+            workload_data.telemetry_end = workload_data.telemetry_start + sim_config.time
 
         if sim_config.time_delta is not None:
             time_delta = sim_config.time_delta
