@@ -981,7 +981,7 @@ def run_workload(sim_config: SimConfig):
         jobs = td.load_from_files(sim_config.replay).jobs
     else:
         workload = Workload(args, config)
-        jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args)
+        jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args())
     plot_job_hist(jobs,
                   config=config,
                   dist_split=sim_config.multimodal,
