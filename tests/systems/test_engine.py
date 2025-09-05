@@ -22,7 +22,10 @@ def test_engine(system, system_config, sim_output):
         "system": system,
         "time": "2m",
     })
-    engine, jobs, timestep_start, timestep_end, time_delta = Engine.from_sim_config(sim_config)
+    engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
+    jobs = workload_data.jobs
+    timestep_start = workload_data.telemetry_start
+    timestep_end = workload_data.telemetry_end
     ticks = list(engine.run_simulation(jobs, timestep_start, timestep_end, time_delta))
 
     assert len(ticks) == 120

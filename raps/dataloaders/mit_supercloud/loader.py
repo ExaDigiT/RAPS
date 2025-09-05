@@ -116,9 +116,9 @@ import re
 from tqdm import tqdm
 from typing import Dict, Union, Optional
 from collections import Counter
-
+from datetime import datetime, timezone
 from raps.job import job_dict, Job
-from raps.utils import summarize_ranges
+from raps.utils import summarize_ranges, WorkloadData
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 
@@ -602,20 +602,12 @@ def load_data(local_dataset_path, **kwargs):
         job = Job(current_job_dict)
         jobs_list.append(job)
 
-    # Calculate min_overall_utime and max_overall_utime
-    telemetry_start = int(sl.time_start.min())
-    telemetry_end = int(sl.time_end.max())
-    # min_overall_utime = int(sl.time_submit.min())
-    # max_overall_utime = int(sl.time_submit.max())
-
-    # args_namespace = SimpleNamespace(
-    #    fastforward=min_overall_utime,
-    #    system='mit_supercloud',
-    #    time=max_overall_utime
-    # )
-
     print("\nSkipped jobs summary:")
     for reason, count in skip_counts.items():
         print(f"- {reason}: {count}")
 
-    return jobs_list, telemetry_start, telemetry_end  # min_overall_utime, max_overall_utime, args_namespace
+    return WorkloadData(
+        jobs=jobs_list,
+        telemetry_start=0, telemetry_end=int(end_ts - start_ts),
+        start_date=datetime.fromtimestamp(start_ts, timezone.utc),
+    )

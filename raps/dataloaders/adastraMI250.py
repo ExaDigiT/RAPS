@@ -24,7 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import next_arrival_byconfkwargs
+from ..utils import WorkloadData
 
 
 def load_data(jobs_path, **kwargs):
@@ -58,7 +58,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     """
     count_jobs_notOK = 0
     config = kwargs.get('config')
-    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
 
@@ -146,15 +145,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
         priority = int(jobs_df.loc[jidx, 'priority'])
 
-        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
-            scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config, kwargs)
-        else:  # Prescribed replay
-            scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
+        scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
-            submit_timestamp = jobs_df.loc[jidx, 'submit_time']
-            diff = submit_timestamp - telemetry_start_timestamp
-            submit_time = int(diff.total_seconds())
+        submit_timestamp = jobs_df.loc[jidx, 'submit_time']
+        diff = submit_timestamp - telemetry_start_timestamp
+        submit_time = int(diff.total_seconds())
 
         time_limit = jobs_df.loc[jidx, 'time_limit']  # in seconds
 
@@ -205,7 +200,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             count_jobs_notOK += 1
 
     print("jobs not added: ", count_jobs_notOK)
-    return jobs, telemetry_start_time, telemetry_end_time
+    return WorkloadData(
+        jobs=jobs,
+        telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
+        start_date=telemetry_start_timestamp.tz_localize("UTC"),
+    )
 
 
 def xname_to_index(xname: str, config: dict):

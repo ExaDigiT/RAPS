@@ -10,12 +10,13 @@
     python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 """
 import time
+from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs, encrypt
+from ..utils import power_to_utilization, encrypt, WorkloadData
 
 
 def aging_boost(nnodes):
@@ -136,7 +137,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     """
     config = kwargs.get('config')
     encrypt_bool = kwargs.get('encrypt')
-    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     debug = kwargs.get('debug')
@@ -266,20 +266,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if '' in xnames:
             continue
 
-        if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
-            scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config, kwargs)
-            start_time = None  # ?
-            end_time = None  # ?
-            priority = aging_boost(nodes_required)
-
-        else:  # Prescribed replay
-            scheduled_nodes = []
-            # priority = 0  # not used for replay
-            priority = aging_boost(nodes_required)
-            for xname in xnames:
-                indices = xname_to_index(xname, config)
-                scheduled_nodes.append(indices)
+        scheduled_nodes = []
+        # priority = 0  # not used for replay
+        priority = aging_boost(nodes_required)
+        for xname in xnames:
+            indices = xname_to_index(xname, config)
+            scheduled_nodes.append(indices)
 
         # Throw out jobs that are not valid!
         if gpu_trace.size == 0:
@@ -325,7 +317,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
             job = Job(job_info)
             jobs.append(job)
-    return jobs, telemetry_start, telemetry_end
+    return WorkloadData(
+        jobs=jobs,
+        telemetry_start=telemetry_start,
+        telemetry_end=telemetry_end,
+        start_date=telemetry_start_timestamp,
+    )
 
 
 def load_live_data(**kwargs):
@@ -537,7 +534,12 @@ def load_live_data(**kwargs):
         job = Job(job_info)
         jobs.append(job)
 
-    return jobs, telemetry_start, telemetry_end
+    return WorkloadData(
+        jobs=jobs,
+        telemetry_start=telemetry_start,
+        telemetry_end=telemetry_end,
+        start_date=datetime.fromtimestamp(telemetry_start, timezone.utc),
+    )
 
 
 def xname_to_index(xname: str, config: dict):

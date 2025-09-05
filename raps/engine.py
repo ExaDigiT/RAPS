@@ -10,12 +10,11 @@ import os
 import select
 import time
 import random
-import math
 from raps.job import Job, JobState
 from raps.policy import PolicyType
 from raps.utils import (
     summarize_ranges,
-    get_current_utilization
+    get_current_utilization,
 )
 from raps.resmgr import ResourceManager
 from raps.schedulers import load_scheduler
@@ -41,8 +40,8 @@ from raps.downtime import Downtime
 from raps.weather import Weather
 from raps.sim_config import SimConfig
 from raps.system_config import SystemConfig
-
 from bisect import bisect_right
+
 
 @dataclasses.dataclass
 class TickData:
@@ -266,8 +265,7 @@ class Engine:
 
         if sim_config.live and not sim_config.replay:
             td = Telemetry(**sim_config_dict)
-            jobs, timestep_start, timestep_end = \
-                td.load_jobs_times_args_from_live_system()
+            workload_data = td.load_from_live_system()
         elif sim_config.replay:
             # TODO: this will have issues if running separate systems or custom systems
             partition_short = partition.split("/")[-1] if partition else None
@@ -286,27 +284,20 @@ class Engine:
             else:
                 replay_files = sim_config.replay
 
-            jobs, timestep_start, timestep_end, args_from_file = td.load_jobs_times_args_from_files(
-                files=replay_files,
-                args=sim_config_args, config=system_config_dict,
-            )
+            workload_data = td.load_from_files(replay_files)
         else:  # Synthetic jobs
             wl = Workload(sim_config_args, system_config_dict)
-            jobs = wl.generate_jobs()
-            timestep_start = 0
-            if hasattr(jobs[0], 'end_time'):
-                timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
-            else:
-                timestep_end = 88200  # 24 hours
-
+            workload_data = wl.generate_jobs()
             td = Telemetry(**sim_config_dict)
+
+        jobs = workload_data.jobs
 
         # TODO refactor how stat/end/fastforward/time work
         if sim_config.fastforward is not None:
-            timestep_start = timestep_start + sim_config.fastforward
+            workload_data.telemetry_start = workload_data.telemetry_start + sim_config.fastforward
 
         if sim_config.time is not None:
-            timestep_end = timestep_start + sim_config.time
+            workload_data.telemetry_end = workload_data.telemetry_start + sim_config.time
 
         if sim_config.time_delta is not None:
             time_delta = sim_config.time_delta
@@ -339,7 +330,7 @@ class Engine:
             system_config=system_config,
         )
 
-        return engine, jobs, timestep_start, timestep_end, time_delta
+        return engine, workload_data, time_delta
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -536,7 +527,10 @@ class Engine:
             job.running_time = self.current_timestep - job.start_time
 
             if job.current_state != JobState.RUNNING:
-                raise ValueError(f"Job {job.id} is in running list, but state is not RUNNING: job.state == {job.current_state}")
+                raise ValueError(
+                    f"Job {job.id} is in running list, " +
+                    "but state is not RUNNING: job.state == {job.current_state}"
+                )
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if job.running_time > job.time_limit and job.end_time is not None:

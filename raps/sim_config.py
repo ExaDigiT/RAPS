@@ -48,9 +48,9 @@ class SimConfig(BaseModel):
     def downscale(self) -> int:
         return int(timedelta(seconds=1) / self.time_unit)
 
-    start: str = "2021-05-21T13:00"
+    start: str = "2021-05-21T13:00:00-04:00"
     """ ISO8601 start of simulation """
-    end: str = "2021-05-21T14:00"
+    end: str = "2021-05-21T14:00:00-04:00"
     """ ISO8601 end of simulation """
 
     numjobs: int = 100

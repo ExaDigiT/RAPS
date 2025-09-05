@@ -30,7 +30,8 @@ from raps.utils import (
     determine_state, next_arrival,
     next_arrival_byconfargs,
     truncated_weibull,
-    truncated_weibull_float
+    truncated_weibull_float,
+    WorkloadData,
 )
 import math
 import random
@@ -66,7 +67,12 @@ class Workload:
         # This function calls the job generation function as specified by the workload keyword.
         # The respective funciton of this class is called.
         jobs = getattr(self, self.args.workload)(args=self.args)
-        return jobs
+        timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
+        return WorkloadData(
+            jobs=jobs,
+            telemetry_start=0, telemetry_end=timestep_end,
+            start_date=self.args.start,
+        )
 
     def compute_traces(self,
                        cpu_util: float,
@@ -972,10 +978,10 @@ def run_workload(sim_config: SimConfig):
 
     if sim_config.replay:
         td = Telemetry(**args_dict)
-        jobs, _, _, _ = td.load_jobs_times_args_from_files(files=sim_config.replay, args=args, config=config)
+        jobs = td.load_from_files(sim_config.replay).jobs
     else:
         workload = Workload(args, config)
-        jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args)
+        jobs = getattr(workload, sim_config.workload)(args=sim_config.get_legacy_args())
     plot_job_hist(jobs,
                   config=config,
                   dist_split=sim_config.multimodal,
@@ -994,5 +1000,5 @@ def continuous_job_generation(*, engine, timestep, jobs):
     # print("if len(engine.queue) <= engine.continuous_workload.args.maxqueue:")
     # print(f"if {len(engine.queue)} <= {engine.continuous_workload.args.maxqueue}:")
     if len(engine.queue) <= engine.continuous_workload.args.maxqueue:
-        new_jobs = engine.continuous_workload.generate_jobs()
+        new_jobs = engine.continuous_workload.generate_jobs().jobs
         jobs.extend(new_jobs)
