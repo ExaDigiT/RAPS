@@ -8,6 +8,7 @@ from raps.utils import (
 )
 from raps.system_config import SystemConfig, get_partition_configs
 from pydantic import BaseModel, model_validator
+import importlib
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
@@ -158,12 +159,16 @@ class SimConfig(BaseModel):
 
     # Synthetic workloads
     scheduler: Literal[
-        "default", "scheduleflow", "fastsim", "anl", "flux", "experimental", "multitenant",
+        "default",
+        "experimental",
+        "fastsim",
+        "multitenant",
+        "scheduleflow",
     ] = "default"
     """ Scheduler name """
-    policy: PolicyType | None = None
+    policy: str | None = None
     """ Schedule policy """
-    backfill: BackfillType | None = None
+    backfill: str | None = None
     """ Backfill policy """
 
     # Arrival
@@ -257,6 +262,34 @@ class SimConfig(BaseModel):
 
         if self.live and not self.replay and self.time is None:
             raise ValueError("--time must be set, specifing how long we want to predict")
+
+        if self.policy or self.backfill:
+            try:
+                module = importlib.import_module(f"raps.schedulers.{self.scheduler}")
+            except ImportError as e:
+                raise ValueError(f"Scheduler '{self.scheduler}' could not be imported") from e
+
+        if self.policy:
+            extended_policytypes = getattr(module, "ExtendedPolicyType", None)
+
+            valid_policies = set(m.value for m in PolicyType)
+            if extended_policytypes is not None:
+                valid_policies |= {m.value for m in extended_policytypes}
+
+            if self.policy not in valid_policies:
+                raise ValueError(f"policy {self.policy} not implemented by {self.scheduler}. "
+                                 f"Valid selections: {sorted(valid_policies)}")
+
+        if self.backfill:
+            extended_backfilltypes = getattr(module, "ExtendedBackfillType", None)
+
+            valid_backfilltypes = set(m.value for m in BackfillType)
+            if extended_backfilltypes is not None:
+                valid_backfilltypes |= {m.value for m in extended_backfilltypes}
+
+            if self.backfill not in valid_backfilltypes:
+                raise ValueError(f"policy {self.backfill} not implemented by {self.scheduler}. "
+                                 f"Valid selections: {sorted(valid_backfilltypes)}")
 
         return self
 
