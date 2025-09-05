@@ -49,7 +49,9 @@ scheduler:
     NODE_FAIL: 0.01
 network:
   topology: torus3d
-  network_max_bw: 9600000000.0
+  #topology: capacity
+  #network_max_bw: 9.6E9
+  network_max_bw: 1E7
   torus_x: 24
   torus_y: 24
   torus_z: 24

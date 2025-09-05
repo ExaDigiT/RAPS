@@ -103,26 +103,45 @@ def dilate_trace(trace, factor):
     Scale a trace in the time dimension by the given factor.
 
     Parameters:
-    - trace (list of float): the original trace values.
-    - factor (float): the dilation factor; >1 to slow down (stretch) and <1 to speed up (compress).
+    - trace: list/tuple/np.ndarray of floats OR a single numeric scalar.
+    - factor (float): >1 to slow down (stretch in time), <1 to speed up.
 
     Returns:
-    - list of float: the dilated trace.
+    - list of float for sequence inputs, or numeric for scalar inputs.
     """
-    if trace is None or (isinstance(trace, (list, np.ndarray)) and len(trace) == 0):
+    if trace is None:
         return trace
-    # Traces can be list/np.array or single float values.
-    # In case of a single float, we adjust the value directly as it is applied to each timestep
-    if isinstance(trace, (np.float64, float)):
-        return trace / factor  # Single value
-    original_length = len(trace)
-    # Compute the new length (rounding to the nearest integer)
-    new_length = int(np.round(original_length * factor))
-    # Create arrays for the old and new indices
+
+    if factor is None:
+        raise ValueError("factor must be provided")
+    if factor == 0:
+        raise ValueError("factor must be non-zero")
+
+    # Treat any numeric scalar (int/float/np.number) as a scalar trace
+    if isinstance(trace, (int, float, np.integer, np.floating, np.number)):
+        # Keep total "area" the same when stretching/compressing in time:
+        return trace / factor
+
+    # Handle common sequence types directly
+    if isinstance(trace, (list, tuple, np.ndarray)):
+        arr = np.asarray(trace, dtype=float)
+    else:
+        # Last-resort: try coercion (e.g., pandas Series)
+        arr = np.asarray(trace, dtype=float)
+
+    if arr.size == 0:
+        # empty sequence: nothing to do
+        return [] if not isinstance(trace, np.ndarray) else arr
+
+    original_length = arr.size
+    # at least 1 sample after dilation
+    new_length = max(1, int(np.round(original_length * float(factor))))
+
+    # If original_length == 1, interpolation just repeats the value
     old_indices = np.linspace(0, original_length - 1, num=original_length)
     new_indices = np.linspace(0, original_length - 1, num=new_length)
-    # Use linear interpolation to compute the new trace values
-    new_trace = np.interp(new_indices, old_indices, trace).tolist()
+
+    new_trace = np.interp(new_indices, old_indices, arr).tolist()
     return new_trace
 
 

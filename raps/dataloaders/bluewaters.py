@@ -17,7 +17,17 @@ To download the necessary datasets:
 
        2. /node_metrics/cray_system_sampler - we are using the file 20170328.tgz (485MB)
 
-    Another dataset we plan to use (but not currently):
+    In order to speed up data loading, we have downsized these files to just
+    four columns using the following code:
+
+        import csv
+        with open("20170328", "r") as infile, open("output.csv", "w", newline="") as outfile:
+            reader = csv.reader(infile, skipinitialspace=True)
+            writer = csv.writer(outfile)
+            for row in reader:
+                writer.writerow([row[0], row[1], row[15], row[16]])
+
+    Another dataset we plan to use (but not currently using) is:
 
        3. Monet - Blue Waters Network Dataset (140GB) - https://databank.illinois.edu/datasets/IDB-2921318
 
@@ -33,6 +43,7 @@ import re
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
+from pprint import pprint
 from raps.telemetry import Job, job_dict
 from raps.utils import WorkloadData
 
@@ -64,20 +75,10 @@ def build_sampler_df(root, day, nodes, tmin, tmax, tx_idx, rx_idx, chunksize=Non
         df = df[df["nid"].isin(nodes)]
         if df.empty:
             return None
-        # sort & compute deltas per node
+        # sort values (optional, for consistency)
         df = df.sort_values(["nid", "ts"])
-        df["ts_prev"] = df.groupby("nid")["ts"].shift(1)
-        df["tx_prev"] = df.groupby("nid")["tx"].shift(1)
-        df["rx_prev"] = df.groupby("nid")["rx"].shift(1)
-        # positive deltas only
-        df["dtx"] = df["tx"] - df["tx_prev"]
-        df["drx"] = df["rx"] - df["rx_prev"]
-        df = df[(df["dtx"] > 0) | (df["drx"] > 0)]
-        if df.empty:
-            return None
-        # mid-interval timestamp for window inclusion
-        df["mid_ts"] = 0.5 * (df["ts"] + df["ts_prev"])
-        df = df[["nid", "mid_ts", "dtx", "drx"]].dropna()
+        # keep raw values
+        df = df[["nid", "ts", "tx", "rx"]].dropna()
         return df
 
     for fp in files:
@@ -182,6 +183,8 @@ def load_data(local_dataset_path, **kwargs):
     root = Path(local_dataset_path[0])
     day = kwargs.get("start")
     fp = root / "torque_logs" / day
+    filter_str = kwargs.get("filter")
+    debug = kwargs.get("debug")
 
     jobs_raw = []
 
@@ -256,8 +259,10 @@ def load_data(local_dataset_path, **kwargs):
     global_tmax = max(abs_ends)
 
     # Confirm the correct 0-based indices for ipogif0_* from the HEADER
-    tx_idx = 15  # kwargs.get("sampler_tx_idx", 15)  # placeholder; pass real index via kwargs
-    rx_idx = 16  # kwargs.get("sampler_rx_idx", 16)  # placeholder; pass real index via kwargs
+    # tx_idx = 15 # for the original file
+    # rx_idx = 16
+    tx_idx = 2  # for a downselected file with just four columns: [timestamp, node, tx, rx] - for faster loading
+    rx_idx = 3
 
     # Build once (chunk if files are huge)
     sampler_df = build_sampler_df(root, day, all_nodes, global_tmin, global_tmax, tx_idx, rx_idx, chunksize=None)
@@ -279,16 +284,23 @@ def load_data(local_dataset_path, **kwargs):
 
         # Filter by nodes, sum positive deltas
         dfj = sampler_df[sampler_df["nid"].isin(nodes)]
-        total_tx = int(dfj["dtx"].sum()) if not dfj.empty else 0
-        total_rx = int(dfj["drx"].sum()) if not dfj.empty else 0
-        # total_tx and total_rx are bytes per node
+
+        # Print first 10 rows (node, tx, rx)
+        if debug:
+            print(dfj[["nid", "tx", "rx"]].head(10))
+
+        total_tx = int(dfj["tx"].sum()) if not dfj.empty else 0
+        total_rx = int(dfj["rx"].sum()) if not dfj.empty else 0
 
         nodes_required = r.get("nodes_required")
+
+        avg_tx_per_node = total_tx / nodes_required if nodes_required > 0 else 0
+        avg_rx_per_node = total_rx / nodes_required if nodes_required > 0 else 0
 
         # Smear totals evenly across bins (simple first pass)
         duration = max(1, et_abs - st_abs)
         samples = max(1, math.ceil(duration / bin_s))
-        ntx, nrx = throughput_traces(total_tx, total_rx, samples)  # bytes per bin
+        ntx, nrx = throughput_traces(avg_tx_per_node, avg_rx_per_node, samples)
 
         job_d = job_dict(
             nodes_required=nodes_required,
@@ -314,7 +326,16 @@ def load_data(local_dataset_path, **kwargs):
             trace_quanta=bin_s,
             trace_missing_values=False,
         )
-        jobs.append(Job(job_d))
+
+        if filter_str:
+            traffic = (avg_tx_per_node + avg_rx_per_node) / 2.
+            keep_jobs = eval(filter_str)
+            print(job_d["id"], filter_str, traffic, keep_jobs)
+        else:
+            keep_jobs = True
+
+        if keep_jobs:
+            jobs.append(Job(job_d))
 
     # Normalize times so first start = 0
     t0 = min((j.start_time for j in jobs), default=0)
@@ -327,6 +348,10 @@ def load_data(local_dataset_path, **kwargs):
         j.trace_end_time -= t0
 
     # pprint(jobs)
+
+    if debug:
+        pprint(jobs)
+
     telemetry_start = 0
     telemetry_end = max((j.end_time for j in jobs), default=0)
 
