@@ -21,7 +21,7 @@ class MultiPartEngine:
         workloads_by_partition: dict[str, WorkloadData] = {}
         engines: dict[str, Engine] = {}
 
-        timestep_start, timestep_end, time_delta = 0, 0, 0
+        time_delta = 0
         for partition in sim_config.system_configs:
             name = partition.system_name
             engine, workload_data, time_delta = Engine.from_sim_config(
@@ -31,6 +31,9 @@ class MultiPartEngine:
                 job.partition = name
             workloads_by_partition[name] = workload_data
             engines[name] = engine
+        timestep_start = min(w.telemetry_start for w in workloads_by_partition.values())
+        timestep_end = min(w.telemetry_end for w in workloads_by_partition.values())
+
         total_initial_jobs = sum(len(j.jobs) for j in workloads_by_partition.values())
         for engine in engines.values():
             engine.total_initial_jobs = total_initial_jobs

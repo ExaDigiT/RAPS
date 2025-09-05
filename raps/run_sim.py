@@ -245,12 +245,6 @@ def run_multi_part_sim(sim_config: SimConfig):
     multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
         MultiPartEngine.from_sim_config(sim_config)
 
-    # TODO: The mit_supercloud dataloader seems to be outputting the wrong timesteps? mit_supercloud
-    # is the only multi-partition system with replay, so just manually overriding the timesteps here
-    # to fix it for now. The original multi-part-sim.py always started from timestep 0 as well.
-    timestep_end = timestep_end - timestep_start
-    timestep_start = 0
-
     if sim_config.output:
         for part, engine in multi_engine.engines.items():
             engine.telemetry.save_snapshot(
