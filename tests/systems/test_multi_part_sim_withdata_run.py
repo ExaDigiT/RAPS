@@ -20,7 +20,7 @@ def test_multi_part_sim_withdata_run(system, system_config, system_files):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run-multi-part",
+        "python", "main.py", "run-parts",
         "--time", "1h",
         "-x", f"{system}/*",
         "-f", ','.join(system_files),
