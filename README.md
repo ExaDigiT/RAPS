@@ -179,6 +179,12 @@ RAPS_DATA_DIR=/opt/data pytest -n auto -x
 By default, tests are parallelized with `pytest-xdist` (`-n auto`) to speed up execution.
 The `-x` flag stops execution after the first failure. Add `-v` to run in verbose mode.
 
+### Run tests on multi-partition systems
+
+```bash
+pytest -v -k "multi_part_sim"
+```
+
 ### Run only network-related tests
 
 ```bash
