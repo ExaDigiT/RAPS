@@ -222,7 +222,7 @@ class Telemetry:
 
     def update_jobs(self, jobs: list[Job]):
         """ Updates jobs with new scale or random start times """
-        if self.kwargs.get("scale") is not None:
+        if self.kwargs.get("scale"):
             for job in jobs:
                 job.nodes_required = random.randint(1, self.kwargs['scale'])
                 job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
