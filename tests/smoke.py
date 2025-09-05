@@ -54,7 +54,7 @@ def synthetic_workload_tests():
 def hetero_tests():
     """Run heterogeneous workload tests."""
     print("Starting heterogeneous workload tests...")
-    run_command(f"python main.py run-multi-part -x setonix/part-cpu setonix/part-gpu -t {DEFAULT_TIME}")
+    run_command(f"python main.py run-parts -x setonix/part-cpu setonix/part-gpu -t {DEFAULT_TIME}")
 
 
 def main():

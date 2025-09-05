@@ -18,7 +18,7 @@ def test_multi_part_sim_basic_run(system, system_config):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run-multi-part",
+        "python", "main.py", "run-parts",
         "--time", "1h",
         "-x", f"{system}/*",
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
