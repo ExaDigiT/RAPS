@@ -62,21 +62,20 @@ For MIT Supercloud
     python -m raps.dataloaders.mit_supercloud.cli download --start 2021-05-21T13:00 --end 2021-05-21T14:00
 
     # Load data and run simulation - will save data as part-cpu.npz and part-gpu.npz files
-    raps run-multi-part -x 'mit_supercloud/*' -f $DPATH --system mit_supercloud \
-                             --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    raps run-parts -x mit_supercloud -f $DPATH --system mit_supercloud --start 2021-05-21T13:00 --end 2021-05-21T14:00
     # Note: if no start, end dates provided will default to run 24 hours between
     # 2021-05-21T00:00 to 2021-05-22T00:00 set by defaults in raps/dataloaders/mit_supercloud/utils.py
 
     # Re-run simulation using npz files (much faster load)
-    raps run-multi-part -x mit_supercloud/* -f part-*.npz --system mit_supercloud
+    raps run-parts -x mit_supercloud -f part-*.npz --system mit_supercloud
 
     # Synthetic tests for verification studies:
-    raps run-multi-part -x 'mit_supercloud/*' -w multitenant
+    raps run-parts -x mit_supercloud -w multitenant
 
 For Lumi
 
-    # Synthetic test for lumi multi-part-sim:
-    raps run-multi-part -x lumi/*
+    # Synthetic test for Lumi:
+    raps run-parts -x lumi
 
 ## Perform Network Simulation
 
@@ -92,7 +91,6 @@ RAPS saves a snapshot of the extracted data in NPZ format. The NPZ file can be
 given instead of the parquet files for more quickly running subsequent simulations, e.g.:
 
     raps run -f jobs_2024-02-20_12-20-39.npz
-
 
 ## Cooling models
 
@@ -111,23 +109,21 @@ use `--cooling` or `-c` argument. e.g.,
 
 ## Support for multiple system partitions
 
-Multi-partition systems are supported by running the `multi-part-sim.py` script, where a list of configurations can be specified using the `-x` flag as follows:
+Multi-partition systems are supported by running `raps multi-parts ...` command, where a list of partitions can be specified using the `-x` flag as follows:
 
-    raps run-multi-part -x setonix/part-cpu setonix/part-gpu
+    raps run-parts -x setonix/part-cpu setonix/part-gpu
 
 or simply:
 
-    raps run-multi-part -x setonix/* # bash
-
-    raps run-multi-part -x 'setonix/*' # zsh
+    raps run-parts -x setonix
 
 This will simulate synthetic workloads on two partitions as defined in `config/setonix-cpu` and `config/setonix-gpu`. To replay telemetry workloads from another system, e.g., Marconi100's PM100 dataset, first create a .npz snapshot of the telemetry data, e.g.,
 
-    raps run-multi-part --system marconi100 -f /path/to/marconi100/job_table.parquet
+    raps run-parts --system marconi100 -f /path/to/marconi100/job_table.parquet
 
-This will dump a .npz file with a randomized name, e.g. ac23db.npz. Let's rename this file to pm100.npz for clarity. Note: can control-C when the simulation starts. Now, this pm100.npz file can be used with `multi-part-sim.py` as follows:
+This will dump a .npz file with a randomized name, e.g. ac23db.npz. Let's rename this file to pm100.npz for clarity. Note: can control-C when the simulation starts. Now, this pm100.npz file can be used as follows:
 
-    raps run-multi-part -x setonix/* -f pm100.npz --arrival poisson --scale 192
+    raps run-parts -x setonix -f pm100.npz --arrival poisson --scale 192
 
 ## Modifications to telemetry replay
 
@@ -135,9 +131,10 @@ There are three ways to modify replaying of telemetry data:
 
 1. `--arrival`. Changing the arrival time distribution - replay cases will default to `--arrival prescribed`, where the jobs will be submitted exactly as they were submitted on the physical machine. This can be changed to `--arrival poisson` to change when the jobs arrive, which is especially useful in cases where there may be gaps in time, e.g., when the system goes down for several days, or the system is is underutilized.
 python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --arrival poisson
-2. `--policy`. Changing the way the jobs are scheduled. The `--policy` flag will be set by default to `replay` in cases where a telemetry file is provided, in which case the jobs will be scheduled according to the start times provided. Changing the `--policy` to `fcfs` or `backfill` will use the internal scheduler.
 
-python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --policy fcfs --backfill firstfit -t 12h
+2. `--policy`. Changing the way the jobs are scheduled. The `--policy` flag will be set by default to `replay` in cases where a telemetry file is provided, in which case the jobs will be scheduled according to the start times provided. Changing the `--policy` to `fcfs` or `backfill` will use the internal scheduler, e.g.:
+
+    python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR --policy fcfs --backfill firstfit -t 12h
 
 3. `--scale`. Changing the scale of each job in the telemetry data. The `--scale` flag will specify the maximum number of nodes for each job (generally set this to the max number of nodes of the smallest partition), and randomly select the number of nodes for each job from one to max nodes. This flag is useful when replaying telemetry from a larger system onto a smaller system.
 

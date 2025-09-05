@@ -3,7 +3,7 @@ ExaDigiT Resource Allocator & Power Simulator (RAPS)
 """
 import argparse
 from raps.helpers import check_python_version
-from raps.run_sim import run_sim_add_parser, run_multi_part_sim_add_parser, show_add_parser
+from raps.run_sim import run_sim_add_parser, run_parts_sim_add_parser, show_add_parser
 from raps.workload import run_workload_add_parser
 from raps.telemetry import run_telemetry_add_parser
 
@@ -20,7 +20,7 @@ def main(cli_args: list[str] | None = None):
     subparsers = parser.add_subparsers(required=True)
 
     run_sim_add_parser(subparsers)
-    run_multi_part_sim_add_parser(subparsers)
+    run_parts_sim_add_parser(subparsers)
     show_add_parser(subparsers)
     run_workload_add_parser(subparsers)
     run_telemetry_add_parser(subparsers)

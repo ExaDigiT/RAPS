@@ -7,6 +7,7 @@ import json
 import pandas as pd
 import sys
 import yaml
+import warnings
 from pathlib import Path
 from raps.ui import LayoutManager
 from raps.plotting import Plotter
@@ -73,7 +74,7 @@ def run_sim(sim_config: SimConfig):
     if sim_config.verbose or sim_config.debug:
         print(f"SimConfig: {sim_config.model_dump_json(indent=4)}")
     if len(sim_config.system_configs) > 1:
-        print("Use run-multi-part to run multi-partition simulations")
+        print("Use run-parts to run multi-partition simulations")
         sys.exit(1)
 
     engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
@@ -221,8 +222,8 @@ def run_sim(sim_config: SimConfig):
         print("Output directory is: ", out)  # If output is enabled, the user wants this information as last output
 
 
-def run_multi_part_sim_add_parser(subparsers: SubParsers):
-    parser = subparsers.add_parser("run-multi-part", description="""
+def run_parts_sim_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("run-parts", description="""
         Simulates multi-partition (heterogeneous) systems. Supports replaying telemetry or
         generating synthetic workloads across CPU-only, GPU, and mixed partitions. Initializes
         per-partition power, FLOPS, and scheduling models, then advances simulations in lockstep.
@@ -237,11 +238,18 @@ def run_multi_part_sim_add_parser(subparsers: SubParsers):
         "cli_shortcuts": shortcuts,
     })
     parser.set_defaults(
-        impl=lambda args: run_multi_part_sim(model_validate(args, read_yaml(args.config_file)))
+        impl=lambda args: run_parts_sim(model_validate(args, read_yaml(args.config_file)))
     )
 
 
-def run_multi_part_sim(sim_config: SimConfig):
+def run_parts_sim(sim_config: SimConfig):
+
+    if len(sim_config.system_configs) == 1:
+        warnings.warn(
+            "run_parts_sim is usually for multiple partitions. Did you mean to run with one?",
+            UserWarning
+        )
+
     multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
         MultiPartEngine.from_sim_config(sim_config)
 
