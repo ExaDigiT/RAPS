@@ -4,23 +4,14 @@ from gym import spaces
 import numpy as np
 
 from raps.engine import Engine
-from raps.power import PowerManager, compute_node_power
-from raps.flops import FLOPSManager
-from raps.telemetry import Telemetry
 from raps.workload import Workload
-from raps.ui import LayoutManager
-from raps.schedulers.rl import Scheduler
 # from raps.resmgr.default import MultiTenantResourceManager as ResourceManager
-from raps.resmgr.default import ExclusiveNodeResourceManager as ResourceManager
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
 from stable_baselines3.common.logger import Logger, HumanOutputFormat
 import sys
 
-logger = Logger(
-    folder=None,  # no log file, just stdout
-    output_formats=[HumanOutputFormat(sys.stdout)]
-)
+logger = Logger(folder=None, output_formats=[HumanOutputFormat(sys.stdout)])
 
 
 def print_stats(stats, step=0):
@@ -56,65 +47,11 @@ class RAPSEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, **kwargs):
+    def __init__(self, sim_config):
         super().__init__()
         # Store everything in self.args
-        self.args_dict = kwargs  # dict
-        self.cli_args = kwargs.get("args")  # Namespace
-        self.config = kwargs.get("config")
-        if self.cli_args is None:
-            raise ValueError("RAPSEnv requires 'args' (argparse.Namespace) in kwargs")
-        if self.config is None:
-            raise ValueError("RAPSEnv requires 'config' in kwargs")
-
-        # --- managers (minimal versions) ---
-        self.power_manager = PowerManager(compute_node_power, **self.config)
-        self.flops_manager = FLOPSManager(**self.args_dict)
-        self.telemetry = Telemetry(**self.args_dict)
-
-        # --- Build initial jobs & time bounds ---
-        self.jobs, self.timestep_start, self.timestep_end = self._build_jobs()
-        self.original_jobs = self.jobs               # keep pristine version
-
-        self.engine = Engine(
-            power_manager=self.power_manager,
-            flops_manager=self.flops_manager,
-            jobs=self.jobs,
-            **self.args_dict
-        )
-
-        resmgr = ResourceManager(
-            total_nodes=self.config["TOTAL_NODES"],
-            down_nodes=self.config.get("DOWN_NODES", []),
-            config=self.config
-        )
-
-        # Plug in RL scheduler
-        self.scheduler = Scheduler(
-            config=self.config,
-            policy="fcfs",   # or None if you want no heuristic fallback
-            resource_manager=resmgr,
-            env=self
-        )
-        self.engine.scheduler = self.scheduler
-
-        self.layout_manager = LayoutManager(
-            self.args_dict.get("layout"), engine=self.engine,
-            debug=self.args_dict.get("debug", False),
-            total_timesteps=self.args_dict.get("time", 1000),
-            args_dict=self.args_dict,
-            **self.config
-        )
-
-        self.timestep_start = 0
-        self.timestep_end = getattr(self.cli_args, "episode_length")
-
-        self.generator = self.layout_manager.run_stepwise(
-            self.jobs,
-            timestep_start=self.timestep_start,
-            timestep_end=self.timestep_end,
-            time_delta=self.args_dict.get("time_delta"),
-        )
+        self.sim_config = sim_config
+        self.engine = self._create_engine()
 
         # --- RL spaces ---
         max_jobs = 100
@@ -123,6 +60,14 @@ class RAPSEnv(gym.Env):
             low=0, high=1, shape=(max_jobs, job_features), dtype=np.float32
         )
         self.action_space = spaces.Discrete(max_jobs)
+
+    def _create_engine(self):
+        self.engine, workload_data, time_delta = Engine.from_sim_config(self.sim_config)
+        self.engine.scheduler.env = self
+        jobs = workload_data.jobs
+        timestep_start = workload_data.telemetry_start
+        timestep_end = workload_data.telemetry_end
+        self.generator = self.engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)
 
     def _build_jobs(self):
         """
@@ -204,6 +149,9 @@ class RAPSEnv(gym.Env):
 #        return self._get_state(), {}
 
     def reset(self, **kwargs):
+        self.engine = self._create_engine()
+
+    def reset2(self, **kwargs):
         completed = [j.id for j in self.jobs if j.current_state.name == "COMPLETED"]
         print(f"[RESET] Jobs already completed before deepcopy: {len(completed)}")
 

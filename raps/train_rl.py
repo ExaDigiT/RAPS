@@ -2,12 +2,6 @@ from raps.sim_config import SingleSimConfig, SIM_SHORTCUTS
 from raps.utils import SubParsers, pydantic_add_args, read_yaml
 
 
-class RLConfig(SingleSimConfig):
-    # Reinforcement Learning
-    episode_length: int = 1000
-    """ Number of timesteps per RL episode (default 1000) """
-
-
 def train_rl_add_parser(subparsers: SubParsers):
     parser = subparsers.add_parser("train-rl", description="""
         Example usage:
@@ -17,15 +11,18 @@ def train_rl_add_parser(subparsers: SubParsers):
         YAML sim config file, can be used to configure an experiment instead of using CLI
         flags. Pass "-" to read from stdin.
     """)
-    model_validate = pydantic_add_args(parser, RLConfig, model_config={
+    model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
         "cli_shortcuts": SIM_SHORTCUTS,
     })
-    parser.set_defaults(
-        impl=lambda args: train_rl(model_validate(args, read_yaml(args.config_file)))
-    )
+
+    def impl(args):
+        model = model_validate(args, read_yaml(args.config_file))
+        model.scheduler = "rl"
+        train_rl(model)
+    parser.set_defaults(impl=impl)
 
 
-def train_rl(rl_config: RLConfig):
+def train_rl(rl_config: SingleSimConfig):
     from stable_baselines3 import PPO
     from raps.envs.raps_env import RAPSEnv
 
@@ -34,14 +31,14 @@ def train_rl(rl_config: RLConfig):
     args_dict['config'] = config
     args_dict['args'] = rl_config.get_legacy_args()
 
-    env = RAPSEnv(**args_dict)
+    env = RAPSEnv(rl_config)
 
     model = PPO(
         "MlpPolicy",
         env,
         n_steps=512,         # shorter rollouts (quicker feedback loop)
         batch_size=128,      # must divide n_steps evenly
-        n_epochs=10,         # # of minibatch passes per update
+        n_epochs=10,         # of minibatch passes per update
         gamma=0.99,          # discount (keeps long-term credit)
         learning_rate=3e-4,  # default Adam lr, can try 1e-4 if unstable
         ent_coef=0.01,       # encourage exploration
@@ -53,6 +50,7 @@ def train_rl(rl_config: RLConfig):
 
     # Output stats
     stats = env.get_stats()
+    print(stats)
 
     # Save trained model
     model.save("ppo_raps")
