@@ -21,10 +21,37 @@ import json
 import argparse
 from pathlib import Path
 from typing import Annotated as A, TypeVar, Callable, TypeAlias
-from pydantic import BaseModel, TypeAdapter, AfterValidator, ConfigDict, AwareDatetime
+from pydantic import BaseModel, TypeAdapter, AfterValidator, ConfigDict, AwareDatetime, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
 import yaml
 from raps.job import Job
+
+
+def deep_merge(a: dict, b: dict):
+    a = {**a}
+    for key in b.keys():
+        if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+            a[key] = deep_merge(a[key], b[key])
+        else:
+            a[key] = b[key]
+    return a
+
+
+def deep_subtract_dicts(a: dict, b: dict):
+    """
+    Remove all fields from a that are already in b, such that
+    deep_merge(deep_subtract_dicts(a, b), b) == a
+    a should contain a superset of b's keys.
+    """
+    a = {**a}
+    for key in b.keys():
+        if key in a:
+            if a[key] == b[key]:
+                a.pop(key)
+            elif isinstance(a[key], dict) and isinstance(b[key], dict):
+                a[key] = deep_subtract_dicts(a[key], b[key])
+            # otherwise keep key in a as is
+    return a
 
 
 def sum_values(values):
@@ -639,6 +666,13 @@ SmartTimedelta = A[timedelta, AfterValidator(parse_td)]
 T = TypeVar("T", bound=BaseModel)
 
 
+class RAPSBaseModel(BaseModel):
+    """ Base Pydantic model with shared config """
+    model_config = ConfigDict(
+        use_attribute_docstrings=True,
+    )
+
+
 def pydantic_add_args(
     parser: argparse.ArgumentParser, model_cls: type[T],
     model_config: SettingsConfigDict | None = None,
@@ -655,6 +689,7 @@ def pydantic_add_args(
     model_config_dict = SettingsConfigDict({
         "cli_implicit_flags": True,
         "cli_kebab_case": True,
+        "title": model_cls.__name__,
         **(model_config or {}),
         "cli_parse_args": False,  # Don't automatically parse args
     })
@@ -671,13 +706,17 @@ def pydantic_add_args(
     cli_settings_source = CliSettingsSource(SettingsModel, root_parser=parser)
 
     def model_validate_args(args: argparse.Namespace, data: dict | None = None):
-        model = CliApp.run(SettingsModel,
-                           cli_args=args,
-                           cli_settings_source=cli_settings_source,
-                           **(data or {}),
-                           )
-        # Recreate model so we don't return the SettingsModel subclass
-        return model_cls.model_validate(model.model_dump())
+        try:
+            model = CliApp.run(SettingsModel,
+                               cli_args=args,
+                               cli_settings_source=cli_settings_source,
+                               **(data or {}),
+                               )
+            # Recreate model so we don't return the SettingsModel subclass
+            return model_cls.model_validate(model.model_dump())
+        except ValidationError as err:
+            print(err)
+            sys.exit(1)
     return model_validate_args
 
 
@@ -711,7 +750,7 @@ def yaml_dump(data):
     )
 
 
-class WorkloadData(BaseModel):
+class WorkloadData(RAPSBaseModel):
     """
     Represents a workload, a list of jobs with some metadata. Returned by dataloaders load_data()
     function, and by Workload.generate_jobs().

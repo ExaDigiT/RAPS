@@ -15,7 +15,7 @@ from types import ModuleType
 import importlib
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, model_validator
+from pydantic import model_validator
 # from rich.progress import track
 
 from raps.sim_config import SimConfig
@@ -28,12 +28,12 @@ from raps.plotting import (
     plot_network_histogram
 )
 from raps.utils import (
-    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadData,
+    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadData, RAPSBaseModel,
 )
 
 
 # TODO: should reuse this model in SimConfig
-class TelemetryArgs(BaseModel):
+class TelemetryArgs(RAPSBaseModel):
     jid: str = '*'
     """ Replay job id """
     replay: list[ExpandedPath] | None = None

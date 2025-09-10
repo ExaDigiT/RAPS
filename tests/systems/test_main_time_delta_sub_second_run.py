@@ -34,17 +34,11 @@ def test_main_time_delta_sub_second_run(system, system_config, time_arg, tdelta_
         "--time-delta", tdelta_arg,
         "--system", system,
         "--noui",
-        "-o", sim_output
+        "-o", sim_output,
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     time = parse_td(time_arg).seconds
     assert f"Time Simulated: {convert_seconds_to_hhmmss(time)}" in result.stdout
-
-    subprocess.run(
-        f"rm {sim_output}.npz && rm -fr simulation_results/{sim_output}",
-        shell=True,
-        check=True
-    )
 
     del result
     gc.collect()

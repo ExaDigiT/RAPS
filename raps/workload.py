@@ -40,7 +40,7 @@ import matplotlib.pyplot as plt
 from raps.telemetry import Telemetry
 from raps.job import job_dict, Job
 from raps.utils import create_file_indexed, SubParsers, pydantic_add_args
-from raps.sim_config import SimConfig
+from raps.sim_config import SingleSimConfig
 
 
 JOB_NAMES = ["LAMMPS", "GROMACS", "VASP", "Quantum ESPRESSO", "NAMD",
@@ -965,13 +965,13 @@ def run_workload_add_parser(subparsers: SubParsers):
         YAML sim config file, can be used to configure an experiment instead of using CLI
         flags. Pass "-" to read from stdin.
     """)
-    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+    model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
         "cli_shortcuts": shortcuts,
     })
     parser.set_defaults(impl=lambda args: run_workload(model_validate(args, {})))
 
 
-def run_workload(sim_config: SimConfig):
+def run_workload(sim_config: SingleSimConfig):
     args = sim_config.get_legacy_args()
     args_dict = sim_config.get_legacy_args()
     config = sim_config.system_configs[0].get_legacy()
@@ -987,10 +987,11 @@ def run_workload(sim_config: SimConfig):
                   dist_split=sim_config.multimodal,
                   gantt_nodes=sim_config.gantt_nodes)
 
-    if sim_config.output:
+    out = sim_config.get_output()
+    if out:
         timestep_start = min([x.submit_time for x in jobs])
         timestep_end = math.ceil(max([x.submit_time for x in jobs]) + max([x.expected_run_time for x in jobs]))
-        filename = create_file_indexed('wl', create=False, ending="npz").split(".npz")[0]
+        filename = create_file_indexed('wl', path=str(out), create=False, ending="npz").split(".npz")[0]
         # savez_compressed add npz itself, but create_file_indexed needs to check for .npz to find existing files
         np.savez_compressed(filename, jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end, args=args)
         print(filename + ".npz")  # To std-out to show which npz was created.

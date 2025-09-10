@@ -1,7 +1,7 @@
 import os
 import subprocess
 import pytest
-from tests.util import PROJECT_ROOT, DATA_PATH
+from tests.util import PROJECT_ROOT
 
 
 pytestmark = [

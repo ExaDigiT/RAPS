@@ -22,7 +22,7 @@ from raps.stats import (
     print_formatted_report
 )
 
-from raps.sim_config import SimConfig
+from raps.sim_config import SingleSimConfig, MultiPartSimConfig
 
 
 def read_yaml(config_file: str):
@@ -62,7 +62,7 @@ def run_sim_add_parser(subparsers: SubParsers):
         YAML sim config file, can be used to configure an experiment instead of using CLI
         flags. Pass "-" to read from stdin.
     """)
-    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+    model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
         "cli_shortcuts": shortcuts,
     })
     parser.set_defaults(
@@ -70,23 +70,26 @@ def run_sim_add_parser(subparsers: SubParsers):
     )
 
 
-def run_sim(sim_config: SimConfig):
+def run_sim(sim_config: SingleSimConfig):
     if sim_config.verbose or sim_config.debug:
-        print(f"SimConfig: {sim_config.model_dump_json(indent=4)}")
+        print(f"SingleSimConfig: {sim_config.model_dump_json(indent=4)}")
     if len(sim_config.system_configs) > 1:
         print("Use run-parts to run multi-partition simulations")
         sys.exit(1)
 
     engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
 
-    out = sim_config.output
+    out = sim_config.get_output()
     if out:
         out.mkdir(parents=True)
         engine.telemetry.save_snapshot(
-            dest=str(out),
+            dest=str(out / 'snapshot.npz'),
             result=workload_data,
             args=sim_config,
         )
+        config_yaml = yaml_dump(sim_config.model_dump(mode="json", exclude_defaults=True))
+        (out / 'sim_config.yaml').write_text(config_yaml)
+
     jobs = workload_data.jobs
     timestep_start, timestep_end = workload_data.telemetry_start, workload_data.telemetry_end
     total_timesteps = timestep_end - timestep_start
@@ -234,7 +237,7 @@ def run_parts_sim_add_parser(subparsers: SubParsers):
         YAML sim config file, can be used to configure an experiment instead of using CLI
         flags. Pass "-" to read from stdin.
     """)
-    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+    model_validate = pydantic_add_args(parser, MultiPartSimConfig, model_config={
         "cli_shortcuts": shortcuts,
     })
     parser.set_defaults(
@@ -242,8 +245,7 @@ def run_parts_sim_add_parser(subparsers: SubParsers):
     )
 
 
-def run_parts_sim(sim_config: SimConfig):
-
+def run_parts_sim(sim_config: MultiPartSimConfig):
     if len(sim_config.system_configs) == 1:
         warnings.warn(
             "run_parts_sim is usually for multiple partitions. Did you mean to run with one?",
@@ -253,13 +255,18 @@ def run_parts_sim(sim_config: SimConfig):
     multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
         MultiPartEngine.from_sim_config(sim_config)
 
-    if sim_config.output:
+    out = sim_config.get_output()
+    if out:
+        out.mkdir(parents=True)
         for part, engine in multi_engine.engines.items():
             engine.telemetry.save_snapshot(
-                dest=str(sim_config.output / part.split('/')[-1]),
+                dest=str(out / part.split('/')[-1]),
                 result=workload_results[part],
                 args=sim_config,
             )
+        config_yaml = yaml_dump(sim_config.model_dump(mode="json", exclude_defaults=True))
+        (out / 'sim_config.yaml').write_text(config_yaml)
+
     jobs = {p: w.jobs for p, w in workload_results.items()}
 
     ui_update_freq = sim_config.system_configs[0].scheduler.ui_update_freq
@@ -317,7 +324,7 @@ def show_add_parser(subparsers: SubParsers):
     parser.add_argument("--show-defaults", default=False, help="""
         If true, include defaults in the output YAML
     """)
-    model_validate = pydantic_add_args(parser, SimConfig, model_config={
+    model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
         "cli_shortcuts": shortcuts,
     })
 
@@ -328,6 +335,6 @@ def show_add_parser(subparsers: SubParsers):
     parser.set_defaults(impl=impl)
 
 
-def show(sim_config: SimConfig, show_defaults=False):
+def show(sim_config: SingleSimConfig, show_defaults=False):
     data = sim_config.model_dump(mode="json", exclude_defaults=not show_defaults)
     print(yaml_dump(data), end="")
