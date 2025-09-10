@@ -22,30 +22,23 @@ pytestmark = [
     ("10cs", "1ms"),
     ("100ms", "1ms"),
     ("100ms", "1s"),
-], ids=["1ds","3ds","1cs","1ms","1cs-for-10ds","1ms-for-10cs","1ms-for-100ms","1s-for-100ms"])
-def test_main_time_delta_sub_second_run(system, system_config, time_arg, tdelta_arg, random_id):
+], ids=["1ds", "3ds", "1cs", "1ms", "1cs-for-10ds", "1ms-for-10cs", "1ms-for-100ms", "1s-for-100ms"])
+def test_main_time_delta_sub_second_run(system, system_config, time_arg, tdelta_arg, sim_output):
     if not system_config.get("time_delta", False):
         pytest.skip(f"{system} does not support time_delta run.")
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "-t", time_arg,
         "--time-delta", tdelta_arg,
         "--system", system,
-        #--"-f", system_file,
         "--noui",
-        "-o", random_id
+        "-o", sim_output,
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     time = parse_td(time_arg).seconds
     assert f"Time Simulated: {convert_seconds_to_hhmmss(time)}" in result.stdout
-
-    subprocess.run(
-        f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",
-        shell=True,
-        check=True
-    )
 
     del result
     gc.collect()

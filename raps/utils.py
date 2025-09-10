@@ -20,11 +20,38 @@ import uuid
 import json
 import argparse
 from pathlib import Path
-from typing import Annotated as A, TypeVar, Callable
-from pydantic import BaseModel, TypeAdapter, AfterValidator
+from typing import Annotated as A, TypeVar, Callable, TypeAlias
+from pydantic import BaseModel, TypeAdapter, AfterValidator, ConfigDict, AwareDatetime, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
 import yaml
 from raps.job import Job
+
+
+def deep_merge(a: dict, b: dict):
+    a = {**a}
+    for key in b.keys():
+        if key in a and isinstance(a[key], dict) and isinstance(b[key], dict):
+            a[key] = deep_merge(a[key], b[key])
+        else:
+            a[key] = b[key]
+    return a
+
+
+def deep_subtract_dicts(a: dict, b: dict):
+    """
+    Remove all fields from a that are already in b, such that
+    deep_merge(deep_subtract_dicts(a, b), b) == a
+    a should contain a superset of b's keys.
+    """
+    a = {**a}
+    for key in b.keys():
+        if key in a:
+            if a[key] == b[key]:
+                a.pop(key)
+            elif isinstance(a[key], dict) and isinstance(b[key], dict):
+                a[key] = deep_subtract_dicts(a[key], b[key])
+            # otherwise keep key in a as is
+    return a
 
 
 def sum_values(values):
@@ -633,7 +660,17 @@ ExpandedPath = A[Path, AfterValidator(lambda v: Path(v).expanduser().resolve())]
 """ Type that that expands ~ and environment variables in a path string """
 
 
+SmartTimedelta = A[timedelta, AfterValidator(parse_td)]
+""" Can be passed as ISO 8601 format like PT5M, or a string like 9s, or a number of seconds """
+
 T = TypeVar("T", bound=BaseModel)
+
+
+class RAPSBaseModel(BaseModel):
+    """ Base Pydantic model with shared config """
+    model_config = ConfigDict(
+        use_attribute_docstrings=True,
+    )
 
 
 def pydantic_add_args(
@@ -650,6 +687,9 @@ def pydantic_add_args(
     some hacks to apply the args manually.
     """
     model_config_dict = SettingsConfigDict({
+        "cli_implicit_flags": True,
+        "cli_kebab_case": True,
+        "title": model_cls.__name__,
         **(model_config or {}),
         "cli_parse_args": False,  # Don't automatically parse args
     })
@@ -666,14 +706,22 @@ def pydantic_add_args(
     cli_settings_source = CliSettingsSource(SettingsModel, root_parser=parser)
 
     def model_validate_args(args: argparse.Namespace, data: dict | None = None):
-        model = CliApp.run(SettingsModel,
-                           cli_args=args,
-                           cli_settings_source=cli_settings_source,
-                           **(data or {}),
-                           )
-        # Recreate model so we don't return the SettingsModel subclass
-        return model_cls.model_validate(model.model_dump())
+        try:
+            model = CliApp.run(SettingsModel,
+                               cli_args=args,
+                               cli_settings_source=cli_settings_source,
+                               **(data or {}),
+                               )
+            # Recreate model so we don't return the SettingsModel subclass
+            return model_cls.model_validate(model.model_dump())
+        except ValidationError as err:
+            print(err)
+            sys.exit(1)
     return model_validate_args
+
+
+SubParsers: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
+""" Alias for the result of argparse parser.add_subparsers """
 
 
 def yaml_dump(data):
@@ -699,4 +747,97 @@ def yaml_dump(data):
         sort_keys=False,
         indent=2,
         allow_unicode=True,
+    )
+
+
+class WorkloadData(RAPSBaseModel):
+    """
+    Represents a workload, a list of jobs with some metadata. Returned by dataloaders load_data()
+    function, and by Workload.generate_jobs().
+
+    jobs:
+        The list of parsed jobs.
+
+    telemetry_start
+        the first timestep in which the simulation be executed.
+
+    telemetry_end
+        the last timestep in which the simulation can be executed.
+
+    start_date
+        The actual date that telemetry_start represents.
+    ----
+    Explanation regarding times:
+
+    The loaded dataframe contains
+    a first timestamp with associated data
+    and a last timestamp with associated data
+
+    These form the maximum extent of the simuluation time.
+    telemetry_start and telemetry_end.
+
+            [                                    ]
+            ^                                    ^
+            telemetry_start          telemetry_end
+
+    These values form the maximum extent of the simulation.
+    telemetry_start is typically 0, but any int can be used as long as all the times in the
+    jobs are relative to the telemetry_start.
+
+    Next is the actual extent of the simulation:
+
+            [                                   ]
+                ^                   ^
+                simulation_start    simulation_end
+
+    The simulation will start at telemetry_start by default, but the user can specify an explicit
+    simulation start time.
+
+    Additionally, jobs can have started before telemetry_start,
+    And can have a recorded ending after simulation_end,
+            [                                   ]
+    ^                                                ^
+    first_start_timestamp           last_end_timestamp
+
+    This means that the time between first_start_timestamp and telemetry_start
+    has no associated values in the traces!
+    The missing values after simulation_end can be ignored, as the simulatuion
+    will have stoped before.
+
+    However, the times before telemetry_start have to be padded to generate
+    correct offsets within their data!
+    Within the simulation a job's current time is specified as the difference
+    between its start_time and the current timestep of the simulation.
+
+    With this each job's
+    - submit_time
+    - time_limit
+    - start_time  # Maybe Null
+    - end_time  # Maybe Null
+    - expected_run_time (end_time - start_time)  # Maybe Null
+    - current_run_time (How long did the job run already, when loading)  # Maybe zero
+    - trace_time (lenght of each trace in seconds)  # Maybe Null
+    - trace_start_time (time offset in seconds after which the trace starts)  # Maybe Null
+    - trace_end_time (time offset in seconds after which the trace ends)  # Maybe Null
+    - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta) # Maybe Null
+    has to be set for use within the simulation
+
+    The values trace_start_time are similar to the telemetry_start and
+    telemetry_stop but may different due to missing data, for each job.
+
+    The returned values are these:
+        - The list of parsed jobs. (as a Job object)
+        - telemetry_start: int (in seconds)
+        - telemetry_end: int (in seconds)
+        - start_date: datetime
+    """
+    jobs: list[Job]
+    telemetry_start: int
+    telemetry_end: int
+    # TODO: It might make more sense to make start_timestep/end_timestep always unix time, then we
+    # wouldn't need this extra start_date field.
+    start_date: AwareDatetime
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
     )

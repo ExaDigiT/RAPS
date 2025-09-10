@@ -13,11 +13,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent  # adjust if needed
 def test_main_withui():
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-                            "python", "main.py",
-                            "--time", "1h",
-                            ], capture_output=True,
-                               text=True
-                            )
+        "python", "main.py", "run",
+        "--time", "1h",
+        "-o", 'none',
+    ], capture_output=True, text=True)
     assert result.returncode == 0
 
 
@@ -25,12 +24,10 @@ def test_main_withui():
 def test_main_noui():
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-                            "python", "main.py",
-                            "--time", "1h",
-                            "--noui"
-                            ], capture_output=True,
-                               text=True
-                            )
+        "python", "main.py", "run",
+        "--time", "1h",
+        "--noui", "-o", 'none',
+    ], capture_output=True, text=True)
     assert result.returncode == 0
 
 
@@ -39,8 +36,6 @@ def test_main_noui():
 def test_main_long():
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-                            "python", "main.py",
-                            ], capture_output=True,
-                               text=True
-                            )
+        "python", "main.py", "run", "-o", 'none',
+    ], capture_output=True, text=True)
     assert result.returncode == 0

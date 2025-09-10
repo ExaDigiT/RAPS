@@ -68,6 +68,8 @@ class ExclusiveNodeResourceManager:
                 else:
                     # Already free — log instead of raising
                     print(f"[WARN] Tried to free node {n}, but it was already available")
+                    print(f"Atempting to free node {n} after completion of job {job.id}. " +
+                                     "Node is already free (in available nodes)!")
             self.available_nodes = sorted(self.available_nodes)
 
     def update_system_utilization(self, current_time, running_jobs):

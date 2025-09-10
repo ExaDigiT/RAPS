@@ -1,13 +1,14 @@
 import os
 import re
+from datetime import datetime
 from tqdm import tqdm
-from typing import List, Optional, Generator, Tuple, Any, Union
+from typing import List, Optional, Generator, Any, Union
 
 import numpy as np
 import pandas as pd
 
-from raps.job import job_dict
-from raps.job import Job
+from raps.job import job_dict, Job
+from raps.utils import WorkloadData
 
 """
 Official instructions are here:
@@ -200,7 +201,7 @@ class GoogleClusterV2DataLoader:
             yield pd.concat(dfs, ignore_index=True)
 
 
-def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any], float, float]:
+def load_data(data_path: Union[str, List[str]], **kwargs: Any):
     config = kwargs.get('config')
     # Unpack list
     if isinstance(data_path, list):
@@ -331,6 +332,11 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any) -> Tuple[List[Any
         jobs.append(Job(job_d))
 
     # Compute simulation span: start at t=0, end at the latest job finish
-    simulation_start = 0
-    simulation_end = int(max(usage_map_end.values()) - t0)
-    return jobs, simulation_start, simulation_end
+    telemetry_start = 0
+    telemetry_end = int(max(usage_map_end.values()) - t0)
+    return WorkloadData(
+        jobs=jobs,
+        telemetry_start=telemetry_start, telemetry_end=telemetry_end,
+        # gcloud dataset timestamps are already relative, and it doesn't list a start exact date.
+        start_date=datetime.fromisoformat("2011-05-02T00:00:00Z"),
+    )

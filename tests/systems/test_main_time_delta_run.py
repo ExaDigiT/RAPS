@@ -1,6 +1,5 @@
 import os
 import subprocess
-import gc
 import pytest
 from tests.util import PROJECT_ROOT
 from raps.utils import convert_to_time_unit, convert_seconds_to_hhmmss
@@ -21,30 +20,20 @@ pytestmark = [
     ("10h", "1h"),
     ("10h", "3h"),
     ("3d", "1d")
-], ids=["1","1s","10s","1m","1h","3h","1d"])
-def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, random_id):
+], ids=["1", "1s", "10s", "1m", "1h", "3h", "1d"])
+def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, sim_output):
     if not system_config.get("time_delta", False):
         pytest.skip(f"{system} does not support time_delta run.")
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "-t", time_arg,
         "--time-delta", tdelta_arg,
         "--system", system,
-        #--"-f", system_file,
         "--noui",
-        "-o", random_id
+        "-o", sim_output
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
     time = convert_to_time_unit(time_arg)
     assert f"Time Simulated: {convert_seconds_to_hhmmss(time)}" in result.stdout
-
-    subprocess.run(
-        f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",
-        shell=True,
-        check=True
-    )
-
-    del result
-    gc.collect()

@@ -28,7 +28,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, next_arrival_byconfkwargs
+from ..utils import power_to_utilization, WorkloadData
 
 
 def load_data(jobs_path, **kwargs):
@@ -60,7 +60,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     """
     config = kwargs.get('config')
     # min_time = kwargs.get('min_time', None)  # Unused
-    arrival = kwargs.get('arrival')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     debug = kwargs.get('debug')
@@ -165,17 +164,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             print("wall_time != (end_time - start_time)")
             print(f"{wall_time} != {(end_time - start_time)}")
 
-        if arrival == 'poisson':  # Modify the arrival times according to Poisson distribution
-            scheduled_nodes = None
-            submit_time = next_arrival_byconfkwargs(config, kwargs)
-            start_time = None
-            end_time = None
-        else:  # Prescribed replay
-            scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
+        scheduled_nodes = (jobs_df.loc[jidx, 'nodes']).tolist()
 
-            submit_timestamp = jobs_df.loc[jidx, 'submit_time']
-            diff = submit_timestamp - telemetry_start_timestamp
-            submit_time = int(diff.total_seconds())
+        submit_timestamp = jobs_df.loc[jidx, 'submit_time']
+        diff = submit_timestamp - telemetry_start_timestamp
+        submit_time = int(diff.total_seconds())
 
         trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
         trace_start_time = 0
@@ -233,7 +226,11 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             job = Job(job_info)
             jobs.append(job)
 
-    return jobs, telemetry_start, telemetry_end
+    return WorkloadData(
+        jobs=jobs,
+        telemetry_start=telemetry_start, telemetry_end=telemetry_end,
+        start_date=telemetry_start_timestamp,
+    )
 
 
 def node_index_to_name(index: int, config: dict):

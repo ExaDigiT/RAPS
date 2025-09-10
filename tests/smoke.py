@@ -32,7 +32,7 @@ def run_command(command):
 def build_command(system, file_paths, additional_args=""):
     """Build the command string for the given system and file paths."""
     full_paths = " ".join([os.path.join(DATAPATH, path) for path in file_paths.split()])
-    return f"python main.py --system {system} -f {full_paths} -t {DEFAULT_TIME} {additional_args}".strip()
+    return f"python main.py run --system {system} -f {full_paths} -t {DEFAULT_TIME} -o none {additional_args}".strip()
 
 
 def execute_system_tests(systems):
@@ -45,16 +45,16 @@ def execute_system_tests(systems):
 def synthetic_workload_tests():
     """Run synthetic workload tests."""
     print("Starting synthetic workload tests...")
-    run_command(f"python main.py -t {DEFAULT_TIME}")
-    run_command(f"python main.py -w benchmark -t {BENCH_TIME}")
-    run_command(f"python main.py -w peak -t {DEFAULT_TIME}")
-    run_command(f"python main.py -w idle -t {DEFAULT_TIME}")
+    run_command(f"python main.py run -t {DEFAULT_TIME}")
+    run_command(f"python main.py run -w benchmark -t {BENCH_TIME}")
+    run_command(f"python main.py run -w peak -t {DEFAULT_TIME}")
+    run_command(f"python main.py run -w idle -t {DEFAULT_TIME}")
 
 
 def hetero_tests():
     """Run heterogeneous workload tests."""
     print("Starting heterogeneous workload tests...")
-    run_command(f"python multi-part-sim.py -x setonix/part-cpu setonix/part-gpu -t {DEFAULT_TIME}")
+    run_command(f"python main.py run-parts -x setonix/part-cpu setonix/part-gpu -t {DEFAULT_TIME}")
 
 
 def main():

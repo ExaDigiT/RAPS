@@ -1,6 +1,5 @@
 import os
 import subprocess
-import gc
 import pytest
 from tests.util import PROJECT_ROOT
 
@@ -12,7 +11,7 @@ pytestmark = [
 ]
 
 
-def test_main_network_run(system, system_config, random_id):
+def test_main_network_run(system, system_config, sim_output):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 
@@ -21,19 +20,10 @@ def test_main_network_run(system, system_config, random_id):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py",
+        "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
         "--net",
-        "-o", random_id
+        "-o", sim_output
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"
-
-    subprocess.run(
-        f"rm {random_id}.npz && rm -fr simulation_results/{random_id}",
-        shell=True,
-        check=True
-    )
-
-    del result
-    gc.collect()

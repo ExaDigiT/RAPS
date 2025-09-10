@@ -1,4 +1,5 @@
 import pytest
+from tests.util import DATA_PATH
 
 
 @pytest.fixture(params=[
@@ -62,6 +63,18 @@ def system_config(system):
             "time_delta": True,
             "net": False,
         },
+        "bluewaters": {
+            "main": True,
+            "telemetry": True,
+            "multi-part-sim": False,
+            "withdata": True,
+            "cooling": False,
+            "uncertainty": False,
+            "time": True,
+            "fastforward": True,
+            "time_delta": True,
+            "net": False,
+        },
         "frontier": {
             "main": True,
             "telemetry": True,
@@ -88,10 +101,10 @@ def system_config(system):
             "net": False,
         },
         "gcloudv2": {
-            "main": False,
-            "telemetry": False,
+            "main": True,
+            "telemetry": True,
             "multi-part-sim": False,
-            "withdata": False,
+            "withdata": True,
             "cooling": False,
             "uncertainty": False,
             "time": True,
@@ -99,7 +112,7 @@ def system_config(system):
             "time_delta": True,
             "net": False,
         },
-        "lassen":{
+        "lassen": {
             "main": True,
             "telemetry": False,  # Takes very long!
             "multi-part-sim": False,
@@ -111,7 +124,7 @@ def system_config(system):
             "time_delta": True,
             "net": True,
         },
-        "marconi100":{
+        "marconi100": {
             "main": True,
             "telemetry": True,
             "multi-part-sim": False,
@@ -180,18 +193,25 @@ def system_config(system):
 
 
 @pytest.fixture
-def system_file(system):
+def system_files(system):
     files = {
-        "40frontiers":[],
-        "adastraMI250":["AdastaJobsMI250_15days.parquet"],
-        "frontier":["slurm/joblive/date=2024-01-18/","jobprofile/date=2024-01-18/"],
-        "fugaku":["21_04.parquet"],
-        "gcloudv2":["/v2/google_cluster_data_2011_sample"],
-        "lassen":["Lassen-Supercomputer-Job-Dataset"],
-        "marconi100":["job_table.parquet"],
-        "mit_supercloud":["202201"],
-        "setonix":[""],
-        "summit":[],
-        "lumi":[]
+        "40frontiers": [],
+        "adastraMI250": ["adastraMI250/AdastaJobsMI250_15days.parquet"],
+        "bluewaters": ["bluewaters"],
+        "frontier": ["frontier/slurm/joblive/date=2024-01-18/", "frontier/jobprofile/date=2024-01-18/"],
+        "fugaku": ["fugaku/21_04.parquet"],
+        "gcloudv2": ["gcloud/v2/google_cluster_data_2011_sample"],
+        "lassen": ["lassen/Lassen-Supercomputer-Job-Dataset"],
+        "marconi100": ["marconi100/job_table.parquet"],
+        "mit_supercloud": ["mit_supercloud/202201"],
+        "setonix": [],
+        "summit": [],
+        "lumi": []
     }
-    return files.get(system,files)
+
+    file_list = [DATA_PATH / f for f in files.get(system, [])]
+    for file in file_list:
+        assert file.exists(), \
+            f"File `{file}' does not exist. does ./data exist or is RAPS_DATA_DIR set?"
+
+    return [str(f) for f in file_list]
