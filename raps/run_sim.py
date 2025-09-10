@@ -13,7 +13,7 @@ from raps.ui import LayoutManager
 from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
-from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, yaml_dump
+from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, yaml_dump, read_yaml
 from raps.stats import (
     get_engine_stats,
     get_job_stats,
@@ -23,15 +23,6 @@ from raps.stats import (
 )
 
 from raps.sim_config import SingleSimConfig, MultiPartSimConfig, SIM_SHORTCUTS
-
-
-def read_yaml(config_file: str):
-    if config_file == "-":
-        return yaml.safe_load(sys.stdin.read())
-    elif config_file:
-        return yaml.safe_load(Path(config_file).read_text())
-    else:
-        return {}
 
 
 def run_sim_add_parser(subparsers: SubParsers):

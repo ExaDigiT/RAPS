@@ -750,6 +750,16 @@ def yaml_dump(data):
     )
 
 
+def read_yaml(config_file: str):
+    """ Parses yaml file. Pass "-" to read from stdin """
+    if config_file == "-":
+        return yaml.safe_load(sys.stdin.read())
+    elif config_file:
+        return yaml.safe_load(Path(config_file).read_text())
+    else:
+        return {}
+
+
 class WorkloadData(RAPSBaseModel):
     """
     Represents a workload, a list of jobs with some metadata. Returned by dataloaders load_data()
