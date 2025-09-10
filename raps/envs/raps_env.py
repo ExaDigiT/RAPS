@@ -1,6 +1,7 @@
+import copy
 import gym
-import numpy as np
 from gym import spaces
+import numpy as np
 
 from raps.engine import Engine
 from raps.power import PowerManager, compute_node_power
@@ -30,7 +31,7 @@ def print_stats(stats, step=0):
         "average power": "engine/Average Power",
         "system power efficiency": "engine/System Power Efficiency",
         "total energy consumed": "engine/Total Energy Consumed",
-        "carbon emissions": "engine/Carbon Emissions",
+        "carbon emissions": "engine/Carbon Footprint",
         "jobs completed": "jobs/Jobs Completed",
         "throughput": "jobs/Throughput",
         "jobs still running": "jobs/Jobs Still Running",
@@ -73,6 +74,7 @@ class RAPSEnv(gym.Env):
 
         # --- Build initial jobs & time bounds ---
         self.jobs, self.timestep_start, self.timestep_end = self._build_jobs()
+        self.original_jobs = self.jobs               # keep pristine version
 
         self.engine = Engine(
             power_manager=self.power_manager,
@@ -167,11 +169,60 @@ class RAPSEnv(gym.Env):
         else:
             raise ValueError("RAPSEnv requires either --workload or --replay to build jobs.")
 
+#    def reset(self, seed=None, options=None):
+#        super().reset(seed=seed)
+#
+#        self.jobs = copy.deepcopy(self.original_jobs)  # working copy
+#
+#        # Reset engine
+#        self.engine.current_timestep = 0
+#        #self.engine.reset()  # or clear state manually
+#        power_manager = PowerManager(compute_node_power, **self.config)
+#        flops_manager = FLOPSManager(**self.args_dict)
+#        telemetry = Telemetry(**self.args_dict)
+#        jobs, timestep_start, timestep_end = self._build_jobs()
+#
+#        self.engine = Engine(
+#            power_manager=power_manager,
+#            flops_manager=flops_manager,
+#            jobs=jobs,
+#            **self.args_dict
+#        )
+#
+#        self.engine.timestep_start = timestep_start
+#        self.engine.timestep_end = timestep_end
+#        #self.engine.current_timestep = timestep_start
+#
+#        # Restart generator
+#        self.generator = self.layout_manager.run_stepwise(
+#            self.jobs,
+#            timestep_start=self.timestep_start,
+#            timestep_end=self.timestep_end,
+#            time_delta=self.args_dict.get("time_delta"),
+#        )
+#
+#        return self._get_state(), {}
+
     def reset(self, **kwargs):
-        self.engine.jobs = self.jobs
-        self.engine.timestep_start = self.timestep_start
-        self.engine.timestep_end = self.timestep_end
-        self.engine.current_timestep = self.timestep_start
+        completed = [j.id for j in self.jobs if j.current_state.name == "COMPLETED"]
+        print(f"[RESET] Jobs already completed before deepcopy: {len(completed)}")
+
+        super().reset(seed=42)
+        # self.engine.jobs = self.jobs
+        self.jobs = copy.deepcopy(self.original_jobs)  # working copy
+
+        # self.engine.timestep_start = self.timestep_start
+        # self.engine.timestep_end = self.timestep_end
+        # self.engine.reset(self.jobs, self.timestep_start, self.timestep_end)
+
+        # self.engine.current_timestep = self.timestep_start
+
+        # self.engine.jobs = self.jobs  # repoint engine to fresh jobs
+        # self.engine.completed_jobs = []
+        # self.engine.queue.clear()
+        # self.engine.running.clear()
+        # self.engine.power_manager.history.clear()
+        # self.engine.jobs_completed = 0
 
         self.generator = self.layout_manager.run_stepwise(
             self.jobs,
@@ -184,25 +235,50 @@ class RAPSEnv(gym.Env):
 
     def _compute_reward(self, tick_data):
         """
-        Reward function: minimize carbon footprint per job completed.
-        Encourages the agent to complete jobs while keeping emissions low.
+        Reward function for RL scheduling on Frontier-like systems.
+        Balances throughput and carbon footprint, using incremental values.
         """
-        reward = 0.0
 
-        # Jobs completed this tick
-        jobs_completed = len(getattr(tick_data, "completed", []))
+        # How many jobs completed *this tick*
+        jobs_done = len(getattr(tick_data, "completed", []))
 
-        # Carbon emitted so far (metric tons CO2)
-        carbon_so_far = getattr(self.engine, "carbon emissions", 0.0)
+        # Incremental carbon emitted this tick
+        carbon_step = getattr(self.engine, "carbon emissions", 0.0)
 
-        if jobs_completed > 0:
-            # Reward is higher when more jobs finish with less carbon
-            reward = jobs_completed / (carbon_so_far + 1e-6)
-        else:
-            # Small penalty if no jobs finished (encourages progress)
-            reward = -0.01
+        # Tradeoff weights (tunable hyperparameters)
+        alpha = 10.0   # reward for finishing a job
+        beta = 0.1    # penalty per metric ton CO2
+
+        # Reward = (jobs * alpha) - (carbon * beta)
+        reward = (alpha * jobs_done) - (beta * carbon_step)
+
+        # Small penalty if idle and no jobs complete
+        if jobs_done == 0 and carbon_step == 0:
+            reward -= 0.01
 
         return reward
+
+#    def _compute_reward(self, tick_data):
+#        """
+#        Reward function: minimize carbon footprint per job completed.
+#        Encourages the agent to complete jobs while keeping emissions low.
+#        """
+#        reward = 0.0
+#
+#        # Jobs completed this tick
+#        jobs_completed = len(getattr(tick_data, "completed", []))
+#
+#        # Carbon emitted so far (metric tons CO2)
+#        carbon_so_far = getattr(self.engine, "carbon emissions", 0.0)
+#
+#        if jobs_completed > 0:
+#            # Reward is higher when more jobs finish with less carbon
+#            reward = jobs_completed / (carbon_so_far + 1e-6)
+#        else:
+#            # Small penalty if no jobs finished (encourages progress)
+#            reward = -0.01
+#
+#        return reward
 
     def _compute_reward2(self, tick_data, alpha=10.0, beta=1.0, gamma=2.0):
         completed = getattr(tick_data, "completed", None)
@@ -252,12 +328,18 @@ class RAPSEnv(gym.Env):
         done = self.engine.current_timestep >= self.engine.timestep_end
         info = {}
 
+        print(f"t={self.engine.current_timestep}, "
+              f"queue={len(self.engine.queue)}, "
+              f"running={len(self.engine.running)}, "
+              f"completed={self.engine.jobs_completed}",
+              f"action={action}")
+
         return obs, reward, done, info
 
     def _get_state(self):
         """Construct simple state representation from engine's job queue."""
         # Example: take waiting jobs (haven’t started yet)
-        job_queue = [j for j in self.engine.jobs if getattr(j, "start_time", None) is None]
+        job_queue = [j for j in self.jobs if getattr(j, "start_time", None) is None]
 
         max_jobs, job_features = self.observation_space.shape
         state = np.zeros((max_jobs, job_features), dtype=np.float32)

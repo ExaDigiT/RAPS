@@ -1,3 +1,7 @@
+"""
+Example usage:
+    python train_rl.py --system mit_supercloud -f /opt/data/mit_supercloud/202201
+"""
 from stable_baselines3 import PPO
 from raps.envs.raps_env import RAPSEnv
 from raps.system_config import get_system_config

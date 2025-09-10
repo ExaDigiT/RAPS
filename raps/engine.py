@@ -402,7 +402,7 @@ class Engine:
             job.running_time = self.current_timestep - job.start_time
 
             if job.current_state != JobState.RUNNING:
-                raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.currentstate}")
+                raise ValueError(f"Job is in running list, but state is not RUNNING: job.state == {job.current_state}")
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if job.running_time > job.time_limit:
@@ -609,7 +609,7 @@ class Engine:
         # listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
         # listener_thread.start()
 
-        while self.current_timestep < self.timestep_end:  # Runs every seconds!
+        while self.current_timestep < self.timestep_end:  # Runs every second
 
             if sim_state.is_paused():
                 time.sleep(0.1)

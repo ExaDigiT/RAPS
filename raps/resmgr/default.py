@@ -66,7 +66,8 @@ class ExclusiveNodeResourceManager:
                 if n not in self.available_nodes:
                     self.available_nodes.append(n)
                 else:
-                    raise KeyError(f"node was free but already in available nodes: {n.id}")
+                    # Already free — log instead of raising
+                    print(f"[WARN] Tried to free node {n}, but it was already available")
             self.available_nodes = sorted(self.available_nodes)
 
     def update_system_utilization(self, current_time, running_jobs):

@@ -118,7 +118,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
     - end_time  # Maybe Null
     - expected_run_time (end_time - start_time)  # Maybe Null
     - current_run_time (How long did the job run already, when loading)  # Maybe zero
-    - trace_time (lenght of each trace in seconds)  # Maybe Null
+    - trace_time (length of each trace in seconds)  # Maybe Null
     - trace_start_time (time offset in seconds after which the trace starts)  # Maybe Null
     - trace_end_time (time offset in seconds after which the trace ends)  # Maybe Null
     - trace_quanta (job's associated trace quanta, to correctly replay with different trace quanta) # Maybe Null
@@ -269,8 +269,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         if arrival == 'poisson':  # Modify the arrival times of the jobs according to Poisson distribution
             scheduled_nodes = None
             submit_time = next_arrival_byconfkwargs(config, kwargs)
-            start_time = None  # ?
-            end_time = None  # ?
+            end_time = submit_time + end_time - start_time
+            start_time = submit_time
             priority = aging_boost(nodes_required)
 
         else:  # Prescribed replay
@@ -281,24 +281,20 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
                 indices = xname_to_index(xname, config)
                 scheduled_nodes.append(indices)
 
+            if end_time < telemetry_start:
+                print("Job ends before first recorded telemetry entry:", job_id, "start:",
+                      start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
+                continue  # skip
+
+            if start_time > telemetry_end:
+                print("Job starts after last recorded telemetry entry:", job_id, "start:",
+                      start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
+                continue  # skip
+
         # Throw out jobs that are not valid!
         if gpu_trace.size == 0:
             print("ignoring job b/c zero trace:", jidx, submit_time, start_time, nodes_required)
-            continue  # SKIP!
-        if end_time < telemetry_start:
-            # raise ValueError("Job ends before frist recorded telemetry entry:",
-            #                  job_id, "start:", start_time,"end:",end_time,
-            #                  " Telemetry: ", len(gpu_trace), "entries.")
-            print("Job ends before frist recorded telemetry entry:", job_id, "start:",
-                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
-            continue  # SKIP!
-        if start_time > telemetry_end:
-            # raise ValueError("Job starts after last recorded telemetry entry:",
-            #                  job_id, "start:", start_time,"end:",end_time,
-            #                  " Telemetry: ", len(gpu_trace), "entries.")
-            print("Job starts after last recorded telemetry entry:", job_id, "start:",
-                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
-            continue  # SKIP!
+            continue  # skip
 
         if gpu_trace.size > 0 and (jid == job_id or jid == '*'):  # and time_submit >= 0:
             job_info = job_dict(

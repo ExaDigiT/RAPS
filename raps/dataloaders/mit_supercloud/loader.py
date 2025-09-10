@@ -616,7 +616,7 @@ def load_data(local_dataset_path, **kwargs):
             scheduled_nodes=scheduled_nodes,
             priority=rec.get("priority", 0),
             submit_time=submit_time,
-            time_limit=rec.get("timelimit", 0),
+            time_limit=rec.get("timelimit") * 60,
             start_time=start_time,
             end_time=end_time,
             expected_run_time=max(0, t1-t0),
