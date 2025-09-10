@@ -19,6 +19,6 @@ def test_main_basic_run(system, system_config, sim_output):
         "python", "main.py", "run",
         "--time", "1m",
         "--system", system,
-        "-o", sim_output
+        "-o", sim_output,
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert result.returncode == 0, f"Failed on {system}: {result.stderr}"

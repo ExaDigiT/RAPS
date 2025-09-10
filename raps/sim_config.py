@@ -1,24 +1,22 @@
 import argparse
+import abc
+from pathlib import Path
 from functools import cached_property
 from datetime import timedelta
 from typing import Literal
+import importlib
 from raps.schedulers.default import PolicyType, BackfillType
 from raps.utils import (
-    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, parse_td,
+    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, parse_td, create_casename,
+    RAPSBaseModel,
 )
-from raps.system_config import SystemConfig, get_partition_configs
-from pydantic import BaseModel, model_validator
-import importlib
+from raps.system_config import SystemConfig, get_partition_configs, get_system_config
+from pydantic import model_validator
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
 
-class SimConfig(BaseModel):
-    system: str | None = None
-    """ System config to use """
-    partitions: list[str] = []
-    """ List of multiple system configurations for a multi-partition run. Can contain wildcards """
-
+class SimConfig(RAPSBaseModel, abc.ABC):
     cooling: bool = False
     """ Include the FMU cooling model """
     simulate_network: bool = False
@@ -62,8 +60,25 @@ class SimConfig(BaseModel):
 
     seed: int | None = None
     """ Set RNG seed for deterministic simulation """
-    output: ExpandedPath | None = None
-    """ Output power, cooling, and loss models for later analysis. Argument specifies name. """
+
+    output: ExpandedPath | Literal['none'] | None = None
+    """
+    Where to output power, cooling, and loss models for later analysis.
+    If omitted it will output to raps-output-<id> by default.
+    Set to "none" to disable file output entirely.
+    """
+
+    _random_output: Path | None = None
+
+    def get_output(self) -> Path | None:
+        if self.output is None:  # by default, output to a random directory
+            if not self._random_output:
+                self._random_output = Path(create_casename("raps-output-")).resolve()
+            return self._random_output
+        elif self.output == "none":  # allow explicitly disabling output with "none"
+            return None
+        else:
+            return self.output  # return user defined output path
 
     debug: bool = False
     """ Enable debug mode and disable rich layout """
@@ -242,12 +257,6 @@ class SimConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_after(self):
-        # This is called after Pydantic has parsed everything into the model
-        if self.system and self.partitions:
-            raise ValueError("system and partitions are mutually exclusive")
-        elif not self.system and not self.partitions:
-            self.system = "frontier"
-
         if not self.replay and not self.workload:
             self.workload = "random"
 
@@ -294,24 +303,28 @@ class SimConfig(BaseModel):
         return self
 
     @property
+    @abc.abstractmethod
     def system_name(self) -> str:
         """
         Name of the system.
-        Note, this is different than system, as system can be a file or None if partition is set.
+        Note, this is different than system, as system can be a file, or there can be multiple systems
         """
-        return self._multi_partition_system_config.system_name
+        pass
 
     @property
+    @abc.abstractmethod
     def system_configs(self) -> list[SystemConfig]:
         """
         Return the SystemConfigs for the selected systems.
         Will be a single element array unless multiple `partitions` are selected.
         """
-        return self._multi_partition_system_config.partitions
+        pass
 
-    @cached_property
-    def _multi_partition_system_config(self):
-        return get_partition_configs(self.partitions if self.partitions else [self.system])
+    def get_system_config_by_name(self, name: str) -> SystemConfig:
+        for s in self.system_configs:
+            if s.system_name == name:
+                return s
+        raise ValueError(f"Partition {name} isn't in SimConfig")
 
     def get_legacy_args(self):
         """
@@ -326,6 +339,7 @@ class SimConfig(BaseModel):
         contains the SimConfig object itself.
         """
         args_dict = self.model_dump(mode="json")
+        args_dict['system'] = self.system_name
         # validate has been renamed to power_scope
         args_dict['validate'] = args_dict["power_scope"] == "node"
         args_dict['downscale'] = self.downscale
@@ -340,3 +354,40 @@ class SimConfig(BaseModel):
 
         args_dict['sim_config'] = self
         return args_dict
+
+
+class SingleSimConfig(SimConfig, abc.ABC):
+    system: SystemConfig | str = "frontier"
+    """
+    Name of the system to simulate, e.g "frontier". Can also be a path to a yaml file containing
+    the SystemConfig. You can also make modificiations to the SystemConfig on the CLI using
+    `--system.base`, e.g.  `--system.base frontier --system.cooling.fmu-path path/to/my.fmu`
+    """
+
+    @property
+    def system_name(self) -> str:
+        return self.system_configs[0].system_name
+
+    @cached_property
+    def system_configs(self) -> list[SystemConfig]:
+        return [get_system_config(self.system)]
+
+
+class MultiPartSimConfig(SimConfig):
+    partitions: list[SystemConfig | str]
+    """
+    List of multiple systems/partitions to run. Can be names of preconfigured systems, or paths
+    to custom SystemConfig yaml files.
+    """
+
+    @property
+    def system_name(self) -> str:
+        return self._multi_partition_system_config.system_name
+
+    @property
+    def system_configs(self) -> list[SystemConfig]:
+        return self._multi_partition_system_config.partitions
+
+    @cached_property
+    def _multi_partition_system_config(self):
+        return get_partition_configs(self.partitions)

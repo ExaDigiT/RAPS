@@ -161,7 +161,6 @@ class Engine:
         self.flops_manager = flops_manager
         self.debug = sim_config.debug
         self.continuous_workload = continuous_workload
-        self.output = sim_config.output
         self.replay = sim_config.replay
         self.downscale = sim_config.downscale  # Factor to downscale the 1s timesteps (power of 10)
         self.simulate_network = sim_config.simulate_network
@@ -215,10 +214,7 @@ class Engine:
     @staticmethod
     def from_sim_config(sim_config: SimConfig, partition: str | None = None):
         if partition:
-            system_config_by_name = {s.system_name: s for s in sim_config.system_configs}
-            system_config = system_config_by_name.get(partition)
-            if not system_config:
-                raise ValueError(f"Partition {partition} isn't in SimConfig")
+            system_config = sim_config.get_system_config_by_name(partition)
         elif len(sim_config.system_configs) > 1:
             raise ValueError(
                 "Engine can only run single-partition simulations. Use MultiPartEngine for " +
@@ -232,8 +228,6 @@ class Engine:
         sim_config_args = sim_config.get_legacy_args()
         sim_config_dict = sim_config.get_legacy_args_dict()
         sim_config_dict['config'] = system_config_dict
-        if partition:
-            sim_config_dict["system"] = sim_config.system_name
 
         if sim_config.seed:
             random.seed(sim_config.seed)

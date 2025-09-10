@@ -32,7 +32,7 @@ def run_command(command):
 def build_command(system, file_paths, additional_args=""):
     """Build the command string for the given system and file paths."""
     full_paths = " ".join([os.path.join(DATAPATH, path) for path in file_paths.split()])
-    return f"python main.py run --system {system} -f {full_paths} -t {DEFAULT_TIME} {additional_args}".strip()
+    return f"python main.py run --system {system} -f {full_paths} -t {DEFAULT_TIME} -o none {additional_args}".strip()
 
 
 def execute_system_tests(systems):

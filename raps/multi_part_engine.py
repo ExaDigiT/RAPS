@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from raps.engine import Engine, TickData
-from raps.sim_config import SimConfig
+from raps.sim_config import MultiPartSimConfig
 from raps.utils import WorkloadData
 
 
@@ -11,7 +11,7 @@ class MultiPartEngine:
         self.jobs = jobs
 
     @staticmethod
-    def from_sim_config(sim_config: SimConfig):
+    def from_sim_config(sim_config: MultiPartSimConfig):
         if sim_config.replay:
             root_systems = set(s.system_name.split("/")[0] for s in sim_config.system_configs)
             # TODO should consider how to pass separate replay values for separate systems
