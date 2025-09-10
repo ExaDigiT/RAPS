@@ -22,7 +22,7 @@ from raps.stats import (
     print_formatted_report
 )
 
-from raps.sim_config import SingleSimConfig, MultiPartSimConfig
+from raps.sim_config import SingleSimConfig, MultiPartSimConfig, SIM_SHORTCUTS
 
 
 def read_yaml(config_file: str):
@@ -32,23 +32,6 @@ def read_yaml(config_file: str):
         return yaml.safe_load(Path(config_file).read_text())
     else:
         return {}
-
-
-shortcuts = {
-    "partitions": "x",
-    "cooling": "c",
-    "simulate-network": "net",
-    "fastforward": "ff",
-    "time": "t",
-    "debug": "d",
-    "numjobs": "n",
-    "verbose": "v",
-    "output": "o",
-    "uncertainties": "u",
-    "plot": "p",
-    "replay": "f",
-    "workload": "w",
-}
 
 
 def run_sim_add_parser(subparsers: SubParsers):
@@ -63,7 +46,7 @@ def run_sim_add_parser(subparsers: SubParsers):
         flags. Pass "-" to read from stdin.
     """)
     model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
-        "cli_shortcuts": shortcuts,
+        "cli_shortcuts": SIM_SHORTCUTS,
     })
     parser.set_defaults(
         impl=lambda args: run_sim(model_validate(args, read_yaml(args.config_file)))
@@ -238,7 +221,7 @@ def run_parts_sim_add_parser(subparsers: SubParsers):
         flags. Pass "-" to read from stdin.
     """)
     model_validate = pydantic_add_args(parser, MultiPartSimConfig, model_config={
-        "cli_shortcuts": shortcuts,
+        "cli_shortcuts": SIM_SHORTCUTS,
     })
     parser.set_defaults(
         impl=lambda args: run_parts_sim(model_validate(args, read_yaml(args.config_file)))
@@ -325,7 +308,7 @@ def show_add_parser(subparsers: SubParsers):
         If true, include defaults in the output YAML
     """)
     model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
-        "cli_shortcuts": shortcuts,
+        "cli_shortcuts": SIM_SHORTCUTS,
     })
 
     def impl(args):
