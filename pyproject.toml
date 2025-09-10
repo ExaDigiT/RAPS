@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "raps"
-version = "0.0.1"
+version = "2.0.0.dev0"
 requires-python = ">=3.12"
 description = "RAPS"
 readme = "README.md"
@@ -30,6 +30,8 @@ dependencies = [
     "pyyaml>=6.0.2",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
+    "stable-baselines3==2.7.0",
+    "gym==0.26.2",
     "pre-commit"
 ]
 
