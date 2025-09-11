@@ -3,8 +3,6 @@ from gym import spaces
 import numpy as np
 
 from raps.engine import Engine
-from raps.workload import Workload
-# from raps.resmgr.default import MultiTenantResourceManager as ResourceManager
 from raps.stats import get_engine_stats, get_job_stats, get_scheduler_stats, get_network_stats
 
 from stable_baselines3.common.logger import Logger, HumanOutputFormat
@@ -68,51 +66,6 @@ class RAPSEnv(gym.Env):
         timestep_end = workload_data.telemetry_end
         self.generator = engine.run_simulation(self.jobs, timestep_start, timestep_end, time_delta)
         return engine
-
-    def _build_jobs(self):
-        """
-        Build a job list either from synthetic workload (--workload)
-        or from telemetry replay (--replay).
-        Returns: jobs, timestep_start, timestep_end
-        """
-        # --- Case 1: Telemetry replay ---
-        if self.cli_args and getattr(self.cli_args, "replay"):
-            result = self.telemetry.load_jobs_times_args_from_files(
-                files=self.cli_args.replay,
-                args=self.cli_args,
-                config=self.config,
-            )
-
-            # Handle 3-tuple vs 4-tuple return
-            if len(result) == 3:
-                jobs, start_time, end_time = result
-            elif len(result) == 4:
-                jobs, start_time, end_time, _ = result
-            else:
-                raise ValueError(f"Unexpected telemetry return format: {len(result)} values")
-
-            # Flatten partitioned jobs if necessary
-            if jobs and isinstance(jobs[0], list):
-                jobs = [job for sublist in jobs for job in sublist]
-
-            return jobs, start_time, end_time
-
-        # --- Case 2: Synthetic workload generation ---
-        elif self.cli_args and getattr(self.cli_args, "workload"):
-            wl = Workload(self.cli_args, self.config)
-            jobs = wl.generate_jobs()
-
-            # For synthetic jobs, compute timestep_end from submit + run_time
-            timestep_start = 0
-            timestep_end = max(
-                (getattr(job, "end_time", None) or getattr(job, "expected_run_time", 0) + job.submit_time)
-                for job in jobs
-            )
-            return jobs, timestep_start, timestep_end
-
-        # --- Error: neither replay nor workload specified ---
-        else:
-            raise ValueError("RAPSEnv requires either --workload or --replay to build jobs.")
 
     def reset(self, **kwargs):
         self.engine = self._create_engine()
