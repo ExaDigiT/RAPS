@@ -74,6 +74,9 @@ For MIT Supercloud
     # Synthetic tests for verification studies:
     raps run-parts -x mit_supercloud -w multitenant
 
+    # Reinforcement learning test case
+    python main.py train-rl --system mit_supercloud/part-cpu -f /opt/data/mit_supercloud/202201
+
 For Lumi
 
     # Synthetic test for Lumi:
@@ -170,7 +173,7 @@ See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulat
 
 ## Running Tests
 
-RAPS uses [pytest](https://docs.pytest.org/) for its test suite.  
+RAPS uses [pytest](https://docs.pytest.org/) for its test suite.
 Before running tests, ensure that you have a valid data directory available (e.g., `/opt/data`) and set the environment variable `RAPS_DATA_DIR` to point to it.
 
 ### Run all tests
