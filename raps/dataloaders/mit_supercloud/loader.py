@@ -298,7 +298,7 @@ def load_data(local_dataset_path, **kwargs):
     ])
 
     # partition mode
-    part = kwargs.get("partition", "").split("/")[-1].lower()
+    part = (kwargs.get("partition") or "").split("/")[-1].lower()
     cpu_only = (part == "part-cpu")
     mixed = (part == "part-gpu")
 
