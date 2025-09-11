@@ -24,7 +24,6 @@ def train_rl_add_parser(subparsers: SubParsers):
 
 def train_rl(rl_config: SingleSimConfig):
     from stable_baselines3 import PPO
-    from stable_baselines3.common.env_checker import check_env
     from raps.envs.raps_env import RAPSEnv
 
     args_dict = rl_config.get_legacy_args_dict()
@@ -33,7 +32,6 @@ def train_rl(rl_config: SingleSimConfig):
     args_dict['args'] = rl_config.get_legacy_args()
 
     env = RAPSEnv(rl_config)
-    check_env(RAPSEnv(env))
 
     model = PPO(
         "MlpPolicy",

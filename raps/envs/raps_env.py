@@ -61,12 +61,13 @@ class RAPSEnv(gym.Env):
         self.action_space = spaces.Discrete(max_jobs)
 
     def _create_engine(self):
-        self.engine, workload_data, time_delta = Engine.from_sim_config(self.sim_config)
-        self.engine.scheduler.env = self
+        engine, workload_data, time_delta = Engine.from_sim_config(self.sim_config)
+        engine.scheduler.env = self
         self.jobs = workload_data.jobs
         timestep_start = workload_data.telemetry_start
         timestep_end = workload_data.telemetry_end
-        self.generator = self.engine.run_simulation(self.jobs, timestep_start, timestep_end, time_delta)
+        self.generator = engine.run_simulation(self.jobs, timestep_start, timestep_end, time_delta)
+        return engine
 
     def _build_jobs(self):
         """
@@ -116,8 +117,7 @@ class RAPSEnv(gym.Env):
     def reset(self, **kwargs):
         self.engine = self._create_engine()
         obs = self._get_state()
-        info = {}
-        return obs, info
+        return obs
 
     def _compute_reward(self, tick_data):
         """
@@ -145,6 +145,9 @@ class RAPSEnv(gym.Env):
         return reward
 
     def step(self, action):
+        if self.engine is None:
+            raise RuntimeError("Engine not initialized. Did you forget to call reset()?")
+
         queue = self.engine.queue
         invalid_action = False
 
@@ -153,11 +156,17 @@ class RAPSEnv(gym.Env):
             invalid_action = True
         else:
             job = queue[int(action)]
-            available = len(self.engine.scheduler.resource_manager.available_nodes)
-            if job.nodes_required <= available:
-                # Valid scheduling
+            available_nodes = self.engine.scheduler.resource_manager.available_nodes
+
+            if job.nodes_required <= len(available_nodes):
+                # Just pick the first available node (simplest placement policy)
+                node_id = available_nodes[0]
                 self.engine.scheduler.place_job_and_manage_queues(
-                    job, queue, self.engine.running, self.engine.current_timestep
+                    job,
+                    queue,
+                    self.engine.running,
+                    self.engine.current_timestep,
+                    node_id,
                 )
             else:
                 invalid_action = True
