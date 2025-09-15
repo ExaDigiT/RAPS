@@ -32,6 +32,8 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "stable-baselines3==2.7.0",
     "gym==0.26.2",
+    "dill==0.4.0",
+    "argcomplete==3.6.2",
     "pre-commit"
 ]
 
