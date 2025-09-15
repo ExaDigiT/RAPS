@@ -6,3 +6,4 @@ venv
 *.prof
 simulation_results/
 models/*.fmu
+.shell-completion-cache
