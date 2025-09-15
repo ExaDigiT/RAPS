@@ -6,13 +6,13 @@
 
 
     # to simulate the dataset
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250
+    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250
 
     # to replay with different scheduling policy
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
+    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
 
     # to run a specific time range
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 \
+    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 \
         --start 2024-11-01T00:00:00Z --end 2024-11-02T00:00:00Z
 
     # to analyze dataset

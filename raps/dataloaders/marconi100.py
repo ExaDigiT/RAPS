@@ -9,14 +9,14 @@
     Download `job_table.parquet` from https://zenodo.org/records/10127767
 
     # to simulate the dataset
-    python main.py -f /path/to/job_table.parquet --system marconi100
+    raps run -f /path/to/job_table.parquet --system marconi100
 
     # to replay using differnt schedulers
-    python main.py -f /path/to/job_table.parquet --system marconi100 --policy fcfs --backfill easy
-    python main.py -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
+    raps run -f /path/to/job_table.parquet --system marconi100 --policy fcfs --backfill easy
+    raps run -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
 
     # to fast-forward 60 days and replay for 1 day
-    python main.py -f /path/to/job_table.parquet --system marconi100 --start 2020-07-05T00:00:00+00:00 -t 1d
+    raps run -f /path/to/job_table.parquet --system marconi100 --start 2020-07-05T00:00:00+00:00 -t 1d
 
     # to analyze dataset
     python -m raps.telemetry -f /path/to/job_table.parquet --system marconi100 -v

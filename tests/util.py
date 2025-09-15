@@ -13,7 +13,7 @@ from raps.stats import (
 
 def find_project_root():
     path = Path(__file__).resolve()
-    while not (path / "main.py").exists():
+    while not (path / "pyproject.toml").exists():
         if path.parent == path:
             raise RuntimeError("Could not find project root.")
         path = path.parent

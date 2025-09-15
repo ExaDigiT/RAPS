@@ -1,4 +1,4 @@
-# python main.py run-multi-part experiments/mit-replay-24hrs.yaml
+# raps run-multi-part experiments/mit-replay-24hrs.yaml
 partitions: ["mit_supercloud/part-cpu", "mit_supercloud/part-gpu"]
 replay:
   - /opt/data/mit_supercloud/202201
