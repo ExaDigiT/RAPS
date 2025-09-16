@@ -34,7 +34,7 @@ from raps.network import (
 from raps.telemetry import Telemetry
 from raps.cooling import ThermoFluidsModel
 from raps.flops import FLOPSManager
-from raps.workload import Workload, continuous_job_generation
+from raps.workloads import Workload, continuous_job_generation
 from raps.account import Accounts
 from raps.downtime import Downtime
 from raps.weather import Weather
