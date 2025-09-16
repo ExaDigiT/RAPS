@@ -4,7 +4,7 @@ ExaDigiT Resource Allocator & Power Simulator (RAPS)
 import argparse
 from raps.helpers import check_python_version
 from raps.run_sim import run_sim_add_parser, run_parts_sim_add_parser, show_add_parser
-from raps.workload import run_workload_add_parser
+from raps.workloads import run_workload_add_parser
 from raps.telemetry import run_telemetry_add_parser
 from raps.train_rl import train_rl_add_parser
 
