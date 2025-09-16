@@ -229,6 +229,8 @@ class Telemetry:
                 job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
 
         if self.kwargs['arrival'] == "poisson":
+            # TODO: --arrival poisson distribution throws errors about start_time in some scenarios
+            # e.g. `python main.py run-parts experiments/mit-replay-24hrs.yaml --arrival poisson`
             for job in jobs:
                 job.scheduled_nodes = None
                 job.submit_time = next_arrival_byconfargs(self.config, self.kwargs)
