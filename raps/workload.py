@@ -653,10 +653,6 @@ class Workload:
         """
         Generate deterministic jobs to validate multitenant scheduling & power.
 
-        usage example:
-
-            python main.py run-multi-part -x mit_supercloud -w multitenant
-
         Parameters
         ----------
         mode : str
@@ -956,7 +952,7 @@ def plot_job_hist(jobs, config=None, dist_split=None, gantt_nodes=False):
 
 
 def run_workload_add_parser(subparsers: SubParsers):
-    from raps.run_sim import shortcuts
+    from raps.sim_config import SIM_SHORTCUTS
     # TODO: Separate the arguments for this command
     parser = subparsers.add_parser("workload", description="""
         Saves workload as a snapshot.
@@ -966,7 +962,7 @@ def run_workload_add_parser(subparsers: SubParsers):
         flags. Pass "-" to read from stdin.
     """)
     model_validate = pydantic_add_args(parser, SingleSimConfig, model_config={
-        "cli_shortcuts": shortcuts,
+        "cli_shortcuts": SIM_SHORTCUTS,
     })
     parser.set_defaults(impl=lambda args: run_workload(model_validate(args, {})))
 

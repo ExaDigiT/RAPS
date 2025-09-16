@@ -36,7 +36,7 @@ power:
   power_cost: 0.094
 scheduler:
   multitenant: true
-  job_arrival_time: 900
+  job_arrival_time: 1
   mtbf: 11
   trace_quanta: 10
   min_wall_time: 3600

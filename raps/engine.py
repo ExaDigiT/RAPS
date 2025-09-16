@@ -488,23 +488,25 @@ class Engine:
         return simulation_complete
 
     def tick(self, *, time_delta=1, replay=False):
-        # Tick runs all simulations of interest at the given time delta interval.
-        #
-        # The simulations which are needed for simulations consistency at each time step
-        # (inside: the main simulation loop of run_simulation) are not part of tick.
-        #
-        # Tick contains:
-        # For each running job:
-        #  - CPU utilization
-        #  - GPU utilization
-        #  - Network utilization
-        #
-        # From these the systems (across all nodes)
-        #  - System Utilization
-        #  - Power
-        #  - Cooling
-        #  - System Performance
-        # is simulated.
+        """
+        Tick runs all simulations of interest at the given time delta interval.
+
+        The simulations which are needed for simulations consistency at each time step
+        (inside: the main simulation loop of run_simulation) are not part of tick.
+
+        Tick contains:
+        For each running job:
+         - CPU utilization
+         - GPU utilization
+         - Network utilization
+
+        From these the systems (across all nodes)
+         - System Utilization
+         - Power
+         - Cooling
+         - System Performance
+        is simulated.
+        """
 
         scheduled_nodes = []
         cpu_utils = []
@@ -523,7 +525,7 @@ class Engine:
             if job.current_state != JobState.RUNNING:
                 raise ValueError(
                     f"Job {job.id} is in running list, " +
-                    "but state is not RUNNING: job.state == {job.current_state}"
+                    f"but state is not RUNNING: job.state == {job.current_state}"
                 )
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
@@ -734,7 +736,7 @@ class Engine:
         # listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
         # listener_thread.start()
 
-        while self.current_timestep < self.timestep_end:  # Runs every seconds!
+        while self.current_timestep < self.timestep_end:  # Runs every second
 
             if sim_state.is_paused():
                 time.sleep(0.1)

@@ -391,3 +391,20 @@ class MultiPartSimConfig(SimConfig):
     @cached_property
     def _multi_partition_system_config(self):
         return get_partition_configs(self.partitions)
+
+
+SIM_SHORTCUTS = {
+    "partitions": "x",
+    "cooling": "c",
+    "simulate-network": "net",
+    "fastforward": "ff",
+    "time": "t",
+    "debug": "d",
+    "numjobs": "n",
+    "verbose": "v",
+    "output": "o",
+    "uncertainties": "u",
+    "plot": "p",
+    "replay": "f",
+    "workload": "w",
+}

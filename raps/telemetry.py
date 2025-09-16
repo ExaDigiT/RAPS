@@ -77,11 +77,12 @@ class Telemetry:
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-        self.system = kwargs.get('system')
+        self.system = kwargs['system']
         self.config = kwargs.get('config')
 
         try:
-            self.dataloader = importlib.import_module(f"raps.dataloaders.{self.system}", package=__package__)
+            module = self.system.split("/")[0]
+            self.dataloader = importlib.import_module(f"raps.dataloaders.{module}", package=__package__)
         except ImportError as e:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
@@ -228,6 +229,8 @@ class Telemetry:
                 job.scheduled_nodes = None  # Setting to None triggers scheduler to assign nodes
 
         if self.kwargs['arrival'] == "poisson":
+            # TODO: --arrival poisson distribution throws errors about start_time in some scenarios
+            # e.g. `python main.py run-parts experiments/mit-replay-24hrs.yaml --arrival poisson`
             for job in jobs:
                 job.scheduled_nodes = None
                 job.submit_time = next_arrival_byconfargs(self.config, self.kwargs)

@@ -54,6 +54,19 @@ def deep_subtract_dicts(a: dict, b: dict):
     return a
 
 
+def to_dict(arg):
+    """
+    Normalizes arg to a dictionary if necessary. Used to convert between legacy argparse.Namespace
+    objects and dictionaries.
+    """
+    if isinstance(arg, dict):
+        return arg
+    elif isinstance(arg, argparse.Namespace):
+        return vars(arg)
+    else:
+        raise ValueError(f"Cannot convert {arg} to dict")
+
+
 def sum_values(values):
     return sum(x[1] for x in values) if values else 0
 
@@ -456,14 +469,15 @@ def create_dir_indexed(dir: str, path: str = None) -> str:
 
 
 def next_arrival_byconfargs(config, args, reset=False):
+    args = to_dict(args)
     arrival_rate = 1
     arrival_time = config['JOB_ARRIVAL_TIME']
-    downscale = args.downscale
+    downscale = args['downscale']
 
-    if args.job_arrival_rate:
-        arrival_rate = args.job_arrival_rate
-    if args.job_arrival_time:
-        arrival_time = args.job_arrival_time
+    if args['job_arrival_rate']:
+        arrival_rate = args['job_arrival_rate']
+    if args['job_arrival_time']:
+        arrival_time = args['job_arrival_time']
     return next_arrival(arrival_rate / (arrival_time * downscale), reset)
 
 
@@ -748,6 +762,16 @@ def yaml_dump(data):
         indent=2,
         allow_unicode=True,
     )
+
+
+def read_yaml(config_file: str):
+    """ Parses yaml file. Pass "-" to read from stdin """
+    if config_file == "-":
+        return yaml.safe_load(sys.stdin.read())
+    elif config_file:
+        return yaml.safe_load(Path(config_file).read_text())
+    else:
+        return {}
 
 
 class WorkloadData(RAPSBaseModel):

@@ -62,15 +62,20 @@ For MIT Supercloud
     python -m raps.dataloaders.mit_supercloud.cli download --start 2021-05-21T13:00 --end 2021-05-21T14:00
 
     # Load data and run simulation - will save data as part-cpu.npz and part-gpu.npz files
-    raps run-parts -x mit_supercloud -f $DPATH --system mit_supercloud --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    raps run-parts -x mit_supercloud -f $DPATH --start 2021-05-21T13:00 --end 2021-05-21T14:00
+    # or simply
+    raps run-parts experiments/mit-replay-25hrs.yaml
     # Note: if no start, end dates provided will default to run 24 hours between
     # 2021-05-21T00:00 to 2021-05-22T00:00 set by defaults in raps/dataloaders/mit_supercloud/utils.py
 
     # Re-run simulation using npz files (much faster load)
-    raps run-parts -x mit_supercloud -f part-*.npz --system mit_supercloud
+    raps run-parts -x mit_supercloud -f part-*.npz
 
     # Synthetic tests for verification studies:
     raps run-parts -x mit_supercloud -w multitenant
+
+    # Reinforcement learning test case
+    python main.py train-rl --system mit_supercloud/part-cpu -f /opt/data/mit_supercloud/202201
 
 For Lumi
 
@@ -168,7 +173,7 @@ See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulat
 
 ## Running Tests
 
-RAPS uses [pytest](https://docs.pytest.org/) for its test suite.  
+RAPS uses [pytest](https://docs.pytest.org/) for its test suite.
 Before running tests, ensure that you have a valid data directory available (e.g., `/opt/data`) and set the environment variable `RAPS_DATA_DIR` to point to it.
 
 ### Run all tests

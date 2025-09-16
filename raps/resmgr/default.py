@@ -42,7 +42,8 @@ class ExclusiveNodeResourceManager:
         """Assigns full nodes to a job (replay or count-based)."""
         # Ensure enough free nodes
         if len(self.available_nodes) < job.nodes_required:
-            raise ValueError(f"Not enough available nodes to schedule job {job.id}")
+            raise ValueError(f"Not enough available nodes to schedule job {job.id}",
+                             f"{len(self.available_nodes)} < {job.nodes_required}")
 
         if policy == PolicyType.REPLAY and job.scheduled_nodes:
             # Telemetry replay: use the exact nodes
@@ -65,8 +66,10 @@ class ExclusiveNodeResourceManager:
                 if n not in self.available_nodes:
                     self.available_nodes.append(n)
                 else:
-                    raise KeyError((f"Atempting to free node {n} after completion of job {job.id}. " +
-                                     "Node is already free (in available nodes)!"))
+                    # Already free — log instead of raising
+                    print(f"[WARN] Tried to free node {n}, but it was already available")
+                    print(f"Atempting to free node {n} after completion of job {job.id}. " +
+                                     "Node is already free (in available nodes)!")
             self.available_nodes = sorted(self.available_nodes)
 
     def update_system_utilization(self, current_time, running_jobs):

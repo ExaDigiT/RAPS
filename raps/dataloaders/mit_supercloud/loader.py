@@ -119,7 +119,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from raps.job import job_dict, Job
-from raps.utils import summarize_ranges, WorkloadData
+from raps.utils import summarize_ranges, next_arrival, WorkloadData
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 
@@ -298,7 +298,7 @@ def load_data(local_dataset_path, **kwargs):
     ])
 
     # partition mode
-    part = kwargs.get("partition", "").split("/")[-1].lower()
+    part = (kwargs.get("partition") or "").split("/")[-1].lower()
     cpu_only = (part == "part-cpu")
     mixed = (part == "part-gpu")
 
