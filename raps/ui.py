@@ -26,6 +26,7 @@ from raps.engine import TickData, Engine
 
 MAX_ROWS = 30
 
+
 class LayoutManager:
     def __init__(self, layout_type, engine: Engine, total_timesteps=0, debug=None, args_dict=None, **config):
         self.debug = debug

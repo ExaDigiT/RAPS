@@ -173,9 +173,9 @@ class Engine:
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
         self.node_occupancy_history = []
-        self.downtime = Downtime(first_downtime=sim_config.downtime_first,
-                                 downtime_interval=sim_config.downtime_interval,
-                                 downtime_length=sim_config.downtime_length,
+        self.downtime = Downtime(first_downtime=sim_config.downtime_first_int,
+                                 downtime_interval=sim_config.downtime_interval_int,
+                                 downtime_length=sim_config.downtime_length_int,
                                  debug=sim_config.debug,
                                  )
 
@@ -233,33 +233,9 @@ class Engine:
             random.seed(sim_config.seed)
             np.random.seed(sim_config.seed + 1)
 
-        if sim_config.cooling:
-            cooling_model = ThermoFluidsModel(**system_config_dict)
-            cooling_model.initialize()
-            if sim_config.start:
-                cooling_model.weather = Weather(sim_config.start, config=system_config_dict)
-        else:
-            cooling_model = None
-
-        if sim_config.power_scope == 'node':
-            if sim_config.uncertainties:
-                power_manager = PowerManager(compute_node_power_validate_uncertainties, **system_config_dict)
-            else:
-                power_manager = PowerManager(compute_node_power_validate, **system_config_dict)
-        else:
-            if sim_config.uncertainties:
-                power_manager = PowerManager(compute_node_power_uncertainties, **system_config_dict)
-            else:
-                power_manager = PowerManager(compute_node_power, **system_config_dict)
-
-        flops_manager = FLOPSManager(
-            config=system_config_dict,
-            validate=(sim_config.power_scope == "node"),
-        )
-
         if sim_config.live and not sim_config.replay:
             td = Telemetry(**sim_config_dict)
-            workload_data = td.load_from_live_system()
+            wd = td.load_from_live_system()
         elif sim_config.replay:
             # TODO: this will have issues if running separate systems or custom systems
             partition_short = partition.split("/")[-1] if partition else None
@@ -278,30 +254,61 @@ class Engine:
             else:
                 replay_files = sim_config.replay
 
-            workload_data = td.load_from_files(replay_files)
+            wd = td.load_from_files(replay_files)
         else:  # Synthetic jobs
             wl = Workload(sim_config_args, system_config_dict)
-            workload_data = wl.generate_jobs()
+            wd = wl.generate_jobs()
             td = Telemetry(**sim_config_dict)
 
-        jobs = workload_data.jobs
+        jobs = wd.jobs
+        if len(jobs) == 0:
+            print(f"Warning no jobs found for {partition or 'system'}")
 
-        # TODO refactor how stat/end/fastforward/time work
-        if sim_config.fastforward is not None:
-            workload_data.telemetry_start = workload_data.telemetry_start + sim_config.fastforward
-
-        if sim_config.time is not None:
-            workload_data.telemetry_end = workload_data.telemetry_start + sim_config.time
-
-        if sim_config.time_delta is not None:
-            time_delta = sim_config.time_delta
+        if sim_config.start:
+            start = sim_config.start
+            diff = start - wd.start_date
+            if diff.total_seconds() < 0:
+                raise Exception(
+                    f"{start.isoformat()} is before data range in workload. " +
+                    f"Workload data begins at {wd.start_date.isoformat()}"
+                )
+            wd.telemetry_start += int(diff.total_seconds())
+            wd.start_date = start
         else:
-            time_delta = 1
+            start = wd.start_date
+        start = start + sim_config.fastforward
+        wd.telemetry_end = wd.telemetry_start + sim_config.time_int
+
+        time_delta = sim_config.time_delta_int
 
         if sim_config.continuous_job_generation:
             continuous_workload = wl
         else:
             continuous_workload = None
+
+        if sim_config.cooling:
+            cooling_model = ThermoFluidsModel(**system_config_dict)
+            cooling_model.initialize()
+            if sim_config.weather:
+                cooling_model.weather = Weather(start, config=system_config_dict)
+        else:
+            cooling_model = None
+
+        if sim_config.power_scope == 'node':
+            if sim_config.uncertainties:
+                power_manager = PowerManager(compute_node_power_validate_uncertainties, **system_config_dict)
+            else:
+                power_manager = PowerManager(compute_node_power_validate, **system_config_dict)
+        else:
+            if sim_config.uncertainties:
+                power_manager = PowerManager(compute_node_power_uncertainties, **system_config_dict)
+            else:
+                power_manager = PowerManager(compute_node_power, **system_config_dict)
+
+        flops_manager = FLOPSManager(
+            config=system_config_dict,
+            validate=(sim_config.power_scope == "node"),
+        )
 
         accounts = None
         if sim_config.accounts:
@@ -324,7 +331,7 @@ class Engine:
             system_config=system_config,
         )
 
-        return engine, workload_data, time_delta
+        return engine, wd, time_delta
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """

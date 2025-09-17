@@ -1,6 +1,6 @@
 import pytest
 from datetime import timedelta
-from raps.utils import parse_td, convert_to_time_unit, infer_time_unit, TIME_UNITS
+from raps.utils import parse_td, convert_to_time_unit, infer_time_unit, TIME_UNITS, parse_time_unit
 
 
 @pytest.mark.parametrize("input,expected", [
@@ -9,9 +9,23 @@ from raps.utils import parse_td, convert_to_time_unit, infer_time_unit, TIME_UNI
     (timedelta(minutes=1), timedelta(minutes=1)),
     (2, timedelta(seconds=2)),
     ("PT2S", timedelta(seconds=2)),
+    ("+1 day", timedelta(days=1)),
+    ("2ds", timedelta(milliseconds=200)),
+    ("2cs", timedelta(milliseconds=20)),
+    ("2ms", timedelta(milliseconds=2)),
 ])
 def test_parse_td(input, expected):
     assert parse_td(input) == expected
+
+
+@pytest.mark.parametrize("input,expected", [
+    ("s", timedelta(seconds=1)),
+    ("ms", timedelta(milliseconds=1)),
+    ("ds", timedelta(milliseconds=100)),
+    ("cs", timedelta(milliseconds=10)),
+])
+def test_parse_time_unit(input, expected):
+    assert parse_time_unit(input) == expected
 
 
 def test_parse_td_error():

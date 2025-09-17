@@ -3,15 +3,15 @@ import abc
 from pathlib import Path
 from functools import cached_property
 from datetime import timedelta
-from typing import Literal
+from typing import Literal, Annotated as A
 import importlib
 from raps.schedulers.default import PolicyType, BackfillType
 from raps.utils import (
-    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, parse_td, create_casename,
-    RAPSBaseModel,
+    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, create_casename,
+    RAPSBaseModel, AutoAwareDatetime, SmartTimedelta, yaml_dump,
 )
 from raps.system_config import SystemConfig, get_partition_configs, get_system_config
-from pydantic import model_validator
+from pydantic import model_validator, Field
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
@@ -21,36 +21,53 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Include the FMU cooling model """
     simulate_network: bool = False
     """ Include network model """
+    weather: bool | None = None
+    """
+    Include weather information in the cooling model.
+    Defaults to True if replay, False otherwise.
+    """
 
     # Simulation runtime options
-    fastforward: int | None = None
+    start: AutoAwareDatetime | None = None
+    """ Start of simulation """
+    # Exclude end from serialization as it is redundant with time
+    end: A[AutoAwareDatetime | None, Field(exclude=True)] = None
+    """ End of simulation. Pass either `time` or `end`, not both. """
+    time: SmartTimedelta = timedelta(hours=1)
     """
-    Fast-forward by time amount (unit specified by `time_unit`, default seconds).
+    Length of time to simulate (default seconds).
+    Can pass a string like 123, 27m, 3h, 7d
+    Pass either `time` or `end`, not both.
+    """
+    fastforward: SmartTimedelta = timedelta(seconds=0)
+    """
+    "Fast-forward" the simulation by time amount before starting. This is just a convenience
+    shortcut for setting --start without having to recall the exact start date of the dataset.
     Can pass a string like 15s, 1m, 1h
     """
-    time: int | None = None
+    time_delta: SmartTimedelta = timedelta(seconds=1)
     """
-    Length of time to simulate (unit specified by `time_unit`, default seconds).
-    Can pass a string like 123, 27m, 3h, 7d
-    """
-    time_delta: int = 1
-    """
-    Step size (unit specified by `time_unit`, default seconds).
+    Step size for the power simulation (default seconds).
     Can pass a string like 15s, 1m, 1h, 1ms
     """
     time_unit: timedelta = timedelta(seconds=1)
     """
-    Units all time delta ints are measured in (default seconds)
+    The base unit of the simulation, determining how often it will tick the job scheduler.
     """
+
+    @cached_property
+    def time_int(self) -> int:
+        """ Return time as an int of time_unit """
+        return int(self.time / self.time_unit)
+
+    @cached_property
+    def time_delta_int(self) -> int:
+        """ Return time_delta as an int of time_unit """
+        return int(self.time_delta / self.time_unit)
 
     @cached_property
     def downscale(self) -> int:
         return int(timedelta(seconds=1) / self.time_unit)
-
-    start: str = "2021-05-21T13:00:00-04:00"
-    """ ISO8601 start of simulation """
-    end: str = "2021-05-21T14:00:00-04:00"
-    """ ISO8601 end of simulation """
 
     numjobs: int = 100
     """ Number of jobs to schedule """
@@ -200,21 +217,33 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Path to accounts JSON file from previous run """
 
     # Downtime
-    downtime_first: int | None = None
+    downtime_first: SmartTimedelta | None = None
     """
     First downtime (unit specified by `time_unit`, default seconds).
     Can pass a string like 27m, 3h, 7d
     """
-    downtime_interval: str | None = None
+    downtime_interval: SmartTimedelta | None = None
     """
     Interval between downtimes (unit specified by `time_unit`, default seconds).
     Can pass a string like 123, 27m, 3h, 7d
     """
-    downtime_length: str | None = None
+    downtime_length: SmartTimedelta | None = None
     """
     Downtime length (unit specified by `time_unit`, default seconds).
     Can pass a string like 123, 27m, 3h, 7d
     """
+
+    @cached_property
+    def downtime_first_int(self) -> int | None:
+        return None if self.downtime_first is None else int(self.downtime_first / self.time_unit)
+
+    @cached_property
+    def downtime_interval_int(self) -> int | None:
+        return None if self.downtime_interval is None else int(self.downtime_interval / self.time_unit)
+
+    @cached_property
+    def downtime_length_int(self) -> int | None:
+        return None if self.downtime_length is None else int(self.downtime_length / self.time_unit)
 
     # Continous Job Generation
     continuous_job_generation: bool = False
@@ -229,39 +258,59 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     def _validate_before(cls, data):
         # This is called with the raw input, before Pydantic parses it, so data is just a dict and
         # contain any data types.
+        data = {**data}
 
-        time_fields = [
+        # infer time_unit
+        td_fields = [
             "time_delta", "time", "fastforward",
             "downtime_first", "downtime_interval", "downtime_length",
         ]
-
-        if data.get('time_unit') is not None:
-            time_unit = parse_time_unit(data['time_unit'])
-            input_time_unit = time_unit
-        else:
+        if data.get('time_unit') is None:
             time_unit = min(
-                [infer_time_unit(data[f]) for f in time_fields if data.get(f)],
+                [infer_time_unit(data[f]) for f in td_fields if data.get(f)],
                 default=timedelta(seconds=1)
             )
-            # When "inferring" time unit interpret raw numbers as seconds.
-            # E.g. `-t 10 --time-delta 1ds` should be `-t 10s --time-delta 1ds`
-            input_time_unit = timedelta(seconds=1)
-
+        else:
+            time_unit = parse_time_unit(data['time_unit'])
         data['time_unit'] = time_unit
-        for field in time_fields:
-            if data.get(field) is not None:
-                td = parse_td(data[field], input_time_unit)
-                data[field] = convert_to_time_unit(td, time_unit)
 
         return data
 
     @model_validator(mode="after")
     def _validate_after(self):
+        # Allow setting either start/end or start/time for backwards compatibility and convenience
+        if self.start and self.fastforward:
+            raise ValueError("start and fastforward are mutually exclusive")
+
+        if self.end:
+            if not self.start:
+                raise ValueError("end requires start to be set")
+            if 'time' not in self.model_fields_set:  # If time was not explicitly set
+                self.time = self.end - self.start
+        elif self.start:
+            self.end = self.start + self.time
+
+        if self.start and self.start + self.time != self.end:
+            raise ValueError("time and end values don't match. You only need to specify one.")
+
+        td_fields = [
+            "time_delta", "time", "fastforward",
+            "downtime_first", "downtime_interval", "downtime_length",
+        ]
+        # Check time fields are divisible by time_unit.
+        for field in td_fields:
+            td = getattr(self, field)
+            if td is not None:
+                convert_to_time_unit(td, self.time_unit)  # will throw if invalid
+
         if not self.replay and not self.workload:
             self.workload = "random"
 
         if self.cooling:
             self.layout = "layout2"
+
+        if self.weather is None:
+            self.weather = self.cooling and bool(self.replay)
 
         if self.jobsize_is_power_of is not None and self.jobsize_is_of_degree is not None:
             raise ValueError("jobsize_is_power_of and jobsize_is_of_degree are mutually exclusive")
@@ -341,19 +390,31 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         args_dict = self.model_dump(mode="json")
         args_dict['system'] = self.system_name
         # validate has been renamed to power_scope
-        args_dict['validate'] = args_dict["power_scope"] == "node"
+        args_dict['validate'] = self.power_scope == "node"
         args_dict['downscale'] = self.downscale
 
         # Convert Path objects to str
-        if args_dict['output']:
-            args_dict['output'] = str(args_dict['output'])
-        if args_dict['replay']:
-            args_dict['replay'] = [str(p) for p in args_dict['replay']]
-        if args_dict['accounts_json']:
-            args_dict['accounts_json'] = str(args_dict['accounts_json'])
+        if self.output:
+            args_dict['output'] = str(self.output)
+        if self.replay:
+            args_dict['replay'] = [str(p) for p in self.replay]
+        if self.accounts_json:
+            args_dict['accounts_json'] = str(self.accounts_json)
+
+        args_dict["time"] = self.time_int
+        args_dict["time_delta"] = self.time_delta_int
+        args_dict["downtime_first"] = self.downtime_first_int
+        args_dict["downtime_interval"] = self.downtime_interval_int
+        args_dict["downtime_length"] = self.downtime_length_int
+        args_dict['start'] = self.start.astimezone().isoformat() if self.start else None
+        args_dict['end'] = self.end.astimezone().isoformat() if self.end else None
+        args_dict.pop("fastforward")  # Remove fastforward from this to avoid confusion later
 
         args_dict['sim_config'] = self
         return args_dict
+
+    def dump_yaml(self, exclude_unset=True):
+        return yaml_dump(self.model_dump(mode="json", exclude_unset=exclude_unset))
 
 
 class SingleSimConfig(SimConfig, abc.ABC):
@@ -397,8 +458,8 @@ SIM_SHORTCUTS = {
     "partitions": "x",
     "cooling": "c",
     "simulate-network": "net",
-    "fastforward": "ff",
     "time": "t",
+    "fastforward": "ff",
     "debug": "d",
     "numjobs": "n",
     "verbose": "v",

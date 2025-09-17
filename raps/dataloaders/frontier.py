@@ -275,12 +275,12 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
 
         if end_time < telemetry_start:
             print("Job ends before first recorded telemetry entry:", job_id, "start:",
-                    start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
+                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
             continue  # skip
 
         if start_time > telemetry_end:
             print("Job starts after last recorded telemetry entry:", job_id, "start:",
-                    start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
+                  start_time, "end:", end_time, " Telemetry: ", len(gpu_trace), "entries.")
             continue  # skip
 
         # Throw out jobs that are not valid!

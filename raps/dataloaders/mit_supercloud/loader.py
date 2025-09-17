@@ -119,7 +119,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from raps.job import job_dict, Job
-from raps.utils import summarize_ranges, next_arrival, WorkloadData
+from raps.utils import summarize_ranges, WorkloadData
 from .utils import proc_cpu_series, proc_gpu_series, to_epoch
 from .utils import DEFAULT_START, DEFAULT_END
 
@@ -236,8 +236,8 @@ def load_data(local_dataset_path, **kwargs):
     sl["__line__"] = sl.index + 2
 
     # date window
-    start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
-    end_ts = to_epoch(kwargs.get("end",   DEFAULT_END))
+    start_ts = to_epoch(kwargs.get("start") or DEFAULT_START)
+    end_ts = to_epoch(kwargs.get("end") or DEFAULT_END)
 
     mask = (sl.time_submit >= start_ts) & (sl.time_submit < end_ts)
     sl = sl[mask]
@@ -283,8 +283,8 @@ def load_data(local_dataset_path, **kwargs):
     # —— ERROR CATCH: no jobs in this window? ——
     if sl.empty:
         raise ValueError(
-            f"No SLURM jobs found between {kwargs.get('start_date')} and "
-            f"{kwargs.get('end_date')}. Please pick a range covered by the dataset."
+            f"No SLURM jobs found between {kwargs.get('start')} and "
+            f"{kwargs.get('end')}. Please pick a range covered by the dataset."
         )
 
     # detect GPU‐using jobs

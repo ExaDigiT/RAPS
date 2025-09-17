@@ -11,8 +11,9 @@
     # to replay with different scheduling policy
     python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
 
-    # to fast-forward 60 days and replay for 1 day
-    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 --ff 60d -t 1d
+    # to run a specific time range
+    python main.py -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 \
+        --start 2024-11-01T00:00:00Z --end 2024-11-02T00:00:00Z
 
     # to analyze dataset
     python -m raps.telemetry -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 -v

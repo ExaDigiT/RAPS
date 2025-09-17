@@ -15,23 +15,23 @@ def print_stats(stats, step=0):
     """prints SB3-style stats output"""
 
     wanted_keys = {
-        "time simulated": "engine/Time Simulated",
-        "average power": "engine/Average Power",
-        "system power efficiency": "engine/System Power Efficiency",
-        "total energy consumed": "engine/Total Energy Consumed",
-        "carbon emissions": "engine/Carbon Footprint",
-        "jobs completed": "jobs/Jobs Completed",
+        "time_simulated": "engine/Time Simulated",
+        "average_power": "engine/Average Power",
+        "system_power_efficiency": "engine/System Power Efficiency",
+        "total_energy_consumed": "engine/Total Energy Consumed",
+        "carbon_emissions": "engine/Carbon Footprint",
+        "jobs_completed": "jobs/Jobs Completed",
         "throughput": "jobs/Throughput",
-        "jobs still running": "jobs/Jobs Still Running",
+        "jobs_still_running": "jobs/Jobs Still Running",
     }
 
     for section in ["engine_stats", "job_stats"]:
         if section in stats:
             for k, v in stats[section].items():
-                if k.lower() in wanted_keys:
-                    if k.lower() == "jobs still running" and isinstance(v, list):
+                if k in wanted_keys:
+                    if k == "jobs_still_running" and isinstance(v, list):
                         v = len(v)
-                    logger.record(wanted_keys[k.lower()], v)
+                    logger.record(wanted_keys[k], v)
 
     logger.dump(step=step)
 

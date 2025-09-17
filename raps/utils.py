@@ -6,7 +6,7 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import os
 import hashlib
@@ -21,7 +21,9 @@ import json
 import argparse
 from pathlib import Path
 from typing import Annotated as A, TypeVar, Callable, TypeAlias
-from pydantic import BaseModel, TypeAdapter, AfterValidator, ConfigDict, AwareDatetime, ValidationError
+from pydantic import (
+    BaseModel, TypeAdapter, AfterValidator, BeforeValidator, ConfigDict, AwareDatetime, ValidationError
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
 import yaml
 from raps.job import Job
@@ -533,6 +535,9 @@ def parse_td(td, unit: str | timedelta = 's') -> timedelta:
     if TypeAdapter(timedelta).validator.isinstance_python(td):
         return TypeAdapter(timedelta).validate_python(td)
     if isinstance(td, str):
+        if not pd.isna(pd.to_timedelta(td, errors="coerce")):
+            return pd.to_timedelta(td)
+        # Special case parsing for ds and cs units which pandas doesn't support
         re_match = re.fullmatch(r"(\d+)\s*(\w+)", td.strip())
         if re_match and re_match[2] in TIME_UNITS:
             num_str, unit_str = re_match.groups()
@@ -670,14 +675,22 @@ class ValueComparableEnum(Enum):
         return hash(self.value)
 
 
+def normalize_tz(d: datetime):
+    """ Convert datetime to UTC. If naive, assume local time, then convert to UTC """
+    if not d.tzinfo:
+        return d.astimezone().astimezone(timezone.utc)
+    else:
+        return d.astimezone(timezone.utc)
+
+
 ExpandedPath = A[Path, AfterValidator(lambda v: Path(v).expanduser().resolve())]
 """ Type that that expands ~ and environment variables in a path string """
 
+AutoAwareDatetime = A[datetime, AfterValidator(normalize_tz)]
+""" Datetime type wrapper, makes sure timezone is set """
 
-SmartTimedelta = A[timedelta, AfterValidator(parse_td)]
+SmartTimedelta = A[timedelta, BeforeValidator(parse_td)]
 """ Can be passed as ISO 8601 format like PT5M, or a string like 9s, or a number of seconds """
-
-T = TypeVar("T", bound=BaseModel)
 
 
 class RAPSBaseModel(BaseModel):
@@ -685,6 +698,9 @@ class RAPSBaseModel(BaseModel):
     model_config = ConfigDict(
         use_attribute_docstrings=True,
     )
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def pydantic_add_args(
@@ -727,7 +743,8 @@ def pydantic_add_args(
                                **(data or {}),
                                )
             # Recreate model so we don't return the SettingsModel subclass
-            return model_cls.model_validate(model.model_dump())
+            # use exclude_unset so that model_field_set is preserved as well
+            return model_cls.model_validate(model.model_dump(exclude_unset=True))
         except ValidationError as err:
             print(err)
             sys.exit(1)
@@ -738,8 +755,11 @@ SubParsers: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
 """ Alias for the result of argparse parser.add_subparsers """
 
 
-def yaml_dump(data):
+def yaml_dump(data, header_comment=''):
     """ Dumps yaml with pretty formatting """
+    if header_comment:
+        header_comment = '\n'.join(f'# {ln}' for ln in header_comment.splitlines()) + "\n"
+
     class IndentDumper(yaml.Dumper):
         def represent_data(self, data):
             # Quote all strings with special characters to avoid confusion
@@ -755,7 +775,7 @@ def yaml_dump(data):
             # Indent lists
             return super(IndentDumper, self).increase_indent(flow, False)
 
-    return yaml.dump(
+    return header_comment + yaml.dump(
         data,
         Dumper=IndentDumper,
         sort_keys=False,
@@ -766,10 +786,15 @@ def yaml_dump(data):
 
 def read_yaml(config_file: str):
     """ Parses yaml file. Pass "-" to read from stdin """
-    if config_file == "-":
-        return yaml.safe_load(sys.stdin.read())
+    # Assume stdin if not terminal
+    if config_file == "-" or (not config_file and not sys.stdin.isatty()):
+        data = sys.stdin.read()
     elif config_file:
-        return yaml.safe_load(Path(config_file).read_text())
+        data = Path(config_file).read_text()
+    else:
+        data = ""
+    if data.strip():
+        return yaml.safe_load(data)
     else:
         return {}
 
@@ -860,7 +885,8 @@ class WorkloadData(RAPSBaseModel):
     telemetry_end: int
     # TODO: It might make more sense to make start_timestep/end_timestep always unix time, then we
     # wouldn't need this extra start_date field.
-    start_date: AwareDatetime
+    # Don't use AutoAwareDatetime here as we want to enforce dataloaders returning timezone info
+    start_date: A[AwareDatetime, AfterValidator(lambda d: d.astimezone(timezone.utc))]
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

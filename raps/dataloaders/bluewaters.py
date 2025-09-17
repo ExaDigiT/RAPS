@@ -181,7 +181,11 @@ def _parse_line(line: str, debug=False):
 def load_data(local_dataset_path, **kwargs):
     config = kwargs.get("config")
     root = Path(local_dataset_path[0])
-    day = kwargs.get("start")
+    # TODO: confirm bluewater dates are in UTC
+    start = datetime.fromisoformat(kwargs.get('start') or "2017-03-28T00:00:00Z")
+    start = start.astimezone(timezone.utc)
+    # TODO: support multiple day replay
+    day = start.strftime("%Y%m%d")
     fp = root / "torque_logs" / day
     filter_str = kwargs.get("filter")
     debug = kwargs.get("debug")

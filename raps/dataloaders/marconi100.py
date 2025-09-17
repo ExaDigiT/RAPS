@@ -16,7 +16,7 @@
     python main.py -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
 
     # to fast-forward 60 days and replay for 1 day
-    python main.py -f /path/to/job_table.parquet --system marconi100 --ff 60d -t 1d
+    python main.py -f /path/to/job_table.parquet --system marconi100 --start 2020-07-05T00:00:00+00:00 -t 1d
 
     # to analyze dataset
     python -m raps.telemetry -f /path/to/job_table.parquet --system marconi100 -v
@@ -63,10 +63,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
     debug = kwargs.get('debug')
-
-    # fastforward = kwargs.get('fastforward')
-    # if fastforward:
-    #    print(f"fast-forwarding {fastforward} seconds")
 
     # Sort jobs dataframe based on values in time_start column, adjust indices after sorting
     jobs_df = jobs_df.sort_values(by='start_time')
