@@ -30,26 +30,26 @@ def get_engine_stats(engine: Engine):
     total_cost = total_energy_consumed * 1000 * engine.config.get('POWER_COST', 0)  # Total cost in dollars
 
     stats = {
-        'time simulated': time_simulated,
+        'time_simulated': time_simulated,
         'num_samples': num_samples,
-        'average power': f'{average_power_mw:.4f} MW',
-        'min loss': f'{min_loss_mw:.4f} MW',
-        'average loss': f'{average_loss_mw:.2f} MW',
-        'max loss': f'{max_loss_mw:.2f} MW',
-        'system power efficiency': f'{efficiency * 100:.2f}%',
-        'total energy consumed': f'{total_energy_consumed:.2f} MW-hr',
-        'carbon emissions': f'{emissions:.4f} metric tons CO2',
-        'total cost': f'${total_cost:.2f}'
+        'average_power': average_power_mw,
+        'min_loss': min_loss_mw,
+        'average_loss': average_loss_mw,
+        'max_loss': max_loss_mw,
+        'system_power_efficiency': efficiency * 100,
+        'total_energy_consumed': total_energy_consumed,
+        'carbon_emissions': emissions,
+        'total_cost': total_cost,
     }
 
     if engine.config['multitenant']:
         # Multitenancy Stats
         total_jobs_loaded = engine.total_initial_jobs  # Assuming this is passed to __init__
-        stats['total jobs loaded'] = total_jobs_loaded
+        stats['total_jobs_loaded'] = total_jobs_loaded
         if total_jobs_loaded > 0:
-            stats['jobs completed percentage'] = f"{(engine.jobs_completed / total_jobs_loaded * 100):.2f}%"
+            stats['jobs_completed_percentage'] = engine.jobs_completed / total_jobs_loaded * 100
         else:
-            stats['jobs completed percentage'] = "0%"
+            stats['jobs_completed_percentage'] = 0
 
     if engine.node_occupancy_history:
         # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
@@ -76,11 +76,11 @@ def get_engine_stats(engine: Engine):
         avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
             if count_active_timesteps_for_avg_active > 0 else 0
 
-        stats['avg concurrent jobs per active node'] = f"{avg_jobs_per_active_node:.2f}"
-        stats['max concurrent jobs per node'] = max_concurrent_jobs_per_node
+        stats['avg_concurrent_jobs_per_active_node'] = avg_jobs_per_active_node
+        stats['max_concurrent_jobs_per_node'] = max_concurrent_jobs_per_node
     else:
-        stats['avg concurrent jobs per node'] = "N/A"
-        stats['max concurrent jobs per node'] = "N/A"
+        stats['avg_concurrent_jobs_per_node'] = None
+        stats['max_concurrent_jobs_per_node'] = None
 
     # network_stats = get_network_stats()
     # stats.update(network_stats)
@@ -124,19 +124,19 @@ def get_network_stats(engine: Engine):
     else:
         mean_net_util = 0.0
 
-    stats["avg network util"] = f"{mean_net_util * 100:.2f}%"
+    stats["avg_network_util"] = mean_net_util * 100
 
     if engine.avg_slowdown_history:
         avg_job_slow = sum(engine.avg_slowdown_history) / len(engine.avg_slowdown_history)
     else:
         avg_job_slow = 1.0
-    stats["avg per-job slowdown"] = f"{avg_job_slow:.2f}x"
+    stats["avg_per_job_slowdown"] = avg_job_slow
 
     if engine.max_slowdown_history:
         max_job_slow = max(engine.max_slowdown_history)
     else:
         max_job_slow = 1.0
-    stats["max per-job slowdown"] = f"{max_job_slow:.2f}x"
+    stats["max_per_job_slowdown"] = max_job_slow
 
     return stats
 
@@ -301,31 +301,32 @@ def get_job_stats(engine: Engine):
         min_nrx_u, max_nrx_u, avg_nrx_u = -1, -1, -1
 
     job_stats = {
-        'jobs completed': engine.jobs_completed,
-        'throughput': f'{throughput:.2f} jobs/hour',
-        'jobs still running': [job.id for job in engine.running],
-        'jobs still in queue': [job.id for job in engine.queue],
-        'Jobs <= 5 nodes': jobsSmall,
-        'Jobs <= 50 nodes': jobsMedium,
-        'Jobs <= 250 nodes': jobsLarge,
-        'Jobs <= 4500 nodes': jobsVLarge,
-        'Jobs > 4500 nodes': jobsHuge,
+        'jobs_total': engine.jobs_completed + len(engine.running) + len(engine.queue),
+        'jobs_completed': engine.jobs_completed,
+        'throughput': throughput,
+        'jobs_still_running': [job.id for job in engine.running],
+        'jobs_still_in_queue': [job.id for job in engine.queue],
+        'jobs <= 5 nodes': jobsSmall,
+        'jobs <= 50 nodes': jobsMedium,
+        'jobs <= 250 nodes': jobsLarge,
+        'jobs <= 4500 nodes': jobsVLarge,
+        'jobs > 4500 nodes': jobsHuge,
         # Information on job-mix executed
-        'min job size': min_job_size,
-        'max job size': max_job_size,
-        'average job size': avg_job_size,
-        'min runtime': min_runtime,
-        'max runtime': max_runtime,
-        'average runtime': avg_runtime,
-        'min energy': min_energy,
-        'max energy': max_energy,
-        'avg energy': avg_energy,
-        'min edp': min_edp,
-        'max edp': max_edp,
-        'avg edp': avg_edp,
-        'min edp^2': min_edp2,
-        'max edp^2': max_edp2,
-        'avg edp^2': avg_edp2,
+        'min_job_size': min_job_size,
+        'max_job_size': max_job_size,
+        'average_job_size': avg_job_size,
+        'min_runtime': min_runtime,
+        'max_runtime': max_runtime,
+        'average_runtime': avg_runtime,
+        'min_energy': min_energy,
+        'max_energy': max_energy,
+        'avg_energy': avg_energy,
+        'min_edp': min_edp,
+        'max_edp': max_edp,
+        'avg_edp': avg_edp,
+        'min_edp^2': min_edp2,
+        'max_edp^2': max_edp2,
+        'avg_edp^2': avg_edp2,
         'min_aggregate_node_hours': min_agg_node_hours,
         'max_aggregate_node_hours': max_agg_node_hours,
         'avg_aggregate_node_hours': avg_agg_node_hours,
@@ -362,28 +363,44 @@ def print_formatted_report(engine_stats=None,
                            scheduler_stats=None,
                            network_stats=None
                            ):
+    def print_report_section(name, data, templates):
+        if data:
+            rep_str = f"--- {name} ---"
+            print(rep_str)
+            for key, value in data.items():
+                pretty_key = key.replace('_', ' ').title()
+                if key in templates:
+                    pretty_value = templates[key].format(value)
+                elif isinstance(value, float):
+                    pretty_value = f"{value:.2f}"
+                elif value is None:
+                    pretty_value = "N/A"
+                else:
+                    pretty_value = str(value)
+                print(f"{pretty_key}: {pretty_value}")
+            print(f"{'-' * len(rep_str)}\n")
+            print()
+
     # Print a formatted report
-    if engine_stats:
-        rep_str = "--- Simulation Report ---"
-        print(f"\n{rep_str}")
-        for key, value in engine_stats.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-        print(f"{'-' * len(rep_str)}\n")
-    if job_stats:
-        rep_str = "--- Job Stat Report ---"
-        print(f"\n{rep_str}")
-        for key, value in job_stats.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-        print(f"{'-' * len(rep_str)}\n")
-    if scheduler_stats:
-        rep_str = "--- Scheduler Report ---"
-        print(f"\n{rep_str}")
-        for key, value in scheduler_stats.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-        print(f"{'-' * len(rep_str)}\n")
-    if network_stats:
-        rep_str = "--- Network Report ---"
-        print(f"\n{rep_str}")
-        for key, value in network_stats.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-        print(f"{'-' * len(rep_str)}\n")
+    print()
+    print_report_section("Simulation Report", engine_stats, {
+        'average_power': '{:.4f} MW',
+        'min_loss': '{:.4f} MW',
+        'average_loss': '{:.2f} MW',
+        'max_loss': '{:.2f} MW',
+        'system_power_efficiency': '{:.2f}%',
+        'total_energy_consumed': '{:.2f} MW-hr',
+        'carbon_emissions': '{:.4f} metric tons CO2',
+        'total_cost': '${:.2f}',
+    })
+    print_report_section("Job Stat Report", job_stats, {
+        'throughput': '{:.2f} jobs/hour',
+        'jobs_completed_percentage': "{:.2f}%",
+    })
+    print_report_section("Scheduler Report", scheduler_stats, {
+    })
+    print_report_section("Network Report", network_stats, {
+        "avg_network_util": "{:.2f}%",
+        "avg_per_job_slowdown": "{:.2f}x",
+        "max_per_job_slowdown": "{:.2f}x",
+    })

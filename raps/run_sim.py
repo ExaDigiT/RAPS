@@ -6,14 +6,12 @@ These functions just handle rendering the terminal UI and outputting results to 
 import json
 import pandas as pd
 import sys
-import yaml
 import warnings
-from pathlib import Path
 from raps.ui import LayoutManager
 from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
-from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, yaml_dump, read_yaml
+from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, read_yaml
 from raps.stats import (
     get_engine_stats,
     get_job_stats,
@@ -61,8 +59,7 @@ def run_sim(sim_config: SingleSimConfig):
             result=workload_data,
             args=sim_config,
         )
-        config_yaml = yaml_dump(sim_config.model_dump(mode="json", exclude_defaults=True))
-        (out / 'sim_config.yaml').write_text(config_yaml)
+        (out / 'sim_config.yaml').write_text(sim_config.dump_yaml())
 
     jobs = workload_data.jobs
     timestep_start, timestep_end = workload_data.telemetry_start, workload_data.telemetry_end
@@ -238,8 +235,7 @@ def run_parts_sim(sim_config: MultiPartSimConfig):
                 result=workload_results[part],
                 args=sim_config,
             )
-        config_yaml = yaml_dump(sim_config.model_dump(mode="json", exclude_defaults=True))
-        (out / 'sim_config.yaml').write_text(config_yaml)
+        (out / 'sim_config.yaml').write_text(sim_config.dump_yaml())
 
     jobs = {p: w.jobs for p, w in workload_results.items()}
 
@@ -310,5 +306,4 @@ def show_add_parser(subparsers: SubParsers):
 
 
 def show(sim_config: SingleSimConfig, show_defaults=False):
-    data = sim_config.model_dump(mode="json", exclude_defaults=not show_defaults)
-    print(yaml_dump(data), end="")
+    print(sim_config.dump_yaml(exclude_unset=not show_defaults), end='')

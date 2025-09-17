@@ -49,13 +49,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         The list of parsed jobs.
     """
     config = kwargs.get('config')
-    min_time = kwargs.get('min_time', None)
     reschedule = kwargs.get('reschedule')
-    fastforward = kwargs.get('fastforward')
     validate = kwargs.get('validate')
     jid = kwargs.get('jid', '*')
-
-    if fastforward: print(f"fast-forwarding {fastforward} seconds")
 
     # Sort jobs dataframe based on values in time_start column, adjust indices after sorting
     jobs_df = jobs_df.sort_values(by='submit_time')
@@ -73,10 +69,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
 
     # Take earliest time as baseline reference
     # We can use the start time of the first job.
-    if min_time:
-        time_zero = min_time
-    else:
-        time_zero = jobs_df['submit_time'].min()
+    time_zero = jobs_df['submit_time'].min()
 
     num_jobs = len(jobs_df)
     print("time_zero:", time_zero, "num_jobs", num_jobs)
@@ -124,8 +117,6 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         else:
             # When extracting out a single job, run one iteration past the end of the job
             time_offset = config['UI_UPDATE_FREQ']
-
-        if fastforward: time_offset -= fastforward
 
         if reschedule: # Let the scheduler reschedule the jobs
             scheduled_nodes = None

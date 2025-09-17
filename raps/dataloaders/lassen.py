@@ -23,7 +23,7 @@ Usage Instructions:
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --ff 365d -t 1d
+    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
 
     # For the network replay this command gives suiteable snapshots:
     python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
@@ -35,10 +35,10 @@ import uuid
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, parse_td, WorkloadData
+from ..utils import power_to_utilization, WorkloadData
 
 
 def load_data(path, **kwargs):
@@ -61,31 +61,25 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     jid = kwargs.get('jid', '*')
     validate = kwargs.get('validate')
     verbose = kwargs.get('verbose')
-    fastforward = kwargs.get('fastforward')  # int in seconds
+    start = datetime.fromisoformat(kwargs['start']) if kwargs.get('start') else None
 
     allocation_df['job_submit_timestamp'] = pd.to_datetime(
         allocation_df['job_submit_time'], format='mixed', errors='coerce')
     allocation_df['begin_timestamp'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
     allocation_df['end_timestamp'] = pd.to_datetime(allocation_df['end_time'], format='mixed', errors='coerce')
 
-    # Too large dataset! Cut by fastforward and time to simulate!
-    if fastforward is None:  # This is in seconds / int?
-        fastforward = 0
-        fastforward_timedelta = timedelta(seconds=fastforward)  # timedelta
-    else:
-        fastforward_timedelta = timedelta(seconds=fastforward)  # timedelta
-    time_to_simulate = kwargs.get('time')  # int in seconds
-    if time_to_simulate is None:  # This is a string!
-        time_to_simulate = 31536000  # a year
-        time_to_simulate_timedelta = timedelta(seconds=time_to_simulate)  # timedelta
-    else:
-        time_to_simulate_timedelta = parse_td(time_to_simulate)  # timedelta
-
     telemetry_start_timestamp = allocation_df['begin_timestamp'].min()
     telemetry_start_time = 0
     telemetry_end_timestamp = allocation_df['end_timestamp'].max()
     diff = telemetry_end_timestamp - telemetry_start_timestamp
     telemetry_end_time = int(math.ceil(diff.total_seconds()))
+
+    # Too large dataset! Cut by fastforward and time to simulate!
+    if start is None:
+        fastforward_timedelta = timedelta(seconds=0)
+    else:
+        fastforward_timedelta = start - telemetry_start_timestamp.tz_localize("UTC")
+    time_to_simulate_timedelta = timedelta(seconds=kwargs['time'])
 
     simulation_start_timestamp = telemetry_start_timestamp + fastforward_timedelta
     simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta

@@ -32,8 +32,8 @@ def main():
     pl = subs.add_parser("load", parents=[common], help="Load local data into RAPS")
     pl.add_argument("path", help="Local data root")
     pl.set_defaults(func=lambda args: load_data(args.path,
-                                                start_date=args.start,
-                                                end_date=args.end,
+                                                start=args.start,
+                                                end=args.end,
                                                 partition=args.partition))
 
     args = p.parse_args()

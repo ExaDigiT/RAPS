@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 ExaDigiT Resource Allocator & Power Simulator (RAPS)
 """

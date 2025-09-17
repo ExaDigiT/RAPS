@@ -8,7 +8,7 @@ pytestmark = [
 ]
 
 
-def test_main_withdata_run(system, system_config, system_files, sim_output):
+def test_main_withdata_range_run(system, system_config, system_files, sim_output):
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main even without data.")
     if not system_config.get("withdata", False):
@@ -16,6 +16,7 @@ def test_main_withdata_run(system, system_config, system_files, sim_output):
 
     engine, stats = run_engine({
         "system": system,
+        "start": system_config['start'],
         "time": "10m",
         "replay": system_files,
     })

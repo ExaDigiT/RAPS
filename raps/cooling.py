@@ -16,7 +16,7 @@ from fmpy import read_model_description, extract
 from fmpy.fmi2 import FMU2Slave
 from datetime import timedelta
 
-from raps.policy import PolicyType
+from raps.weather import Weather
 
 
 def get_matching_variables(variables, pattern):
@@ -92,7 +92,7 @@ class ThermoFluidsModel:
         self.outputs = None
         self.unzipdir = None
         self.fmu = None
-        self.weather = None
+        self.weather: Weather | None = None
 
     def initialize(self):
         """
@@ -153,9 +153,7 @@ class ThermoFluidsModel:
         temperature = self.config['WET_BULB_TEMP']
 
         # If replay mode is on and weather data is available
-        if engine.scheduler.policy == PolicyType.REPLAY and \
-            self.weather and self.weather.start is not None and \
-                self.weather.has_coords:
+        if self.weather and self.weather.has_coords:
             # Convert total seconds to timedelta object
             delta = timedelta(seconds=engine.current_timestep)
             target_datetime = self.weather.start + delta
