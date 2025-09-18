@@ -77,6 +77,14 @@ For MIT Supercloud
     # Reinforcement learning test case
     raps train-rl --system mit_supercloud/part-cpu -f /opt/data/mit_supercloud/202201
 
+Microsoft Azure - 2017 Philly Traces
+
+    # Synthetic
+    python main.py run-parts -x philly -w multitenant
+
+    # Telemetry replay
+    python main.py run-parts -x philly -f /opt/data/philly/trace-data
+
 For Lumi
 
     # Synthetic test for Lumi:
