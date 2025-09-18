@@ -61,6 +61,10 @@ class TelemetryArgs(RAPSBaseModel):
             raise ValueError("Either --live or --replay is required")
         return self
 
+    @property
+    def system_name(self):
+        return self.system
+
 
 shortcuts = {
     "replay": "f",
@@ -208,7 +212,7 @@ class Telemetry:
             for file in files:
                 print(f"Loading {file}")
                 new_data, args_from_file = self.load_snapshot(file)
-                print(f"File was generated with: --system {args_from_file.system}")
+                print(f"File was generated with: --system {args_from_file.system_name}")
                 if not data:
                     data = new_data
                 else:

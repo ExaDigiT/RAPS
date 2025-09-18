@@ -248,7 +248,7 @@ class Engine:
                 if len(snap_map) > 0:
                     if partition_short not in snap_map:
                         raise RuntimeError(f"Snapshot '{partition_short}.npz' not in {sim_config.replay[0]}")
-                    replay_files = snap_map[partition_short]
+                    replay_files = [snap_map[partition_short]]
                 else:
                     replay_files = sim_config.replay
             else:
