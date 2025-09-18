@@ -4,7 +4,7 @@ import csv
 import datetime
 import pandas as pd
 import warnings
-from raps.job import Job
+from raps.job import job_dict, Job
 
 DATE_FORMAT_STR = "%Y-%m-%d %H:%M:%S"
 
@@ -96,21 +96,51 @@ def load_data(files, **kwargs):
         job_cpu = cpu_util[cpu_util["machine_id"].isin(machine_ids)]
         job_gpu = gpu_util[gpu_util["machineId"].isin(machine_ids)]
 
-        job = Job(
-            job_id=jobid,
-            name=f"philly-{jobid}",
-            user=user,
-            nodes_required=len(machine_ids) if machine_ids else None,
-            wall_time=wall_time,
-            start_time=start,
-            end_time=end,
-            queue_time=submitted,
-            scheduled_nodes=machine_ids,
-            cpu_trace=job_cpu if not job_cpu.empty else None,
-            gpu_trace=job_gpu if not job_gpu.empty else None,
-            priority=None,
-            end_state=status
-        )
-        jobs.append(job)
+        print("***", len(machine_ids), machine_ids)
+
+        if machine_ids:
+
+            job = job_dict(
+                # Core identity
+                id=jobid,
+                name=f"philly-{jobid}",
+                account=user if user else "unknown",   # Philly log has user
+
+                # Partition & priority
+                nodes_required=len(machine_ids) if machine_ids else 0,
+                partition=0,
+                priority=0,
+
+                # Resource requests
+                cpu_cores_required=0,    # Philly logs don’t track cores
+                gpu_units_required=gpus, # we can count GPUs from attempts
+                allocated_cpu_cores=0,
+                allocated_gpu_units=gpus,
+
+                # State
+                end_state=status,
+
+                # Traces
+                cpu_trace=job_cpu if not job_cpu.empty else None,
+                gpu_trace=job_gpu if not job_gpu.empty else None,
+                ntx_trace=None,
+                nrx_trace=None,
+
+                # Timing
+                submit_time=submitted.timestamp() if submitted else 0,
+                start_time=start.timestamp() if start else 0,
+                end_time=end.timestamp() if end else 0,
+                time_limit=0,
+                expected_run_time=wall_time if wall_time else 0,
+                current_run_time=0,
+                trace_time=None,
+                trace_start_time=None,
+                trace_end_time=None,
+                trace_quanta=None,
+                trace_missing_values=False,
+                downscale=1
+            )
+            print(job)
+            jobs.append(Job(job))
 
     return jobs
