@@ -556,7 +556,7 @@ class LayoutManager:
             data.system_util, uncertainties=uncertainties,
         )
 
-    def run(self, jobs, timestep_start, timestep_end, time_delta):
+    def run(self):
         """ Runs the UI, blocking until the simulation is complete """
         if not self.debug and not self.noui:
             context = Live(self.layout, auto_refresh=True, refresh_per_second=3)
@@ -565,13 +565,11 @@ class LayoutManager:
         try:
             with context:
                 # last_i = 0
-                for i, data in enumerate(self.engine.run_simulation(jobs,
-                                                                    timestep_start,
-                                                                    timestep_end,
-                                                                    time_delta,
-                                                                    autoshutdown=True)):
+                for i, data in enumerate(self.engine.run_simulation(autoshutdown=True)):
                     if data and (not self.debug and not self.noui):
-                        self.update_full_layout(data, time_delta, timestep_start=timestep_start)
+                        self.update_full_layout(data,
+                                                self.engine.time_delta,
+                                                timestep_start=self.engine.timestep_start)
                         # self.update_progress_bar(i-last_i)
                         # last_i=i
                     if not self.debug and not self.noui:

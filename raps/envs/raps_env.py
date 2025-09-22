@@ -59,12 +59,10 @@ class RAPSEnv(gym.Env):
         self.action_space = spaces.Discrete(max_jobs)
 
     def _create_engine(self):
-        engine, workload_data, time_delta = Engine.from_sim_config(self.sim_config)
+        engine = Engine(self.sim_config)
         engine.scheduler.env = self
-        self.jobs = workload_data.jobs
-        timestep_start = workload_data.telemetry_start
-        timestep_end = workload_data.telemetry_end
-        self.generator = engine.run_simulation(self.jobs, timestep_start, timestep_end, time_delta)
+        self.jobs = engine.jobs
+        self.generator = engine.run_simulation()
         return engine
 
     def reset(self, **kwargs):

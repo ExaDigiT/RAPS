@@ -49,37 +49,34 @@ def run_sim(sim_config: SingleSimConfig):
         print("Use run-parts to run multi-partition simulations")
         sys.exit(1)
 
-    engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
+    engine = Engine(sim_config)
 
     out = sim_config.get_output()
     if out:
         out.mkdir(parents=True)
         engine.telemetry.save_snapshot(
             dest=str(out / 'snapshot.npz'),
-            result=workload_data,
+            result=engine.get_workload_data(),
             args=sim_config,
         )
         (out / 'sim_config.yaml').write_text(sim_config.dump_yaml())
 
-    jobs = workload_data.jobs
-    timestep_start, timestep_end = workload_data.telemetry_start, workload_data.telemetry_end
+    jobs = engine.jobs
+    timestep_start, timestep_end = engine.timestep_start, engine.timestep_end
     total_timesteps = timestep_end - timestep_start
 
     downscale = sim_config.downscale
     downscale_str = ""if downscale == 1 else f"/{downscale}"
     print(f"Simulating {len(jobs)} jobs for {total_timesteps}{downscale_str}"
           f" seconds from {timestep_start} to {timestep_end}.")
-    print(f"Simulation time delta: {time_delta}{downscale_str} s,"
+    print(f"Simulation time delta: {engine.time_delta}{downscale_str} s,"
           f"Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.")
     layout_manager = LayoutManager(
         sim_config.layout, engine=engine,
         debug=sim_config.debug, total_timesteps=total_timesteps,
         args_dict=sim_config.get_legacy_args_dict(), **sim_config.system_configs[0].get_legacy(),
     )
-    layout_manager.run(
-        jobs,
-        timestep_start=timestep_start, timestep_end=timestep_end, time_delta=time_delta,
-    )
+    layout_manager.run()
 
     engine_stats = get_engine_stats(engine)
     job_stats = get_job_stats(engine)
@@ -223,8 +220,7 @@ def run_parts_sim(sim_config: MultiPartSimConfig):
             UserWarning
         )
 
-    multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
-        MultiPartEngine.from_sim_config(sim_config)
+    multi_engine = MultiPartEngine(sim_config)
 
     out = sim_config.get_output()
     if out:
@@ -232,15 +228,13 @@ def run_parts_sim(sim_config: MultiPartSimConfig):
         for part, engine in multi_engine.engines.items():
             engine.telemetry.save_snapshot(
                 dest=str(out / part.split('/')[-1]),
-                result=workload_results[part],
+                result=engine.get_workload_data(),
                 args=sim_config,
             )
         (out / 'sim_config.yaml').write_text(sim_config.dump_yaml())
 
-    jobs = {p: w.jobs for p, w in workload_results.items()}
-
     ui_update_freq = sim_config.system_configs[0].scheduler.ui_update_freq
-    gen = multi_engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)
+    gen = multi_engine.run_simulation()
 
     for tick_datas in gen:
         sys_power = 0

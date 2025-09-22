@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import cached_property
 from datetime import timedelta
 from typing import Literal, Annotated as A
+from annotated_types import Len
 import importlib
 from raps.schedulers.default import PolicyType, BackfillType
 from raps.utils import (
@@ -435,7 +436,7 @@ class SingleSimConfig(SimConfig, abc.ABC):
 
 
 class MultiPartSimConfig(SimConfig):
-    partitions: list[SystemConfig | str]
+    partitions: A[list[SystemConfig | str], Len(min_length=1)]
     """
     List of multiple systems/partitions to run. Can be names of preconfigured systems, or paths
     to custom SystemConfig yaml files.
