@@ -60,11 +60,8 @@ def run_engine(sim_config, include_ticks=False) -> tuple[Engine, dict[str, Any]]
     print(f"Command to reproduce run:\n    {_get_cmd(sim_config, "run")}")
 
     sim_config = SingleSimConfig.model_validate(sim_config)
-    engine, workload_data, time_delta = Engine.from_sim_config(sim_config)
-    jobs = workload_data.jobs
-    timestep_start = workload_data.telemetry_start
-    timestep_end = workload_data.telemetry_end
-    gen = engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)
+    engine = Engine(sim_config)
+    gen = engine.run_simulation()
 
     stats = {
         "tick_count": 0,
@@ -91,10 +88,8 @@ def run_multi_part_engine(sim_config, include_ticks=False) -> tuple[MultiPartEng
     print(f"Command to reproduce run:\n    {_get_cmd(sim_config, "run-parts")}")
 
     sim_config = MultiPartSimConfig.model_validate(sim_config)
-    multi_engine, workload_results, timestep_start, timestep_end, time_delta = \
-        MultiPartEngine.from_sim_config(sim_config)
-    jobs = {p: w.jobs for p, w in workload_results.items()}
-    gen = multi_engine.run_simulation(jobs, timestep_start, timestep_end, time_delta)
+    multi_engine = MultiPartEngine(sim_config)
+    gen = multi_engine.run_simulation()
 
     stats = {
         "tick_count": 0,

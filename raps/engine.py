@@ -15,6 +15,7 @@ from raps.policy import PolicyType
 from raps.utils import (
     summarize_ranges,
     get_current_utilization,
+    WorkloadData,
 )
 from raps.resmgr import ResourceManager
 from raps.schedulers import load_scheduler
@@ -39,7 +40,6 @@ from raps.account import Accounts
 from raps.downtime import Downtime
 from raps.weather import Weather
 from raps.sim_config import SimConfig
-from raps.system_config import SystemConfig
 from bisect import bisect_right
 
 
@@ -125,20 +125,125 @@ def keyboard_listener(state):
 class Engine:
     """Job scheduling simulation engine."""
 
-    def __init__(self, *,
-                 power_manager: PowerManager,
-                 flops_manager: FLOPSManager,
-                 telemetry: Telemetry,
-                 cooling_model: ThermoFluidsModel | None = None,
-                 jobs=None,
-                 total_initial_jobs=0,
-                 # Workload class to generate from for continuous generation
-                 continuous_workload: Workload | None = None,
-                 accounts=None,
-                 sim_config: SimConfig,
-                 system_config: SystemConfig,
-                 ):
+    def __init__(self, sim_config: SimConfig, partition: str | None = None):
+        if partition:
+            system_config = sim_config.get_system_config_by_name(partition)
+        elif len(sim_config.system_configs) > 1:
+            raise ValueError(
+                "Engine can only run single-partition simulations. Use MultiPartEngine for " +
+                "multi-partition simulations, or pass partition to select the partition to run."
+            )
+        else:
+            system_config = sim_config.system_configs[0]
+
+        # Some temporary backwards/compatibility wrappers
+        system_config_dict = system_config.get_legacy()
+        sim_config_args = sim_config.get_legacy_args()
+        sim_config_dict = sim_config.get_legacy_args_dict()
+        sim_config_dict['config'] = system_config_dict
+
+        if sim_config.seed:
+            random.seed(sim_config.seed)
+            np.random.seed(sim_config.seed + 1)
+
+        if sim_config.live and not sim_config.replay:
+            telemetry = Telemetry(**sim_config_dict)
+            wd = telemetry.load_from_live_system()
+        elif sim_config.replay:
+            # TODO: this will have issues if running separate systems or custom systems
+            partition_short = partition.split("/")[-1] if partition else None
+            telemetry = Telemetry(
+                **sim_config_dict,
+                partition=partition,
+            )
+            if partition:
+                snap_map = {p.stem: p for p in sim_config.replay[0].glob("*.npz")}
+                if len(snap_map) > 0:
+                    if partition_short not in snap_map:
+                        raise RuntimeError(f"Snapshot '{partition_short}.npz' not in {sim_config.replay[0]}")
+                    replay_files = [snap_map[partition_short]]
+                else:
+                    replay_files = sim_config.replay
+            else:
+                replay_files = sim_config.replay
+
+            wd = telemetry.load_from_files(replay_files)
+        else:  # Synthetic jobs
+            wl = Workload(sim_config_args, system_config_dict)
+            wd = wl.generate_jobs()
+            telemetry = Telemetry(**sim_config_dict)
+
+        jobs = wd.jobs
+        if len(jobs) == 0:
+            print(f"Warning no jobs found for {partition or 'system'}")
+        if partition and len(sim_config.system_configs) > 1:
+            for job in jobs:
+                job.partition = partition
+
+        if sim_config.start:
+            start = sim_config.start
+            diff = start - wd.start_date
+            if diff.total_seconds() < 0:
+                raise Exception(
+                    f"{start.isoformat()} is before data range in workload. " +
+                    f"Workload data begins at {wd.start_date.isoformat()}"
+                )
+            wd.telemetry_start += int(diff.total_seconds())
+            wd.start_date = start
+        else:
+            start = wd.start_date
+        start = start + sim_config.fastforward
+        wd.telemetry_end = wd.telemetry_start + sim_config.time_int
+
+        time_delta = sim_config.time_delta_int
+
+        if sim_config.continuous_job_generation:
+            continuous_workload = wl
+        else:
+            continuous_workload = None
+
+        if sim_config.cooling:
+            cooling_model = ThermoFluidsModel(**system_config_dict)
+            cooling_model.initialize()
+            if sim_config.weather:
+                cooling_model.weather = Weather(start, config=system_config_dict)
+        else:
+            cooling_model = None
+
+        if sim_config.power_scope == 'node':
+            if sim_config.uncertainties:
+                power_manager = PowerManager(compute_node_power_validate_uncertainties, **system_config_dict)
+            else:
+                power_manager = PowerManager(compute_node_power_validate, **system_config_dict)
+        else:
+            if sim_config.uncertainties:
+                power_manager = PowerManager(compute_node_power_uncertainties, **system_config_dict)
+            else:
+                power_manager = PowerManager(compute_node_power, **system_config_dict)
+
+        flops_manager = FLOPSManager(
+            config=system_config_dict,
+            validate=(sim_config.power_scope == "node"),
+        )
+
+        accounts = None
+        if sim_config.accounts:
+            job_accounts = Accounts(jobs)
+            if sim_config.accounts_json:
+                loaded_accounts = Accounts.from_json_filename(sim_config.accounts_json)
+                accounts = Accounts.merge(loaded_accounts, job_accounts)
+            else:
+                accounts = job_accounts
+
+        self.sim_config = sim_config
+        self.system_config = system_config
         self.config = system_config.get_legacy()
+
+        self.start = start
+        self.timestep_start = wd.telemetry_start
+        self.timestep_end = wd.telemetry_end
+        self.time_delta = time_delta
+
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
             total_nodes=self.config['TOTAL_NODES'],
@@ -153,7 +258,8 @@ class Engine:
         self.job_history_dict = []
         self.jobs_completed = 0
         self.jobs_killed = 0
-        self.total_initial_jobs = total_initial_jobs
+        self.jobs = jobs
+        self.total_initial_jobs = len(jobs)
         self.current_timestep = 0
         self.cooling_model = cooling_model
         self.sys_power = 0
@@ -211,127 +317,12 @@ class Engine:
         else:
             self.network_model = None
 
-    @staticmethod
-    def from_sim_config(sim_config: SimConfig, partition: str | None = None):
-        if partition:
-            system_config = sim_config.get_system_config_by_name(partition)
-        elif len(sim_config.system_configs) > 1:
-            raise ValueError(
-                "Engine can only run single-partition simulations. Use MultiPartEngine for " +
-                "multi-partition simulations, or pass partition to select the partition to run."
-            )
-        else:
-            system_config = sim_config.system_configs[0]
-
-        # Some temporary backwards/compatibility wrappers
-        system_config_dict = system_config.get_legacy()
-        sim_config_args = sim_config.get_legacy_args()
-        sim_config_dict = sim_config.get_legacy_args_dict()
-        sim_config_dict['config'] = system_config_dict
-
-        if sim_config.seed:
-            random.seed(sim_config.seed)
-            np.random.seed(sim_config.seed + 1)
-
-        if sim_config.live and not sim_config.replay:
-            td = Telemetry(**sim_config_dict)
-            wd = td.load_from_live_system()
-        elif sim_config.replay:
-            # TODO: this will have issues if running separate systems or custom systems
-            partition_short = partition.split("/")[-1] if partition else None
-            td = Telemetry(
-                **sim_config_dict,
-                partition=partition,
-            )
-            if partition:
-                snap_map = {p.stem: p for p in sim_config.replay[0].glob("*.npz")}
-                if len(snap_map) > 0:
-                    if partition_short not in snap_map:
-                        raise RuntimeError(f"Snapshot '{partition_short}.npz' not in {sim_config.replay[0]}")
-                    replay_files = [snap_map[partition_short]]
-                else:
-                    replay_files = sim_config.replay
-            else:
-                replay_files = sim_config.replay
-
-            wd = td.load_from_files(replay_files)
-        else:  # Synthetic jobs
-            wl = Workload(sim_config_args, system_config_dict)
-            wd = wl.generate_jobs()
-            td = Telemetry(**sim_config_dict)
-
-        jobs = wd.jobs
-        if len(jobs) == 0:
-            print(f"Warning no jobs found for {partition or 'system'}")
-
-        if sim_config.start:
-            start = sim_config.start
-            diff = start - wd.start_date
-            if diff.total_seconds() < 0:
-                raise Exception(
-                    f"{start.isoformat()} is before data range in workload. " +
-                    f"Workload data begins at {wd.start_date.isoformat()}"
-                )
-            wd.telemetry_start += int(diff.total_seconds())
-            wd.start_date = start
-        else:
-            start = wd.start_date
-        start = start + sim_config.fastforward
-        wd.telemetry_end = wd.telemetry_start + sim_config.time_int
-
-        time_delta = sim_config.time_delta_int
-
-        if sim_config.continuous_job_generation:
-            continuous_workload = wl
-        else:
-            continuous_workload = None
-
-        if sim_config.cooling:
-            cooling_model = ThermoFluidsModel(**system_config_dict)
-            cooling_model.initialize()
-            if sim_config.weather:
-                cooling_model.weather = Weather(start, config=system_config_dict)
-        else:
-            cooling_model = None
-
-        if sim_config.power_scope == 'node':
-            if sim_config.uncertainties:
-                power_manager = PowerManager(compute_node_power_validate_uncertainties, **system_config_dict)
-            else:
-                power_manager = PowerManager(compute_node_power_validate, **system_config_dict)
-        else:
-            if sim_config.uncertainties:
-                power_manager = PowerManager(compute_node_power_uncertainties, **system_config_dict)
-            else:
-                power_manager = PowerManager(compute_node_power, **system_config_dict)
-
-        flops_manager = FLOPSManager(
-            config=system_config_dict,
-            validate=(sim_config.power_scope == "node"),
+    def get_workload_data(self) -> WorkloadData:
+        return WorkloadData(
+            jobs=self.jobs[:],
+            telemetry_start=self.timestep_start, telemetry_end=self.timestep_end,
+            start_date=self.start,
         )
-
-        accounts = None
-        if sim_config.accounts:
-            job_accounts = Accounts(jobs)
-            if sim_config.accounts_json:
-                loaded_accounts = Accounts.from_json_filename(sim_config.accounts_json)
-                accounts = Accounts.merge(loaded_accounts, job_accounts)
-            else:
-                accounts = job_accounts
-
-        engine = Engine(
-            power_manager=power_manager,
-            flops_manager=flops_manager,
-            cooling_model=cooling_model,
-            continuous_workload=continuous_workload,
-            jobs=jobs,
-            accounts=accounts,
-            telemetry=td,
-            sim_config=sim_config,
-            system_config=system_config,
-        )
-
-        return engine, wd, time_delta
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -713,7 +704,7 @@ class Engine:
         self.scheduler.policy = target_policy
         self.scheduler.bfpolicy = target_bfpolicy
 
-    def run_simulation(self, jobs, timestep_start, timestep_end, time_delta=1, autoshutdown=False):
+    def run_simulation(self, autoshutdown=False):
         """Generator that yields after each simulation tick."""
 
         if self.scheduler.policy == PolicyType.REPLAY:
@@ -722,24 +713,26 @@ class Engine:
             replay = False
 
         if self.debug:
-            print(f"[DEBUG] run_simulation: Initial jobs count: {len(jobs)}")
-            if jobs:
+            print(f"[DEBUG] run_simulation: Initial jobs count: {len(self.jobs)}")
+            if self.jobs:
                 print("[DEBUG] run_simulation: First job submit_time: "
-                      f"{jobs[0].submit_time}, start_time: {jobs[0].start_time}")
+                      f"{self.jobs[0].submit_time}, start_time: {self.jobs[0].start_time}")
 
         # Set times and place jobs that are currently running, onto the system.
-        self.prepare_system_state(all_jobs=jobs, timestep_start=timestep_start, timestep_end=timestep_end)
+        self.prepare_system_state(all_jobs=self.jobs,
+                                  timestep_start=self.timestep_start, timestep_end=self.timestep_end,
+                                  )
 
         # Process jobs in batches for better performance of timestep loop
-        all_jobs = jobs.copy()
+        all_jobs = self.jobs.copy()
         submit_times = [j.submit_time for j in all_jobs]
         cursor = 0
 
         jobs = []
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
-        batch_window = max(60 * 60 * 6, 2 * time_delta)  # at least 6h
+        batch_window = max(60 * 60 * 6, 2 * self.time_delta)  # at least 6h
 
-        sim_state = SimulationState(time_delta)
+        sim_state = SimulationState(self.time_delta)
         # listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
         # listener_thread.start()
 
@@ -751,7 +744,7 @@ class Engine:
 
             current_time_delta = sim_state.get_time_delta()
 
-            if (self.current_timestep % batch_window == 0) or (self.current_timestep == timestep_start):
+            if (self.current_timestep % batch_window == 0) or (self.current_timestep == self.timestep_start):
                 # Add jobs that are within the batching window and remove them from all jobs
                 # jobs += [job for job in all_jobs if job.submit_time <= self.current_timestep + batch_window]
                 # all_jobs[:] = [job for job in all_jobs if job.submit_time > self.current_timestep + batch_window]

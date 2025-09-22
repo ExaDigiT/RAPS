@@ -155,8 +155,8 @@ class ThermoFluidsModel:
         # If replay mode is on and weather data is available
         if self.weather and self.weather.has_coords:
             # Convert total seconds to timedelta object
-            delta = timedelta(seconds=engine.current_timestep)
-            target_datetime = self.weather.start + delta
+            delta = timedelta(seconds=engine.current_timestep - engine.timestep_start)
+            target_datetime = engine.start + delta
 
             # Get temperature from weather data
             temperature = self.weather.get_temperature(target_datetime) or self.config['WET_BULB_TEMP']
