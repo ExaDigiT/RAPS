@@ -10,7 +10,7 @@ from raps.sim_config import args
 from raps.system_config import get_system_config
 
 # Run with this command:
-# python main.py --system kestrel -f ../data/fastsim_jobs_output.parquet --scheduler fastsim --policy priority --start 2024-09-01T00:00 --end 2024-09-15T00:00
+# raps run --system kestrel -f ../data/fastsim_jobs_output.parquet --scheduler fastsim --policy priority --start 2024-09-01T00:00 --end 2024-09-15T00:00
 
 class Scheduler():
     """

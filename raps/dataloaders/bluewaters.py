@@ -3,7 +3,7 @@ Blue Waters dataloader
 
 Example test case:
 
-    python main.py -f /opt/data/bluewaters --start 20170328 --system bluewaters -net
+    raps run -f /opt/data/bluewaters --start 20170328 --system bluewaters -net
 
 To download the necessary datasets:
 

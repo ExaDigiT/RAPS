@@ -10,9 +10,9 @@
     The '--arrival poisson' will compute submit times from Poisson distribution, instead of using
     the submit times given in F-Data.
 
-    python main.py --system fugaku -f /path/to/21_04.parquet
-    python main.py --system fugaku -f /path/to/21_04.parquet --validate
-    python main.py --system fugaku -f /path/to/21_04.parquet --policy priority --backfill easy
+    raps run --system fugaku -f /path/to/21_04.parquet
+    raps run --system fugaku -f /path/to/21_04.parquet --validate
+    raps run --system fugaku -f /path/to/21_04.parquet --policy priority --backfill easy
 """
 import pandas as pd
 from tqdm import tqdm

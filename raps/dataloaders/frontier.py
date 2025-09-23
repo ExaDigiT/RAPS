@@ -4,7 +4,7 @@
     # To simulate
     DATEDIR="date=2024-01-18"
     DPATH=/path/to/data
-    python main.py -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
+    raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
     # To analyze the data
     python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR

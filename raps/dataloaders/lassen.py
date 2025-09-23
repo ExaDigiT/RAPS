@@ -14,19 +14,19 @@ Usage Instructions:
     git lfs pull
 
     # to analyze dataset and plot histograms
-    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --plot
+    raps telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --plot
 
     # to simulate the dataset as submitted
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
+    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
 
     # to modify the submit times of the telemetry according to Poisson distribution
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
+    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
+    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
 
     # For the network replay this command gives suiteable snapshots:
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
+    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
 
 """
 import math
