@@ -171,7 +171,7 @@ def load_data(files, **kwargs):
 
     # --- Second pass: build jobs ---
     jobs_list = []
-    for raw in tqdm(job_log[:1000], desc="Building Job objects"):
+    for raw in tqdm(job_log, desc="Building Job objects"):
         jobid = raw.get("jobid")
         user = raw.get("user")
         status = raw.get("status")
