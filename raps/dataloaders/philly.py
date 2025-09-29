@@ -210,6 +210,9 @@ def load_data(files, **kwargs):
                 mid = detail["ip"]
                 machine_ids.append(mid)
                 gpus += len(detail.get("gpus", []))
+        
+        num_nodes = len(machine_ids)
+        gpus_per_node = gpus // num_nodes
 
         # CPU utilization traces
         #if machine_ids and start and end:
@@ -227,8 +230,6 @@ def load_data(files, **kwargs):
         # --- absolute datetimes (used for filtering traces) ---
         submitted_dt = parse_timestamp(raw.get("submitted_time"))
 
-        print("***", machine_ids, start, end)
-
         gpu_trace = load_gpu_traces_by_day(gpu_trace_dir, start, end)
 
         mask = (
@@ -236,14 +237,8 @@ def load_data(files, **kwargs):
             (gpu_trace["time"] >= start) &
             (gpu_trace["time"] <= end)
         )
-        #job_gpu = gpu_trace.loc[mask].copy()
-        #job_gpu_series = job_gpu["gpu_util"].tolist()
-        #job_gpu_series = (job_gpu["gpu_util"].to_numpy() * 0.01).tolist()
-        job_gpu_trace = (gpu_trace.loc[mask, "gpu_util"].to_numpy() * 0.01).tolist()
-
-        #print(f"  job_gpu shape after filtering: {job_gpu_trace.shape}")
-        #if job_gpu_trace.empty:
-        #    print("  ⚠ No GPU rows matched this job")
+        # Convert traces from percent to fraction of gpus_per_node, e.g., 8 gpus at 100% is 8, at 50% is 4, etc.
+        job_gpu_trace = (gpu_trace.loc[mask, "gpu_util"].to_numpy() * 0.01 * gpus_per_node).tolist()
 
         if machine_ids:
             # Shift times relative to start_ts
@@ -271,9 +266,7 @@ def load_data(files, **kwargs):
                     priority=0,
 
                     cpu_cores_required=0,
-                    gpu_units_required=gpus,
-                    allocated_cpu_cores=0,
-                    allocated_gpu_units=gpus,
+                    gpu_units_required=gpus_per_node,
 
                     end_state=status,
                     scheduled_nodes=scheduled_nodes,
