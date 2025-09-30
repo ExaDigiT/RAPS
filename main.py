@@ -16,9 +16,9 @@ import argcomplete
 # Importing all of raps' dependencies like pandas etc can be rather slow, often taking 1-2 seconds. So for snappy shell
 # completion we need avoid imports on the shell completion path. We could do this by shuffling the code around to
 # create the parser without importing any heavy-weight libraries. But that would be a pain to maintain and track that
-# pandas or scipy aren't accidentally imported transitively. Pandas can also be convenient to use in validating SimConfig
-# etc, which is needed to build the argparser. So instead, we cache the generated argparser object so that shell
-# completion can run without importing the rest of raps.
+# pandas or scipy aren't accidentally imported transitively. Pandas can also be convenient to use in validating
+# SimConfig etc, which is needed to build the argparser. So instead, we cache the generated argparser object so that
+# shell completion can run without importing the rest of raps.
 PARSER_CACHE = Path(__file__).parent / '.shell-completion-cache'
 
 

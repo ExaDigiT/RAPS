@@ -7,9 +7,11 @@ from functools import cached_property
 import yaml
 from pydantic import (
     model_validator, field_validator, model_serializer, SerializationInfo,
-    SerializerFunctionWrapHandler,
+    SerializerFunctionWrapHandler, ValidationInfo,
 )
-from raps.utils import RAPSBaseModel, deep_merge, deep_subtract_dicts
+from raps.utils import (
+    RAPSBaseModel, deep_merge, deep_subtract_dicts, is_yaml_file, ResolvedPath, validate_resolved_path,
+)
 from raps.raps_config import raps_config
 
 # Define Pydantic models for the config to handle parsing and validation
@@ -130,7 +132,7 @@ class SystemCoolingConfig(RAPSBaseModel):
     wet_bulb_temp: float
     zip_code: str | None = None
     country_code: str | None = None
-    fmu_path: str
+    fmu_path: ResolvedPath
     fmu_column_mapping: dict[str, str]
     w_htwps_key: str
     w_ctwps_key: str
@@ -179,10 +181,12 @@ class SystemConfig(RAPSBaseModel):
     network: SystemNetworkConfig | None = None
 
     @model_validator(mode="before")
-    def _load_base(cls, data):
+    def _load_base(cls, data, info: ValidationInfo):
         if isinstance(data, dict) and data.get("base"):
-            base = get_system_config(data['base'])
-            data = deep_merge(base.model_dump(mode='json'), data)
+            data['base'] = resolve_system_reference(data['base'], info)
+            base_model = get_system_config(data['base'])
+            base_data = base_model.model_dump(mode='json', exclude_unset=True)
+            data = deep_merge(base_data, data)
         return data
 
     @model_serializer(mode='wrap')
@@ -263,13 +267,12 @@ def get_system_config(system: str | SystemConfig) -> SystemConfig:
     """
     if isinstance(system, SystemConfig):  # Just pass system through if its already parsed
         return system
-
-    if system in list_systems():
+    elif is_yaml_file(system):
+        config_path = Path(system)
+        system_name = config_path.stem
+    else:
         config_path = raps_config.system_config_dir / f"{system}.yaml"
         system_name = system
-    else:
-        config_path = Path(system).resolve()
-        system_name = config_path.stem
 
     if not config_path.is_file():
         raise FileNotFoundError(f'"{system}" not found. Valid systems are: {list_systems()}')
@@ -277,10 +280,8 @@ def get_system_config(system: str | SystemConfig) -> SystemConfig:
         "system_name": system_name,  # You can override system_name in the yaml as well
         **yaml.safe_load(config_path.read_text()),
     }
-    base = str(config.get('base', ''))
-    if base.endswith(".yaml"):
-        config['base'] = str(config_path.parent / base)  # path relative to yaml
-    return SystemConfig.model_validate(config)
+    # Pass context so paths in the SystemConfig can be resolved relative to the yaml file
+    return SystemConfig.model_validate(config, context={'base_path': config_path.parent})
 
 
 def get_partition_configs(partitions: list[str | SystemConfig]) -> MultiPartitionSystemConfig:
@@ -304,7 +305,7 @@ def get_partition_configs(partitions: list[str | SystemConfig]) -> MultiPartitio
             matched_systems = fnmatch.filter(systems, pat)
             combined_system_name.extend(s.split("/")[0] for s in matched_systems)
         elif Path(pat).is_dir():
-            matched_systems = sorted(Path(pat).glob("*.yaml"))
+            matched_systems = sorted([str(s) for s in Path(pat).glob("*.yaml")])
             combined_system_name.append(Path(pat).name)
         else:
             matched_systems = sorted(glob.glob(pat))
@@ -322,3 +323,11 @@ def get_partition_configs(partitions: list[str | SystemConfig]) -> MultiPartitio
         system_name=combined_system_name,
         partitions=parsed_configs,
     )
+
+
+def resolve_system_reference(system: str | SystemConfig, info: ValidationInfo):
+    """ If system is a yaml path, resolve it as a path. Otherwise leave it as a string """
+    if isinstance(system, str) and is_yaml_file(system):
+        return str(validate_resolved_path(system, info))
+    else:
+        return system

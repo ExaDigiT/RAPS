@@ -28,7 +28,7 @@ from raps.plotting import (
     plot_network_histogram
 )
 from raps.utils import (
-    next_arrival_byconfargs, pydantic_add_args, SubParsers, ExpandedPath, WorkloadData, RAPSBaseModel,
+    next_arrival_byconfargs, pydantic_add_args, SubParsers, ResolvedPath, WorkloadData, RAPSBaseModel,
 )
 
 
@@ -36,7 +36,7 @@ from raps.utils import (
 class TelemetryArgs(RAPSBaseModel):
     jid: str = '*'
     """ Replay job id """
-    replay: list[ExpandedPath] | None = None
+    replay: list[ResolvedPath] | None = None
     """ path/to/joblive path/to/jobprofile  -or- filename.npz (overrides --workload option) """
     plot: list[Literal["jobs", "nodes"]] | None = None
     is_results_file: bool = False

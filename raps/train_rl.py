@@ -1,5 +1,5 @@
 from raps.sim_config import SingleSimConfig, SIM_SHORTCUTS
-from raps.utils import SubParsers, pydantic_add_args, read_yaml
+from raps.utils import SubParsers, pydantic_add_args, read_yaml_parsed
 
 
 def train_rl_add_parser(subparsers: SubParsers):
@@ -16,7 +16,7 @@ def train_rl_add_parser(subparsers: SubParsers):
     })
 
     def impl(args):
-        model = model_validate(args, read_yaml(args.config_file))
+        model = model_validate(args, read_yaml_parsed(SingleSimConfig, args.config_file))
         model.scheduler = "rl"
         train_rl(model)
     parser.set_defaults(impl=impl)

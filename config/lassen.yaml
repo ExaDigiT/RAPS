@@ -56,7 +56,7 @@ cooling:
   wet_bulb_temp: 290.0
   zip_code: '94550'
   country_code: US
-  fmu_path: "models/POWER9CSM/fmus/lassen.fmu"
+  fmu_path: "../models/POWER9CSM/fmus/lassen.fmu"
   fmu_column_mapping:
     T_sec_r_C: "Rack Return Temperature (°C)"
     T_sec_s_C: "Rack Supply Temperature (°C)"
