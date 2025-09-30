@@ -20,12 +20,14 @@ import uuid
 import json
 import argparse
 from pathlib import Path
-from typing import Annotated as A, TypeVar, Callable, TypeAlias
+from typing import Annotated as A, TypeVar, TypeAlias, Protocol
 from pydantic import (
-    BaseModel, TypeAdapter, AfterValidator, BeforeValidator, ConfigDict, AwareDatetime, ValidationError
+    BaseModel, TypeAdapter, AfterValidator, BeforeValidator, ConfigDict, AwareDatetime, ValidationError,
+    ValidationInfo,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource
+from pydantic_settings import BaseSettings, SettingsConfigDict, CliApp, CliSettingsSource, SettingsError
 import yaml
+from yaml import YAMLError
 from raps.job import Job
 
 
@@ -683,8 +685,27 @@ def normalize_tz(d: datetime):
         return d.astimezone(timezone.utc)
 
 
-ExpandedPath = A[Path, AfterValidator(lambda v: Path(v).expanduser().resolve())]
-""" Type that that expands ~ and environment variables in a path string """
+def validate_resolved_path(path: str | Path, info: ValidationInfo):
+    context = info.context or {}
+    path = Path(path).expanduser()
+    if context.get('base_path'):
+        base_path = Path(context["base_path"]).expanduser().resolve()
+    else:
+        base_path = Path.cwd()
+    path = (base_path / path).resolve()
+    # This is used on the simulation server to block reading arbitrary files
+    if context.get("force_under_base_path"):
+        if not path.is_relative_to(base_path):
+            raise ValueError(f"{path} is not under {base_path}")
+    return path
+
+ResolvedPath = A[Path, AfterValidator(validate_resolved_path)]
+"""
+Resolve a path, and expand ~ in the path string.
+Paths can be resolved relative to specific path instead of cwd by passing
+`context={"base_path": "my/path"}` in model_validate().
+"""
+
 
 AutoAwareDatetime = A[datetime, AfterValidator(normalize_tz)]
 """ Datetime type wrapper, makes sure timezone is set """
@@ -700,13 +721,18 @@ class RAPSBaseModel(BaseModel):
     )
 
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T", bound=BaseModel, covariant=True)
+
+
+class ModelArgsValidator(Protocol[T]):
+    def __call__(self, args: argparse.Namespace, init_data: dict | None = None) -> T:
+        ...
 
 
 def pydantic_add_args(
     parser: argparse.ArgumentParser, model_cls: type[T],
     model_config: SettingsConfigDict | None = None,
-) -> Callable[[argparse.Namespace, dict | None], T]:
+) -> ModelArgsValidator[T]:
     """
     Add arguments to the parser from the model. Returns a function that can be used to parse the
     model from the argparse args.
@@ -735,20 +761,20 @@ def pydantic_add_args(
 
     cli_settings_source = CliSettingsSource(SettingsModel, root_parser=parser)
 
-    def model_validate_args(args: argparse.Namespace, data: dict | None = None):
+    def model_args_validator(args: argparse.Namespace, init_data: dict | None = None):
         try:
             model = CliApp.run(SettingsModel,
                                cli_args=args,
                                cli_settings_source=cli_settings_source,
-                               **(data or {}),
+                               **(init_data or {}),
                                )
             # Recreate model so we don't return the SettingsModel subclass
             # use exclude_unset so that model_field_set is preserved as well
             return model_cls.model_validate(model.model_dump(exclude_unset=True))
-        except ValidationError as err:
+        except (ValidationError, SettingsError) as err:
             print(err)
             sys.exit(1)
-    return model_validate_args
+    return model_args_validator
 
 
 SubParsers: TypeAlias = "argparse._SubParsersAction[argparse.ArgumentParser]"
@@ -784,7 +810,7 @@ def yaml_dump(data, header_comment=''):
     )
 
 
-def read_yaml(config_file: str):
+def read_yaml(config_file: str | None) -> dict:
     """ Parses yaml file. Pass "-" to read from stdin """
     # Assume stdin if not terminal
     if config_file == "-" or (not config_file and not sys.stdin.isatty()):
@@ -794,9 +820,36 @@ def read_yaml(config_file: str):
     else:
         data = ""
     if data.strip():
-        return yaml.safe_load(data)
+        result = yaml.safe_load(data)
     else:
-        return {}
+        result = {}
+    if not isinstance(result, dict):
+        raise ValueError("Expected yaml document to contain a top-level mapping")
+    return result
+
+
+def read_yaml_parsed(cls: type[T], config_file = None) -> dict:
+    """
+    Like read_yaml, but parses the input to resolve paths etc.
+    Exits on error after printing message (for use in the CLI)
+    """
+    try:
+        yaml_data = read_yaml(config_file)
+        if yaml_data:
+            # Resolve paths in yaml relative to the yaml file
+            base_path = Path(config_file).parent if config_file and config_file != "-" else None
+            model = cls.model_validate(yaml_data, context={"base_path": base_path})
+            yaml_data = model.model_dump(mode='json', exclude_unset=True)
+    except (ValidationError, ValueError, YAMLError) as err:
+        print(f'Failed to parse yaml "{config_file}"')
+        print(err)
+        sys.exit(1)
+    return yaml_data
+
+
+def is_yaml_file(path: str | Path):
+    """ Return true if the path is .yaml, .yml, or .json """
+    return Path(path).suffix in ['.yaml', '.yml', '.json']
 
 
 class WorkloadData(RAPSBaseModel):

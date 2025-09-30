@@ -1,6 +1,7 @@
 import argparse
 import abc
 from pathlib import Path
+import pandas as pd
 from functools import cached_property
 from datetime import timedelta
 from typing import Literal, Annotated as A
@@ -8,10 +9,12 @@ from annotated_types import Len
 import importlib
 from raps.schedulers.default import PolicyType, BackfillType
 from raps.utils import (
-    parse_time_unit, convert_to_time_unit, infer_time_unit, ExpandedPath, create_casename,
+    parse_time_unit, convert_to_time_unit, infer_time_unit, ResolvedPath, create_casename,
     RAPSBaseModel, AutoAwareDatetime, SmartTimedelta, yaml_dump,
 )
-from raps.system_config import SystemConfig, get_partition_configs, get_system_config
+from raps.system_config import (
+    SystemConfig, get_partition_configs, get_system_config, list_systems, resolve_system_reference,
+)
 from pydantic import model_validator, Field
 
 Distribution = Literal['uniform', 'weibull', 'normal']
@@ -79,7 +82,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     seed: int | None = None
     """ Set RNG seed for deterministic simulation """
 
-    output: ExpandedPath | Literal['none'] | None = None
+    output: ResolvedPath | Literal['none'] | None = None
     """
     Where to output power, cooling, and loss models for later analysis.
     If omitted it will output to raps-output-<id> by default.
@@ -112,7 +115,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     imtype: Literal["png", "svg", "jpg", "pdf", "eps"] = "png"
     """ Plot image type """
 
-    replay: list[ExpandedPath] | None = None
+    replay: list[ResolvedPath] | None = None
     """ Either: path/to/joblive path/to/jobprofile OR filename.npz """
 
     encrypt: bool = False
@@ -214,7 +217,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
 
     # Accounts
     accounts: bool = False
-    accounts_json: ExpandedPath | None = None
+    accounts_json: ResolvedPath | None = None
     """ Path to accounts JSON file from previous run """
 
     # Downtime
@@ -282,6 +285,11 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         # Allow setting either start/end or start/time for backwards compatibility and convenience
         if self.start and self.fastforward:
             raise ValueError("start and fastforward are mutually exclusive")
+
+        if self.start:
+            self.start = pd.Timestamp(self.start).floor(self.time_unit).to_pydatetime()
+        if self.end:
+            self.end = pd.Timestamp(self.end).floor(self.time_unit).to_pydatetime()
 
         if self.end:
             if not self.start:
@@ -419,20 +427,32 @@ class SimConfig(RAPSBaseModel, abc.ABC):
 
 
 class SingleSimConfig(SimConfig, abc.ABC):
-    system: SystemConfig | str = "frontier"
-    """
-    Name of the system to simulate, e.g "frontier". Can also be a path to a yaml file containing
-    the SystemConfig. You can also make modificiations to the SystemConfig on the CLI using
-    `--system.base`, e.g.  `--system.base frontier --system.cooling.fmu-path path/to/my.fmu`
-    """
+    # Dynamic help string
+    system: A[SystemConfig | str, Field(description=f"""
+        Name of the system to simulate or a path to a yaml file containing the SystemConfig.
+
+        You can also make modifications to the SystemConfig on the CLI using `--system.base`, e.g
+        `--system.base frontier --system.cooling.fmu-path path/to/my.fmu`.
+
+        Built-in systems: {', '.join(list_systems())}
+    """)] = "frontier"
+
+    @model_validator(mode="after")
+    def _validate_system(self, info):
+        self.system = resolve_system_reference(self.system, info)
+        try:
+            self._system_configs = [get_system_config(self.system)]
+        except FileNotFoundError as e:
+            raise ValueError(str(e))
+        return self
 
     @property
     def system_name(self) -> str:
         return self.system_configs[0].system_name
 
-    @cached_property
+    @property
     def system_configs(self) -> list[SystemConfig]:
-        return [get_system_config(self.system)]
+        return self._system_configs
 
 
 class MultiPartSimConfig(SimConfig):
@@ -442,6 +462,15 @@ class MultiPartSimConfig(SimConfig):
     to custom SystemConfig yaml files.
     """
 
+    @model_validator(mode="after")
+    def _validate_partitions(self, info):
+        self.partitions = [resolve_system_reference(p, info) for p in self.partitions]
+        try:
+            self._multi_partition_system_config = get_partition_configs(self.partitions)
+        except FileNotFoundError as e:
+            raise ValueError(str(e))
+        return self
+
     @property
     def system_name(self) -> str:
         return self._multi_partition_system_config.system_name
@@ -449,10 +478,6 @@ class MultiPartSimConfig(SimConfig):
     @property
     def system_configs(self) -> list[SystemConfig]:
         return self._multi_partition_system_config.partitions
-
-    @cached_property
-    def _multi_partition_system_config(self):
-        return get_partition_configs(self.partitions)
 
 
 SIM_SHORTCUTS = {

@@ -5,5 +5,5 @@ venv
 *.npz
 *.prof
 simulation_results/
-models/*.fmu
+models/fmu-models
 .shell-completion-cache

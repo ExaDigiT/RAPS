@@ -1,5 +1,3 @@
-import os
-import subprocess
 import pytest
 from ..util import run_engine
 

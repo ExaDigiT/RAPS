@@ -63,7 +63,7 @@ cooling:
   wet_bulb_temp: 290.0
   zip_code: '37831'
   country_code: US
-  fmu_path: "models/Simulator_olcf5_base.fmu"
+  fmu_path: "../models/fmu-models/Frontier/Simulator_olcf5_base.fmu"
   fmu_column_mapping:
     T_sec_r_C: "Rack Return Temperature (°C)"
     T_sec_s_C: "Rack Supply Temperature (°C)"

@@ -11,7 +11,7 @@ from raps.ui import LayoutManager
 from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
-from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, read_yaml
+from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, read_yaml_parsed
 from raps.stats import (
     get_engine_stats,
     get_job_stats,
@@ -38,7 +38,7 @@ def run_sim_add_parser(subparsers: SubParsers):
         "cli_shortcuts": SIM_SHORTCUTS,
     })
     parser.set_defaults(
-        impl=lambda args: run_sim(model_validate(args, read_yaml(args.config_file)))
+        impl=lambda args: run_sim(model_validate(args, read_yaml_parsed(SingleSimConfig, args.config_file)))
     )
 
 
@@ -209,7 +209,7 @@ def run_parts_sim_add_parser(subparsers: SubParsers):
         "cli_shortcuts": SIM_SHORTCUTS,
     })
     parser.set_defaults(
-        impl=lambda args: run_parts_sim(model_validate(args, read_yaml(args.config_file)))
+        impl=lambda args: run_parts_sim(model_validate(args, read_yaml_parsed(MultiPartSimConfig, args.config_file)))
     )
 
 
@@ -293,7 +293,7 @@ def show_add_parser(subparsers: SubParsers):
     })
 
     def impl(args):
-        sim_config = model_validate(args, read_yaml(args.config_file))
+        sim_config = model_validate(args, read_yaml_parsed(SingleSimConfig, args.config_file))
         show(sim_config, show_defaults=args.show_defaults)
 
     parser.set_defaults(impl=impl)

@@ -13,8 +13,11 @@ from .utils import sum_values, min_value, max_value, convert_seconds_to_hhmmss
 from .engine import Engine
 
 
-def get_engine_stats(engine: Engine):
-    """ Return engine statistics """
+def get_engine_stats(engine: Engine, *, fast = False):
+    """
+    Return engine statistics
+    Setting `fast = False` excludes some stats that are more expensive to calculate.
+    """
     timesteps = engine.current_timestep - engine.timestep_start
     num_samples = len(engine.power_manager.history) if engine.power_manager else 0
     time_simulated = convert_seconds_to_hhmmss(timesteps / engine.downscale)
@@ -51,7 +54,7 @@ def get_engine_stats(engine: Engine):
         else:
             stats['jobs_completed_percentage'] = 0
 
-    if engine.node_occupancy_history:
+    if not fast and engine.node_occupancy_history:
         # Calculate average concurrent jobs per node (average density across all nodes and timesteps)
         total_jobs_running_timesteps = 0
         max_concurrent_jobs_per_node = 0
@@ -72,12 +75,12 @@ def get_engine_stats(engine: Engine):
                 sum_jobs_per_active_node += sum(active_nodes_in_timestep) / len(active_nodes_in_timestep)
                 count_active_timesteps_for_avg_active += 1
 
-        # Average jobs per *active* node (user's desired "1" type)
-        avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
-            if count_active_timesteps_for_avg_active > 0 else 0
+            # Average jobs per *active* node (user's desired "1" type)
+            avg_jobs_per_active_node = (sum_jobs_per_active_node / count_active_timesteps_for_avg_active) \
+                if count_active_timesteps_for_avg_active > 0 else 0
 
-        stats['avg_concurrent_jobs_per_active_node'] = avg_jobs_per_active_node
-        stats['max_concurrent_jobs_per_node'] = max_concurrent_jobs_per_node
+            stats['avg_concurrent_jobs_per_active_node'] = avg_jobs_per_active_node
+            stats['max_concurrent_jobs_per_node'] = max_concurrent_jobs_per_node
     else:
         stats['avg_concurrent_jobs_per_node'] = None
         stats['max_concurrent_jobs_per_node'] = None
@@ -358,6 +361,15 @@ def get_job_stats(engine: Engine):
     return job_stats
 
 
+def get_stats(engine: Engine, *, fast = False):
+    return {
+        'engine': get_engine_stats(engine, fast = fast),
+        'job': get_job_stats(engine),
+        'scheduler': get_scheduler_stats(engine),
+        'network': get_network_stats(engine) if engine.simulate_network else {},
+    }
+
+
 def print_formatted_report(engine_stats=None,
                            job_stats=None,
                            scheduler_stats=None,
@@ -404,3 +416,16 @@ def print_formatted_report(engine_stats=None,
         "avg_per_job_slowdown": "{:.2f}x",
         "max_per_job_slowdown": "{:.2f}x",
     })
+
+
+def get_gauge_limits(engine: Engine):
+    """For setting max values in dashboard gauges"""
+    peak_flops = engine.flops_manager.get_rpeak()
+    peak_power = engine.power_manager.get_peak_power()
+    gflops_per_watt_max = peak_flops / 1E9 / peak_power
+
+    return {
+        'peak_flops': peak_flops,
+        'peak_power': peak_power,
+        'g_flops_w_peak': gflops_per_watt_max
+    }
