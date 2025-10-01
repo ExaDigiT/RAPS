@@ -340,6 +340,75 @@ class Engine:
             start_date=self.start,
         )
 
+        if sim_config.live and not sim_config.replay:
+            td = Telemetry(**sim_config_dict)
+            workload_data = td.load_from_live_system()
+        elif sim_config.replay:
+            # TODO: this will have issues if running separate systems or custom systems
+            partition_short = partition.split("/")[-1] if partition else None
+            td = Telemetry(
+                **sim_config_dict,
+                partition=partition,
+            )
+            if partition:
+                snap_map = {p.stem: p for p in sim_config.replay[0].glob("*.npz")}
+                if len(snap_map) > 0:
+                    if partition_short not in snap_map:
+                        raise RuntimeError(f"Snapshot '{partition_short}.npz' not in {sim_config.replay[0]}")
+                    replay_files = [snap_map[partition_short]]
+                else:
+                    replay_files = sim_config.replay
+            else:
+                replay_files = sim_config.replay
+
+            workload_data = td.load_from_files(replay_files)
+        else:  # Synthetic jobs
+            wl = Workload(sim_config_args, system_config_dict)
+            workload_data = wl.generate_jobs()
+            td = Telemetry(**sim_config_dict)
+
+        jobs = workload_data.jobs
+
+        # TODO refactor how stat/end/fastforward/time work
+        if sim_config.fastforward is not None:
+            workload_data.telemetry_start = workload_data.telemetry_start + sim_config.fastforward
+
+        if sim_config.time is not None:
+            workload_data.telemetry_end = workload_data.telemetry_start + sim_config.time
+
+        if sim_config.time_delta is not None:
+            time_delta = sim_config.time_delta
+        else:
+            time_delta = 1
+
+        if sim_config.continuous_job_generation:
+            continuous_workload = wl
+        else:
+            continuous_workload = None
+
+        accounts = None
+        if sim_config.accounts:
+            job_accounts = Accounts(jobs)
+            if sim_config.accounts_json:
+                loaded_accounts = Accounts.from_json_filename(sim_config.accounts_json)
+                accounts = Accounts.merge(loaded_accounts, job_accounts)
+            else:
+                accounts = job_accounts
+
+        engine = Engine(
+            power_manager=power_manager,
+            flops_manager=flops_manager,
+            cooling_model=cooling_model,
+            continuous_workload=continuous_workload,
+            jobs=jobs,
+            accounts=accounts,
+            telemetry=td,
+            sim_config=sim_config,
+            system_config=system_config,
+        )
+
+        return engine, workload_data, time_delta
+
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
         Modifies jobs_to_submit and self.queue
