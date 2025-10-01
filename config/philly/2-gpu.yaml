@@ -13,15 +13,15 @@ system:
   cpus_per_node: 2
   cores_per_cpu: 20
   gpus_per_node: 2
-  cpu_peak_flops: 1248000000000.0
-  gpu_peak_flops: 7800000000000.0
+  cpu_peak_flops: 1248000000000.0 # assume Xeon E5-2690v4 CPU 64-bit
+  gpu_peak_flops: 9300000000000.0 # assume 12G P100 32-bit
   cpu_fp_ratio: 0.667
   gpu_fp_ratio: 0.667
 power:
-  power_gpu_idle: 75
-  power_gpu_max: 300
+  power_gpu_idle: 30
+  power_gpu_max: 250
   power_cpu_idle: 90
-  power_cpu_max: 280
+  power_cpu_max: 270
   power_mem: 74.26
   power_nvme: 30
   power_nic: 20
