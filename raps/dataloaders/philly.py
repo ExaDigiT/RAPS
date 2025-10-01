@@ -1,9 +1,20 @@
 """
-Main reference to Philly traces:
+This is the dataloader for the Philly traces which is documented in this paper:
 
     Jeon, Myeongjae, et al. "Analysis of Large-Scale Multi-Tenant GPU clusters for DNN training workloads." 
     2019 USENIX Annual Technical Conference (USENIX ATC 19). 2019.
     https://www.usenix.org/system/files/atc19-jeon.pdf
+
+Note on hardware specs:
+
+    Philly only provides GPU memory sizes (12G & 24G) without clarifying GPU models.
+    Hu et al. (2024) https://arxiv.org/html/2403.07648v1
+
+    For estimating system power and FLOPS performance, we assume that the 2-GPU
+    nodes used Tesla P100 (12 GB) GPUs and the 8-GPU nodes used Tesla P40 (24 GB) 
+    GPUs, consistent with hardware Microsoft deployed around 2017. Training is 
+    assumed to have been performed in 32-bit (FP32), and the CPUs are assumed 
+    to be 64-bit Intel Xeon E5-2690 v4.
 
 The repository is available here:
 
