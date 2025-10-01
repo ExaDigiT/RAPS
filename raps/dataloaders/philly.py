@@ -321,10 +321,15 @@ def load_data(files, **kwargs):
                 jobs_list.append(Job(job))
 
             print(job)
-            
-    # Find max end timestamp across jobs
-    #end_ts = max(j.end_time for j in jobs_list if j.end_time is not None)
-    end_ts = 3600
+
+#        if len(jobs_list) >= 5: 
+#            break
+
+        # Find max end timestamp across jobs, relative to first job
+        end_ts = max(j.end_time for j in jobs_list if j.end_time is not None)
+
+    # Absolute end_ts
+    end_ts = start_ts + end_ts
 
     return WorkloadData(
         jobs=jobs_list,
