@@ -274,6 +274,9 @@ def load_data(files, **kwargs):
             submit_time = submitted.timestamp() - start_ts if submitted else None
             start_time = start.timestamp() - start_ts if start else None
             end_time = end.timestamp() - start_ts if end else None
+            #submit_time = submitted.timestamp()
+            #start_time = start.timestamp()
+            #end_time = end.timestamp()
 
             if not submit_time or not start_time or not end_time:
                 warnings.warn(
@@ -305,31 +308,37 @@ def load_data(files, **kwargs):
                     ntx_trace=None,
                     nrx_trace=None,
 
-                    submit_time=submit_time,
-                    start_time=start_time,
+                    submit_time=0, #submit_time,
+                    start_time=0, #start_time,
                     end_time=end_time,
-                    time_limit=0,
+                    time_limit=end_time, #0,
                     expected_run_time=wall_time if wall_time else 0,
                     current_run_time=0,
                     trace_time=None,
-                    trace_start_time=None,
-                    trace_end_time=None,
-                    trace_quanta=None,
+                    trace_start_time=0, #None,
+                    trace_end_time=end_time, #None,
+                    trace_quanta=60,
                     trace_missing_values=False,
                     downscale=1
                 )
-                jobs_list.append(Job(job))
+                if job_cpu_trace and job_gpu_trace:
+                    jobs_list.append(Job(job))
 
-            print(job)
+            #print(job)
+            print(start_ts, job["start_time"], job["end_time"])
 
-#        if len(jobs_list) >= 5: 
-#            break
+        if len(jobs_list) >= 20: 
+            break
 
         # Find max end timestamp across jobs, relative to first job
-        end_ts = max(j.end_time for j in jobs_list if j.end_time is not None)
+        #start_ts = min(j.start_time for j in jobs_list if j.start_time is not None)
+        #end_ts = max(j.end_time for j in jobs_list if j.end_time is not None)
 
     # Absolute end_ts
-    end_ts = start_ts + end_ts
+    #end_ts = start_ts + end_ts
+    end_ts = start_ts + 43200
+
+    print("***", start_ts, end_ts)
 
     return WorkloadData(
         jobs=jobs_list,
