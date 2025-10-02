@@ -38,7 +38,7 @@ scheduler:
   seed: 42
   job_arrival_time: 900
   mtbf: 11
-  trace_quanta: 15
+  trace_quanta: 10
   min_wall_time: 3600
   max_wall_time: 43200
   ui_update_freq: 900
