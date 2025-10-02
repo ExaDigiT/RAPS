@@ -113,7 +113,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Grab data from live system. """
 
     # Workload arguments (TODO split into separate model)
-    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant'] | None = None
+    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant', 'calculon'] | None = None
 
     """ Type of synthetic workload """
     multimodal: list[float] = [1.0]

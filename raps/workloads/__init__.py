@@ -8,6 +8,7 @@ from raps.utils import pydantic_add_args
 from raps.sim_config import SingleSimConfig
 
 from .basic import BasicWorkload
+from .calculon import Calculon
 from .constants import JOB_NAMES, ACCT_NAMES, MAX_PRIORITY
 from .distribution import DistributionWorkload
 from .live import continuous_job_generation, run_workload
@@ -48,7 +49,8 @@ class Workload(
     BaseWorkload,
     DistributionWorkload,
     BasicWorkload,
-    MultitenantWorkload
+    MultitenantWorkload,
+    Calculon
 ):
     """Final workload class with all workload types."""
     pass
