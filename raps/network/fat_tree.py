@@ -1,4 +1,6 @@
+import random
 import networkx as nx
+
 
 def node_id_to_host_name(node_id: int, k: int) -> str:
     """
@@ -10,6 +12,7 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     edge = (node_id % (k * k // 4)) // (k // 2)
     host = node_id % (k // 2)
     return f"h_{pod}_{edge}_{host}"
+
 
 def build_fattree(k, total_nodes):
     """
@@ -66,4 +69,14 @@ def build_fattree(k, total_nodes):
                 host = f"h_{pod}_{edge}_{h}"
                 G.add_node(host, type="host")
                 G.add_edge(e, host)
+    return G
+
+
+def subsample_hosts(G, num_hosts):
+    """Reduce the number of host nodes in the FatTree graph to match system size."""
+    hosts = [n for n in G if n.startswith("h")]
+    if num_hosts < len(hosts):
+        keep = set(random.sample(hosts, num_hosts))
+        remove = [n for n in hosts if n not in keep]
+        G.remove_nodes_from(remove)
     return G
