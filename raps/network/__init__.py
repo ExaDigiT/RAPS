@@ -39,8 +39,9 @@ class NetworkModel:
         self.real_to_fat_idx = kwargs.get("real_to_fat_idx", {})
 
         if self.topology == "fat-tree":
+            total_nodes = config['TOTAL_NODES'] - len(config['DOWN_NODES'])
             self.fattree_k = config.get("FATTREE_K")
-            self.net_graph = build_fattree(self.fattree_k)
+            self.net_graph = build_fattree(self.fattree_k, total_nodes)
 
         elif self.topology == "torus3d":
             dims = (

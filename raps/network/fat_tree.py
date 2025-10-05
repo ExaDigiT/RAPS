@@ -13,7 +13,7 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     return f"h_{pod}_{edge}_{host}"
 
 
-def build_fattree(k):
+def build_fattree(k, total_nodes):
     """
     Build a k-ary fat-tree:
       - k pods
@@ -26,6 +26,12 @@ def build_fattree(k):
       - agg   switches "a_{pod}_{agg}"
       - core  switches "c_{i}_{j}"
     """
+    num_hosts = (k**3) // 4
+    if num_hosts < total_nodes:
+        raise ValueError(
+           f"Fat-tree network with k={k} has {num_hosts} hosts, but the system has {total_nodes} nodes. "
+           f"Please increase the value of 'fattree_k' in the system configuration file."
+        )
     G = nx.Graph()
     # core
     # num_core = (k//2)**2  # Unused!
