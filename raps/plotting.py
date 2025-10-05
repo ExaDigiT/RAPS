@@ -442,6 +442,70 @@ def plot_network_graph(G, filename, layout='spring'):
     plt.close()
 
 
+def plot_fattree_hierarchy(G, k=32, save_path='network.png'):
+    """Draw a hierarchical Fat-Tree layout with automatic scaling."""
+    pos = {}
+
+    # --- Layer order and matching prefixes ---
+    layers = ["core", "agg", "edge", "h"]
+    layer_prefixes = {
+        "core": ["core", "c_"],
+        "agg":  ["agg", "a_"],
+        "edge": ["edge", "e_"],
+        "h":    ["h", "host"]
+    }
+
+    # --- Compute how many nodes per layer ---
+    layer_counts = {}
+    for layer in layers:
+        prefixes = layer_prefixes[layer]
+        layer_nodes = [n for n in G.nodes if any(n.startswith(p) for p in prefixes)]
+        layer_counts[layer] = len(layer_nodes)
+
+    max_nodes = max(layer_counts.values()) or 1
+    y_gap = 1.0 / (len(layers) - 1)
+
+    # --- Assign positions, normalized to [0,1] range ---
+    for j, layer in enumerate(layers):
+        prefixes = layer_prefixes[layer]
+        layer_nodes = [n for n in G.nodes if any(n.startswith(p) for p in prefixes)]
+        n_layer = len(layer_nodes)
+        if n_layer == 0:
+            continue
+        x_spacing = 1.0 / n_layer
+        y = 1.0 - j * y_gap
+        for i, node in enumerate(layer_nodes):
+            x = (i + 0.5) * x_spacing  # center each node
+            pos[node] = (x, y)
+
+    # --- Draw figure ---
+    plt.figure(figsize=(10, 8))
+    color_map = {"core": "red", "agg": "orange", "edge": "green", "h": "blue"}
+    size_map = {"core": 30, "agg": 20, "edge": 10, "h": 5}
+
+    for layer in layers:
+        nodes = [n for n in G.nodes if any(n.startswith(p) for p in layer_prefixes[layer])]
+        if nodes:
+            nx.draw_networkx_nodes(
+                G, pos, nodelist=nodes, node_color=color_map[layer],
+                node_size=size_map[layer], label=layer.capitalize(), alpha=0.7
+            )
+
+    # --- Only draw inter-layer edges for clarity ---
+    edgelist = [
+        (u, v) for (u, v) in G.edges
+        if not any(u.startswith(p) and v.startswith(p)
+                   for p in ["c_", "a_", "e_", "h", "core", "agg", "edge", "host"])
+    ]
+    nx.draw_networkx_edges(G, pos, edgelist=edgelist, alpha=0.05, width=0.4)
+
+    plt.legend()
+    plt.axis("off")
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+
 if __name__ == "__main__":
     plotter = Plotter()
     # plotter.plot_history([1, 2, 3, 4])

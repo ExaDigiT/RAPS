@@ -9,9 +9,10 @@ from .base import (
     worst_link_util,
 )
 
-from .fat_tree import build_fattree, node_id_to_host_name
+from .fat_tree import build_fattree, node_id_to_host_name, subsample_hosts
 from .torus3d import build_torus3d, link_loads_for_job_torus
 from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name
+from raps.plotting import plot_fattree_hierarchy
 from raps.utils import get_current_utilization
 
 __all__ = [
@@ -42,6 +43,8 @@ class NetworkModel:
             total_nodes = config['TOTAL_NODES'] - len(config['DOWN_NODES'])
             self.fattree_k = config.get("FATTREE_K")
             self.net_graph = build_fattree(self.fattree_k, total_nodes)
+            #self.net_graph = subsample_hosts(self.net_graph, num_hosts=4626)
+            plot_fattree_hierarchy(self.net_graph, k=self.fattree_k)
 
         elif self.topology == "torus3d":
             dims = (
