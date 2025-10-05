@@ -121,7 +121,7 @@ cooling:
 network:
   topology: fat-tree
   network_max_bw: 1000000000.0
-  fattree_k: 16
+  fattree_k: 32
   dragonfly_d: 11
   dragonfly_a: 9
   dragonfly_p: 8
