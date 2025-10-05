@@ -8,6 +8,12 @@ def build_torus3d(dims, wrap=True, link_bw=1e9, hosts_per_router=1, routing="DOR
     Build a 3D torus at router granularity, then attach host nodes to routers.
     Node ids in the returned graph are host names ("h_x_y_z_i") and router names ("r_x_y_z").
     Edges have attribute 'capacity' (bytes/s) and 'latency' (per hop).
+
+    Examples
+    --------
+    >>> from raps.plotting import plot_network_graph
+    >>> G, meta = build_torus3d(dims=(2, 2, 2))
+    >>> plot_network_graph(G, 'torus3d.png')
     """
     X, Y, Z = map(int, dims)
     G = nx.Graph()

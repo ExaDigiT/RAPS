@@ -1,6 +1,5 @@
 import networkx as nx
 
-
 def node_id_to_host_name(node_id: int, k: int) -> str:
     """
     Convert an integer node id to the host name string in the fat-tree.
@@ -11,7 +10,6 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     edge = (node_id % (k * k // 4)) // (k // 2)
     host = node_id % (k // 2)
     return f"h_{pod}_{edge}_{host}"
-
 
 def build_fattree(k, total_nodes):
     """
@@ -25,6 +23,12 @@ def build_fattree(k, total_nodes):
       - edge switches "e_{pod}_{edge}"
       - agg   switches "a_{pod}_{agg}"
       - core  switches "c_{i}_{j}"
+
+    Examples
+    --------
+    >>> from raps.plotting import plot_network_graph
+    >>> G = build_fattree(k=4, total_nodes=16)
+    >>> plot_network_graph(G, 'fat_tree.png')
     """
     num_hosts = (k**3) // 4
     if num_hosts < total_nodes:

@@ -109,7 +109,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Enable verbose output """
     layout: Literal["layout1", "layout2"] = "layout1"
     """ UI layout """
-    plot: list[Literal["power", "loss", "pue", "temp", "util"]] | None = None
+    plot: list[Literal["power", "loss", "pue", "temp", "util", "net"]] | None = None
     """ Plots to generate """
 
     imtype: Literal["png", "svg", "jpg", "pdf", "eps"] = "png"

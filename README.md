@@ -87,7 +87,7 @@ For Lumi
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to
 get the datasets. To run a network simulation, use the following command:
 
-    raps run -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net 
+    raps run -f /opt/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net
 
 ## Snapshot of extracted workload data
 
