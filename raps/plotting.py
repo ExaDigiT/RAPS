@@ -442,7 +442,7 @@ def plot_network_graph(G, filename, layout='spring'):
     plt.close()
 
 
-def plot_fattree_hierarchy(G, k=32, save_path='network.png'):
+def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     """Draw a hierarchical Fat-Tree layout with automatic scaling."""
     pos = {}
 
@@ -501,6 +501,71 @@ def plot_fattree_hierarchy(G, k=32, save_path='network.png'):
 
     plt.legend()
     plt.axis("off")
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+def plot_dragonfly(G, save_path='net_dragonfly.png'):
+    """
+    Draw a circular Dragonfly layout: groups in a large ring,
+    routers in small inner rings, hosts hanging around each router.
+    """
+    import math
+    import matplotlib.pyplot as plt
+    import networkx as nx
+
+    # Identify groups
+    groups = sorted({G.nodes[n]["group"] for n in G if "group" in G.nodes[n]})
+    num_groups = len(groups)
+
+    pos = {}
+    R_outer = 1.0      # radius of the outer ring (groups)
+    R_inner = 0.15     # radius of each group's internal ring
+
+    # --- compute positions ---
+    for i, g in enumerate(groups):
+        # center of this group
+        theta_g = 2 * math.pi * i / num_groups
+        cx = R_outer * math.cos(theta_g)
+        cy = R_outer * math.sin(theta_g)
+
+        routers = [n for n in G if n.startswith("r_") and G.nodes[n]["group"] == g]
+        hosts = [n for n in G if n.startswith("h_") and G.nodes[n]["group"] == g]
+
+        # routers in small ring
+        for j, r in enumerate(routers):
+            theta_r = 2 * math.pi * j / len(routers)
+            x = cx + R_inner * math.cos(theta_r)
+            y = cy + R_inner * math.sin(theta_r)
+            pos[r] = (x, y)
+
+        # hosts slightly further out around each router
+        for j, h in enumerate(hosts):
+            router = f"r_{g}_{j // 8}" if len(routers) > 0 else None
+            # angle toward router’s position if available
+            angle = 2 * math.pi * (j / len(hosts))
+            r_off = R_inner + 0.05
+            x = cx + r_off * math.cos(angle)
+            y = cy + r_off * math.sin(angle)
+            pos[h] = (x, y)
+
+    # --- Draw figure ---
+    plt.figure(figsize=(10, 10))
+    nx.draw_networkx_nodes(G, pos,
+                           nodelist=[n for n in G if n.startswith("r_")],
+                           node_color="orange", node_size=20, label="Routers", alpha=0.9)
+    nx.draw_networkx_nodes(G, pos,
+                           nodelist=[n for n in G if n.startswith("h_")],
+                           node_color="blue", node_size=8, label="Hosts", alpha=0.7)
+
+    # intra-group edges light gray, inter-group black
+    intra = [(u, v) for (u, v) in G.edges if G.nodes[u]["group"] == G.nodes[v]["group"]]
+    inter = [(u, v) for (u, v) in G.edges if G.nodes[u]["group"] != G.nodes[v]["group"]]
+    nx.draw_networkx_edges(G, pos, edgelist=intra, alpha=0.1, width=0.3, edge_color="gray")
+    nx.draw_networkx_edges(G, pos, edgelist=inter, alpha=0.4, width=0.4, edge_color="black")
+
+    plt.axis("off")
+    plt.legend()
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300)
