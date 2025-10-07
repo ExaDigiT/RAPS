@@ -15,7 +15,7 @@ from raps.utils import (
 from raps.system_config import (
     SystemConfig, get_partition_configs, get_system_config, list_systems, resolve_system_reference,
 )
-from pydantic import model_validator, Field
+from pydantic import model_validator, Field, BeforeValidator
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
@@ -25,7 +25,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Include the FMU cooling model """
     simulate_network: bool = False
     """ Include network model """
-    weather: bool | None = None
+    weather: bool = False
     """
     Include weather information in the cooling model.
     Defaults to True if replay, False otherwise.
@@ -54,7 +54,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     Step size for the power simulation (default seconds).
     Can pass a string like 15s, 1m, 1h, 1ms
     """
-    time_unit: timedelta = timedelta(seconds=1)
+    time_unit: A[timedelta, BeforeValidator(parse_time_unit)] = timedelta(seconds=1)
     """
     The base unit of the simulation, determining how often it will tick the job scheduler.
     """
@@ -134,7 +134,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Grab data from live system. """
 
     # Workload arguments (TODO split into separate model)
-    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant'] | None = None
+    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic', 'multitenant', 'replay'] = "random"
 
     """ Type of synthetic workload """
     multimodal: list[float] = [1.0]
@@ -223,18 +223,15 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     # Downtime
     downtime_first: SmartTimedelta | None = None
     """
-    First downtime (unit specified by `time_unit`, default seconds).
-    Can pass a string like 27m, 3h, 7d
+    First downtime. Can pass a string like 27m, 3h, 7d
     """
     downtime_interval: SmartTimedelta | None = None
     """
-    Interval between downtimes (unit specified by `time_unit`, default seconds).
-    Can pass a string like 123, 27m, 3h, 7d
+    Interval between downtimes. Can pass a string like 123, 27m, 3h, 7d
     """
     downtime_length: SmartTimedelta | None = None
     """
-    Downtime length (unit specified by `time_unit`, default seconds).
-    Can pass a string like 123, 27m, 3h, 7d
+    Downtime length. Can pass a string like 123, 27m, 3h, 7d
     """
 
     @cached_property
@@ -269,6 +266,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
             "time_delta", "time", "fastforward",
             "downtime_first", "downtime_interval", "downtime_length",
         ]
+        # infer time unit from other timedelta fields if it wasn't set explicitly
         if data.get('time_unit') is None:
             time_unit = min(
                 [infer_time_unit(data[f]) for f in td_fields if data.get(f)],
@@ -312,13 +310,17 @@ class SimConfig(RAPSBaseModel, abc.ABC):
             if td is not None:
                 convert_to_time_unit(td, self.time_unit)  # will throw if invalid
 
-        if not self.replay and not self.workload:
-            self.workload = "random"
+        if "workload" not in self.model_fields_set and self.replay:
+            self.workload = "replay"  # default to replay if --replay is set
+        if self.workload == "replay" and not self.replay:
+            raise ValueError('--replay must be set when workload type is "replay"')
+        elif self.workload != "replay" and self.replay:
+            raise ValueError('workload must be either omitted or "replay" when --replay is set')
 
         if self.cooling:
             self.layout = "layout2"
 
-        if self.weather is None:
+        if 'weather' not in self.model_fields_set:
             self.weather = self.cooling and bool(self.replay)
 
         if self.jobsize_is_power_of is not None and self.jobsize_is_of_degree is not None:

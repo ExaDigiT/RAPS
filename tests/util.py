@@ -92,6 +92,6 @@ def run_multi_part_engine(sim_config, include_ticks=False) -> tuple[MultiPartEng
             stats['tick_datas'].append(tick)
 
     for partition, engine in multi_engine.engines.items():
-        stats['partitions'][partition] = engine.get_stats()
+        stats['partitions'][partition] = get_stats(engine)
 
     return multi_engine, stats
