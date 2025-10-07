@@ -11,8 +11,8 @@ from .base import (
 
 from .fat_tree import build_fattree, node_id_to_host_name, subsample_hosts
 from .torus3d import build_torus3d, link_loads_for_job_torus
-from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name
-from raps.plotting import plot_fattree_hierarchy
+from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name, build_dragonfly_idx_map
+from raps.plotting import plot_fattree_hierarchy, plot_dragonfly
 from raps.utils import get_current_utilization
 
 __all__ = [
@@ -71,11 +71,24 @@ class NetworkModel:
                             nid += 1
 
         elif self.topology == "dragonfly":
-            self.net_graph = build_dragonfly(
-                int(config["DRAGONFLY_D"]),
-                int(config["DRAGONFLY_A"]),
-                int(config.get("DRAGONFLY_P", 1))
-            )
+            D = self.config["DRAGONFLY_D"]
+            A = self.config["DRAGONFLY_A"]
+            P = self.config["DRAGONFLY_P"]
+            self.net_graph = build_dragonfly(D, A, P)
+
+            # total nodes seen by scheduler or job trace
+            total_real_nodes = getattr(self, "available_nodes", None)
+            if total_real_nodes is None:
+                total_real_nodes = 4626  # fallback for Lassen
+
+            # if available_nodes is a list, take its length
+            if not isinstance(total_real_nodes, int):
+                total_real_nodes = len(total_real_nodes)
+
+            self.real_to_fat_idx = build_dragonfly_idx_map(D, A, P, total_real_nodes)
+            print(f"[DEBUG] Dragonfly mapping: {len(self.real_to_fat_idx)} entries")
+
+            plot_dragonfly(self.net_graph)
 
         elif self.topology == "capacity":
             # Capacity-only model: no explicit graph
@@ -104,13 +117,15 @@ class NetworkModel:
                 print("  fat-tree hosts:", host_list)
 
         elif self.topology == "dragonfly":
-            D, A, P = self.config["DRAGONFLY_D"], self.config["DRAGONFLY_A"], self.config["DRAGONFLY_P"]
-            host_list = [
-                dragonfly_node_id_to_host_name(self.real_to_fat_idx[real_n], D, A, P)
-                for real_n in job.scheduled_nodes
-            ]
+            D = self.config["DRAGONFLY_D"]
+            A = self.config["DRAGONFLY_A"]
+            P = self.config["DRAGONFLY_P"]
+            # Directly use mapped host names
+            host_list = [self.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
             if debug:
                 print("  dragonfly hosts:", host_list)
+            print("Example nodes in graph:", list(self.net_graph.nodes)[:10])
+            print("Contains h_0_9_0?", "h_0_9_0" in self.net_graph)
             loads = link_loads_for_job(self.net_graph, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
 
