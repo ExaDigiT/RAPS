@@ -10,9 +10,10 @@ from .base import (
 )
 
 from .fat_tree import build_fattree, node_id_to_host_name, subsample_hosts
-from .torus3d import build_torus3d, link_loads_for_job_torus
+from .torus3d import build_torus3d, link_loads_for_job_torus, torus_host_from_real_index
 from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name, build_dragonfly_idx_map
-from raps.plotting import plot_fattree_hierarchy, plot_dragonfly
+from raps.plotting import plot_fattree_hierarchy, plot_dragonfly, plot_torus2d, plot_torus3d
+
 from raps.utils import get_current_utilization
 
 __all__ = [
@@ -57,6 +58,9 @@ class NetworkModel:
 
             # Build the graph and metadata
             self.net_graph, self.meta = build_torus3d(dims, wrap, hosts_per_router=hosts_per_router)
+
+            plot_torus2d(self.net_graph)
+            plot_torus3d(self.net_graph)
 
             # Deterministic numeric → host mapping
             X, Y, Z = self.meta["dims"]
@@ -130,7 +134,15 @@ class NetworkModel:
             net_cong = worst_link_util(loads, max_throughput)
 
         elif self.topology == "torus3d":
-            host_list = [self.id_to_host[n] for n in job.scheduled_nodes]
+            X = self.config["TORUS_X"]
+            Y = self.config["TORUS_Y"]
+            Z = self.config["TORUS_Z"]
+            hosts_per_router = self.config["HOSTS_PER_ROUTER"]
+            #host_list = [self.id_to_host[n] for n in job.scheduled_nodes]
+            host_list = [
+                torus_host_from_real_index(n, X, Y, Z, hosts_per_router)
+                for n in job.scheduled_nodes
+            ]
             loads = link_loads_for_job_torus(self.net_graph, self.meta, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
             if debug:

@@ -3,96 +3,120 @@ import networkx as nx
 from pathlib import Path
 
 
-def build_torus3d(dims, wrap=True, link_bw=1e9, hosts_per_router=1, routing="DOR_XYZ", coords_csv=None):
+def build_torus3d(
+    dims,
+    wrap=True,
+    hosts_per_router: int = 1,
+    torus_link_bw: float = None,
+    latency_per_hop: float = None,
+    network_max_bw: float = None,
+):
     """
-    Build a 3D torus at router granularity, then attach host nodes to routers.
-    Node ids in the returned graph are host names ("h_x_y_z_i") and router names ("r_x_y_z").
-    Edges have attribute 'capacity' (bytes/s) and 'latency' (per hop).
+    Build a 3D torus network (routers + hosts).
+    Each router r_x_y_z connects to 6 neighbors (±X, ±Y, ±Z)
+    and attaches hosts h_x_y_z_p for p ∈ [0..hosts_per_router-1].
 
-    Examples
-    --------
-    >>> from raps.plotting import plot_network_graph
-    >>> G, meta = build_torus3d(dims=(2, 2, 2))
-    >>> plot_network_graph(G, 'torus3d.png')
+    Returns:
+        (G, meta) where:
+          - G: networkx.Graph
+          - meta: dict with topology info for plotting/simulation
     """
-    X, Y, Z = map(int, dims)
+    X, Y, Z = dims
     G = nx.Graph()
 
-    # Routers
-    def rname(x, y, z):
-        return f"r_{x}_{y}_{z}"
-
+    # --- Add routers with normalized coordinates ---
     for x in range(X):
         for y in range(Y):
             for z in range(Z):
-                G.add_node(rname(x, y, z), kind="router", coord=(x, y, z))
+                name = f"r_{x}_{y}_{z}"
+                G.add_node(
+                    name,
+                    type="router",
+                    x=x / (X - 1 if X > 1 else 1),
+                    y=y / (Y - 1 if Y > 1 else 1),
+                    z=z / (Z - 1 if Z > 1 else 1),
+                )
 
-    # Toroidal links between routers (±x, ±y, ±z)
-    def wrapi(i, n):
-        return (i + n) % n if wrap else (None if i < 0 or i >= n else i)
-
+    # --- Add wrap-around router-to-router edges ---
     for x in range(X):
         for y in range(Y):
             for z in range(Z):
-                u = rname(x, y, z)
-                # x+
-                nxp = wrapi(x + 1, X)
-                v = rname(nxp, y, z) if nxp is not None else None
-                if v and not G.has_edge(u, v):
-                    G.add_edge(u, v, capacity=link_bw)
-                # y+
-                nyp = wrapi(y + 1, Y)
-                v = rname(x, nyp, z) if nyp is not None else None
-                if v and not G.has_edge(u, v):
-                    G.add_edge(u, v, capacity=link_bw)
-                # z+
-                nzp = wrapi(z + 1, Z)
-                v = rname(x, y, nzp) if nzp is not None else None
-                if v and not G.has_edge(u, v):
-                    G.add_edge(u, v, capacity=link_bw)
+                src = f"r_{x}_{y}_{z}"
 
-    # Attach hosts to routers
+                nx_ = (x + 1) % X if wrap else x + 1
+                if nx_ < X:
+                    G.add_edge(
+                        src, f"r_{nx_}_{y}_{z}",
+                        bandwidth=torus_link_bw,
+                        latency=latency_per_hop,
+                        type="router_link"
+                    )
+
+                ny_ = (y + 1) % Y if wrap else y + 1
+                if ny_ < Y:
+                    G.add_edge(
+                        src, f"r_{x}_{ny_}_{z}",
+                        bandwidth=torus_link_bw,
+                        latency=latency_per_hop,
+                        type="router_link"
+                    )
+
+                nz_ = (z + 1) % Z if wrap else z + 1
+                if nz_ < Z:
+                    G.add_edge(
+                        src, f"r_{x}_{y}_{nz_}",
+                        bandwidth=torus_link_bw,
+                        latency=latency_per_hop,
+                        type="router_link"
+                    )
+
+    # --- Add hosts and host-router edges ---
+    for x in range(X):
+        for y in range(Y):
+            for z in range(Z):
+                router = f"r_{x}_{y}_{z}"
+                for p in range(hosts_per_router):
+                    host = f"h_{x}_{y}_{z}_{p}"
+                    G.add_node(
+                        host,
+                        type="host",
+                        x=(x + 0.1) / (X - 1 if X > 1 else 1),
+                        y=(y + 0.1) / (Y - 1 if Y > 1 else 1),
+                        z=(z + 0.1 * (p + 1)) / (Z - 1 if Z > 1 else 1),
+                    )
+                    G.add_edge(
+                        host, router,
+                        bandwidth=network_max_bw,
+                        latency=latency_per_hop,
+                        type="host_link"
+                    )
+
+    # --- Build host <-> router mappings for simulator use ---
     host_to_router = {}
     router_to_hosts = {}
 
-    def hname(x, y, z, i):
-        return f"h_{x}_{y}_{z}_{i}"
-
-    # If a nid→(x,y,z) CSV is supplied, place accordingly; else dense round-robin
-    # CSV format: nid,x,y,z[,i]
-    nid_placement = {}
-    if coords_csv:
-        p = Path(coords_csv)
-        with p.open("rt") as fh:
-            rd = csv.reader(fh)
-            for row in rd:
-                if not row:
-                    continue
-                nid = int(row[0])
-                x, y, z = map(int, row[1:4])
-                i = int(row[4]) if len(row) > 4 else 0
-                nid_placement[nid] = (x, y, z, i)
-
-    # Build hosts
     for x in range(X):
         for y in range(Y):
             for z in range(Z):
-                r = rname(x, y, z)
-                router_to_hosts[r] = []
-                for i in range(hosts_per_router):
-                    h = hname(x, y, z, i)
-                    G.add_node(h, kind="host", coord=(x, y, z), local_index=i)
-                    G.add_edge(h, r, capacity=link_bw)  # host↔router edge; you can cap with NETWORK_MAX_BW instead
-                    host_to_router[h] = r
-                    router_to_hosts[r].append(h)
+                router = f"r_{x}_{y}_{z}"
+                router_to_hosts[router] = []
+                for p in range(hosts_per_router):
+                    host = f"h_{x}_{y}_{z}_{p}"
+                    host_to_router[host] = router
+                    router_to_hosts[router].append(host)
 
     meta = {
+        "topology": "torus3d",
         "dims": (X, Y, Z),
+        "hosts_per_router": hosts_per_router,
         "wrap": wrap,
-        "routing": routing,
+        "num_routers": X * Y * Z,
+        "num_hosts": X * Y * Z * hosts_per_router,
         "host_to_router": host_to_router,
         "router_to_hosts": router_to_hosts,
     }
+
+    print(f"Built 3D torus with {meta['num_routers']} routers and {meta['num_hosts']} hosts.")
     return G, meta
 
 
@@ -156,3 +180,15 @@ def link_loads_for_job_torus(G, meta, host_list, traffic_bytes):
                 e = tuple(sorted((u, v)))
                 loads[e] = loads.get(e, 0) + traffic_bytes
     return loads
+
+
+def torus_host_from_real_index(real_n, X, Y, Z, hosts_per_router):
+    total_hosts = X * Y * Z * hosts_per_router
+    idx = real_n % total_hosts
+    r = idx // hosts_per_router
+    h = idx % hosts_per_router
+    z = r % Z
+    y = (r // Z) % Y
+    x = (r // (Y * Z)) % X
+    return f"h_{x}_{y}_{z}_{h}"
+
