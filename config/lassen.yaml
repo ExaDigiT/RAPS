@@ -126,3 +126,9 @@ network:
   dragonfly_a: 9
   dragonfly_p: 8
   latency: 1
+  torus_x: 17
+  torus_y: 17
+  torus_z: 8
+  torus_wrap: true
+  hosts_per_router: 2
+  torus_routing: DOR_XYZ

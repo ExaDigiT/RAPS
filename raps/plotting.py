@@ -17,10 +17,13 @@ import itertools
 from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import MaxNLocator
+
 import time
 import numpy as np
 import networkx as nx
+import random
 from uncertainties import unumpy
 from rich.progress import track
 
@@ -505,6 +508,7 @@ def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     if save_path:
         plt.savefig(save_path, dpi=300)
 
+
 def plot_dragonfly(G, save_path='net_dragonfly.png'):
     """
     Draw a circular Dragonfly layout: groups in a large ring,
@@ -569,6 +573,93 @@ def plot_dragonfly(G, save_path='net_dragonfly.png'):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300)
+
+
+def plot_torus2d(G, save_path="net_torus2d.png"):
+    import matplotlib.pyplot as plt
+
+    routers = [n for n, d in G.nodes(data=True) if d["type"] == "router"]
+    hosts   = [n for n, d in G.nodes(data=True) if d["type"] == "host"]
+
+    fig, ax = plt.subplots(figsize=(8,8))
+
+    for u, v, d in G.edges(data=True):
+        if d.get("type") == "router_link":
+            x1, y1 = G.nodes[u]["x"], G.nodes[u]["y"]
+            x2, y2 = G.nodes[v]["x"], G.nodes[v]["y"]
+            ax.plot([x1, x2], [y1, y2], color="gray", alpha=0.1, linewidth=0.5)
+
+    # flatten z by adding it to y or x offset
+    xs = [G.nodes[n]["x"] for n in routers]
+    ys = [G.nodes[n]["y"] + 0.05*G.nodes[n]["z"] for n in routers]
+    ax.scatter(xs, ys, c="orange", s=10, label="Routers", alpha=0.8)
+
+    hx = [G.nodes[n]["x"] for n in hosts]
+    hy = [G.nodes[n]["y"] + 0.05*G.nodes[n]["z"] for n in hosts]
+    ax.scatter(hx, hy, c="blue", s=4, label="Hosts", alpha=0.5)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y + (scaled Z)")
+    ax.legend()
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+
+def plot_torus3d(G, active_edges=None, max_edges=4000, save_path="net_torus3d.png"):
+    """
+    Plot a 3D torus with routers, hosts, and optional job link highlights.
+    Args:
+        G : networkx.Graph
+        active_edges : list of (u,v) tuples for job links to highlight
+        max_edges : subsample edges to avoid clutter
+    """
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    # --- Separate routers and hosts ---
+    routers = [n for n, d in G.nodes(data=True) if d["type"] == "router"]
+    hosts = [n for n, d in G.nodes(data=True) if d["type"] == "host"]
+
+    # --- Plot routers ---
+    xs, ys, zs = [G.nodes[n]["x"] for n in routers], [G.nodes[n]["y"] for n in routers], [G.nodes[n]["z"] for n in routers]
+    ax.scatter(xs, ys, zs, c="orange", s=6, label="Routers", alpha=0.8)
+
+    # --- Plot hosts ---
+    hx, hy, hz = [G.nodes[n]["x"] for n in hosts], [G.nodes[n]["y"] for n in hosts], [G.nodes[n]["z"] for n in hosts]
+    ax.scatter(hx, hy, hz, c="dodgerblue", s=3, label="Hosts", alpha=0.6)
+
+    # --- Draw router-to-router edges (subsampled) ---
+    all_router_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("type") == "router_link"]
+    if len(all_router_edges) > max_edges:
+        all_router_edges = random.sample(all_router_edges, max_edges)
+    for u, v in all_router_edges:
+        x1, y1, z1 = G.nodes[u]["x"], G.nodes[u]["y"], G.nodes[u]["z"]
+        x2, y2, z2 = G.nodes[v]["x"], G.nodes[v]["y"], G.nodes[v]["z"]
+        ax.plot([x1, x2], [y1, y2], [z1, z2], color="gray", alpha=0.05, linewidth=0.5)
+
+    # --- Draw host links lightly ---
+    for u, v, d in G.edges(data=True):
+        if d.get("type") == "host_link":
+            x1, y1, z1 = G.nodes[u]["x"], G.nodes[u]["y"], G.nodes[u]["z"]
+            x2, y2, z2 = G.nodes[v]["x"], G.nodes[v]["y"], G.nodes[v]["z"]
+            ax.plot([x1, x2], [y1, y2], [z1, z2], color="lightblue", alpha=0.05, linewidth=0.3)
+
+    # --- Overlay active job edges ---
+    if active_edges:
+        for u, v in active_edges:
+            if u in G.nodes and v in G.nodes:
+                x1, y1, z1 = G.nodes[u]["x"], G.nodes[u]["y"], G.nodes[u]["z"]
+                x2, y2, z2 = G.nodes[v]["x"], G.nodes[v]["y"], G.nodes[v]["z"]
+                ax.plot([x1, x2], [y1, y2], [z1, z2], color="red", linewidth=1.8, alpha=0.8)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.legend()
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
 
 
 if __name__ == "__main__":
