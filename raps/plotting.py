@@ -408,43 +408,6 @@ def plot_nodes_gantt(*, ax=None, jobs):
     return ax
 
 
-def plot_network_graph(G, filename, layout='spring'):
-    """
-    Plot the network graph with edge labels and save it to a file.
-
-    Parameters
-    ----------
-    G : networkx.Graph
-        The graph to plot.
-    filename : str
-        The path to save the plot.
-    layout : str, optional
-        The layout to use for the plot. Can be 'spring', 'circular', 'kamada_kawai', 'random', 'shell', 'spectral'.
-        Default is 'spring'.
-    """
-    plt.figure(figsize=(20, 20))
-    if layout == 'spring':
-        pos = nx.spring_layout(G)
-    elif layout == 'circular':
-        pos = nx.circular_layout(G)
-    elif layout == 'kamada_kawai':
-        pos = nx.kamada_kawai_layout(G)
-    elif layout == 'random':
-        pos = nx.random_layout(G)
-    elif layout == 'shell':
-        pos = nx.shell_layout(G)
-    elif layout == 'spectral':
-        pos = nx.spectral_layout(G)
-    else:
-        raise ValueError(f"Unsupported layout: {layout}")
-
-    nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue")
-    edge_labels = nx.get_edge_attributes(G, "capacity")
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
-    plt.savefig(filename)
-    plt.close()
-
-
 def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     """Draw a hierarchical Fat-Tree layout with automatic scaling."""
     pos = {}

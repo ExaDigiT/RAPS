@@ -8,7 +8,7 @@ import pandas as pd
 import sys
 import warnings
 from raps.ui import LayoutManager
-from raps.plotting import Plotter, plot_network_graph
+from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
 from raps.utils import write_dict_to_file, pydantic_add_args, SubParsers, read_yaml_parsed
@@ -147,15 +147,6 @@ def run_sim(sim_config: SingleSimConfig):
                 pl.plot_compare(df['time'], df[ylabel])
             else:
                 print('Cooling model not enabled... skipping output of plot')
-
-        if 'net' in sim_config.plot:
-            if engine.network_model:
-                plot_network_graph(
-                    engine.network_model.net_graph,
-                    out / f'{engine.system_config.system_name}_network.png',
-                )
-            else:
-                print('Network model not enabled... skipping output of plot')
 
     if out:
         if sim_config.uncertainties:
