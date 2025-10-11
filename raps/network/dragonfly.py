@@ -60,12 +60,6 @@ def build_dragonfly2(D: int, A: int, P: int) -> nx.Graph:
       1. All routers within a group form a full clique.
       2. Each router r in group g has exactly one “global link” to router r in each other group.
       3. Each router r in group g attaches to P hosts ("h_{g}_{r}_{0..P−1}").
-
-    Examples
-    --------
-    >>> from raps.plotting import plot_network_graph
-    >>> G = build_dragonfly(D=2, A=2, P=2)
-    >>> plot_network_graph(G, 'dragonfly.png')
     """
     G = nx.Graph()
 

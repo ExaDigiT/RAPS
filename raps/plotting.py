@@ -408,6 +408,31 @@ def plot_nodes_gantt(*, ax=None, jobs):
     return ax
 
 
+def edge_highlighting(plot_func):
+    """
+    Decorator for network plotting functions.
+    Adds support for highlight_edges parameter (list of (u,v) tuples).
+    """
+    def wrapper(G, *args, highlight_edges=None, **kwargs):
+        # Run the original plotting function
+        result = plot_func(G, *args, **kwargs)
+
+        # Overlay highlight edges if provided
+        if highlight_edges:
+            ax = plt.gca()
+            for u, v in highlight_edges:
+                if u in G and v in G:
+                    x1, y1, z1 = G.nodes[u].get("x", 0), G.nodes[u].get("y", 0), G.nodes[u].get("z", 0)
+                    x2, y2, z2 = G.nodes[v].get("x", 0), G.nodes[v].get("y", 0), G.nodes[v].get("z", 0)
+                    if "projection" in ax.name:  # 3D plot
+                        ax.plot([x1, x2], [y1, y2], [z1, z2], color="red", linewidth=2.5, alpha=0.9)
+                    else:  # 2D plot
+                        ax.plot([x1, x2], [y1, y2], color="red", linewidth=2.5, alpha=0.9)
+        return result
+    return wrapper
+
+
+@edge_highlighting
 def plot_network_graph(G, filename, layout='spring'):
     """
     Plot the network graph with edge labels and save it to a file.
@@ -445,6 +470,7 @@ def plot_network_graph(G, filename, layout='spring'):
     plt.close()
 
 
+@edge_highlighting
 def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     """Draw a hierarchical Fat-Tree layout with automatic scaling."""
     pos = {}
@@ -482,7 +508,7 @@ def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
             pos[node] = (x, y)
 
     # --- Draw figure ---
-    plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(10, 8))
     color_map = {"core": "red", "agg": "orange", "edge": "green", "h": "blue"}
     size_map = {"core": 30, "agg": 20, "edge": 10, "h": 5}
 
@@ -507,8 +533,10 @@ def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300)
+        plt.close(fig)
 
 
+@edge_highlighting
 def plot_dragonfly(G, save_path='net_dragonfly.png'):
     """
     Draw a circular Dragonfly layout: groups in a large ring,
@@ -659,7 +687,6 @@ def plot_torus3d(G, active_edges=None, max_edges=4000, save_path="net_torus3d.pn
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300)
-
 
 
 if __name__ == "__main__":

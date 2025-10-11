@@ -587,7 +587,9 @@ class Engine:
                 if self.simulate_network:
 
                     net_util, net_cong, net_tx, net_rx, max_throughput = \
-                        self.network_model.simulate_network_utilization(job=job, debug=self.debug)
+                        self.network_model.simulate_network_utilization(job=job, \
+                                                                        time=self.current_timestep, \
+                                                                        debug=self.debug)
 
                     net_utils.append(net_util)
                     net_congs.append(net_cong)

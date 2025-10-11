@@ -109,7 +109,7 @@ class NetworkModel:
         else:
             raise ValueError(f"Unsupported topology: {self.topology}")
 
-    def simulate_network_utilization(self, *, job, debug=False):
+    def simulate_network_utilization(self, *, job, time, debug=False):
         net_util = net_cong = net_tx = net_rx = 0
         max_throughput = self.max_link_bw * job.trace_quanta
 
@@ -125,6 +125,13 @@ class NetworkModel:
             host_list = [node_id_to_host_name(n, self.fattree_k) for n in job.scheduled_nodes]
             loads = link_loads_for_job(self.net_graph, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
+
+            # every few simulated seconds, snapshot the topology
+            #if time % 10 == 0:  # every 5 min of sim time
+            #    congested = [edge for edge, load in loads.items() if load > 0.8 * max_throughput]
+            #    save_path = os.path.join(self.output_dir, f"net_{time:06d}.png")
+            #    plot_fattree_hierarchy(self.net_graph, k=self.fattree_k, save_path=save_path) #, highlight_edges=congested)
+
             if debug:
                 print("  fat-tree hosts:", host_list)
 
