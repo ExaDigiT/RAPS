@@ -89,6 +89,10 @@ get the datasets. To run a network simulation, use the following command:
 
     raps run -f /opt/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net
 
+To simulate synthetic network tests:
+
+    raps run --system lassen -w network_test --net -t 15m
+
 ## Snapshot of extracted workload data
 
 To reduce the expense of extracting the needed data from the telemetry parquet files,
