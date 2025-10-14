@@ -1,4 +1,4 @@
-def continuous_job_generation(self, *, engine, timestep, jobs):
+def continuous_job_generation(*, engine, timestep, jobs):
     # print("if len(engine.queue) <= engine.continuous_workload.args.maxqueue:")
     # print(f"if {len(engine.queue)} <= {engine.continuous_workload.args.maxqueue}:")
     if len(engine.queue) <= engine.continuous_workload.args.maxqueue:

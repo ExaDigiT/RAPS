@@ -11,6 +11,7 @@ from raps.utils import (
 
 from .constants import JOB_NAMES, ACCT_NAMES, MAX_PRIORITY
 
+
 class BasicWorkload:
 
     # Test for random 'reasonable' AI jobs
@@ -19,17 +20,17 @@ class BasicWorkload:
         jobs = []
         for i in range(args.numjobs):
             draw = random.randint(0, 10)
-            if draw == 0:
+            if draw != 0:
                 et = random.randint(7200, 28800)
                 nr = random.choice([128, 256, 512, 1024, 1280, 1792, 2048])
                 new_job = Job(job_dict(nodes_required=nr,
-                                       name="LLM",
+                                       name="LLM Production",
                                        account="llmUser",
                                        end_state="Success",
                                        id=random.randint(1, 99999),
                                        cpu_trace=0.1,
-                                       gpu_trace=(random.uniform(0.55, 0.8) *
-                                                  self.config_map[self.args.system]['GPUS_PER_NODE']),
+                                       gpu_trace=(random.uniform(0.55, 0.8)
+                                                  * self.config_map[self.args.system]['GPUS_PER_NODE']),
                                        ntx_trace=None,
                                        nrx_trace=None,
                                        submit_time=0,
@@ -38,8 +39,10 @@ class BasicWorkload:
                                        end_time=et,
                                        expected_run_time=et))
             else:
-                new_job = Job(job_dict(nodes_required=1,
-                                       name="LLM",
+                et = random.randint(300, 7200)
+                nr = random.choice([1, 1, 1, 1, 1, 2, 4, 8, 16, 32, 128])
+                new_job = Job(job_dict(nodes_required=nr,
+                                       name="User-Test LLM",
                                        account="llmUser",
                                        end_state="Success",
                                        id=random.randint(1, 99999),
@@ -50,7 +53,7 @@ class BasicWorkload:
                                        submit_time=0,
                                        time_limit=43200,
                                        start_time=0,
-                                       end_time=7200,
+                                       end_time=et,
                                        expected_run_time=random.randint(60, 7200)))
             jobs.append(new_job)
         return jobs
