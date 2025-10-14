@@ -120,7 +120,7 @@ cooling:
   w_cts_key: "simulator[1].centralEnergyPlant[1].coolingTowerLoop[1].summary.W_flow_CT_kW"
 network:
   topology: fat-tree
-  network_max_bw: 1000000000.0
+  network_max_bw: 12.5e9
   fattree_k: 32
   dragonfly_d: 11
   dragonfly_a: 9
