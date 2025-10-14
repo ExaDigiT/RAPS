@@ -193,6 +193,26 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     gantt_nodes: bool = False
     """ Print Gannt with nodes required as line thickness (default false) """
 
+    # Congestion workload arguments
+    congestion_job_sizes_str: str = Field(default="2 4 8 16 32 64", alias="congestion_job_sizes")
+    """ List of job sizes (as a space-separated string) to sample from for the congestion workload """
+    congestion_job_mix_str: str = Field(default="0.6 0.25 0.15", alias="congestion_job_mix")
+    """ Mix of job communication patterns (as a space-separated string) for the congestion workload """
+    congestion_tx_fraction: float = Field(default=0.35, alias="txfrac")
+    """ Fraction of per-link bandwidth per job for the congestion workload """
+
+    @property
+    def congestion_job_sizes(self) -> list[int]:
+        return [int(x) for x in self.congestion_job_sizes_str.split()]
+
+    @property
+    def congestion_job_mix(self) -> list[float]:
+        mix = [float(x) for x in self.congestion_job_mix_str.split()]
+        if abs(sum(mix) - 1.0) > 1e-6:
+            import warnings
+            warnings.warn(f"congestion_job_mix values should sum to 1.0, but sum is {sum(mix)}")
+        return mix
+
     # Synthetic workloads
     scheduler: Literal[
         "default",
@@ -418,6 +438,10 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         args_dict['start'] = self.start.astimezone().isoformat() if self.start else None
         args_dict['end'] = self.end.astimezone().isoformat() if self.end else None
         args_dict.pop("fastforward")  # Remove fastforward from this to avoid confusion later
+
+        # Manually add the parsed properties for the workload generator
+        args_dict['congestion_job_sizes'] = self.congestion_job_sizes
+        args_dict['congestion_job_mix'] = self.congestion_job_mix
 
         args_dict['sim_config'] = self
         return args_dict

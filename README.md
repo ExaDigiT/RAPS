@@ -97,6 +97,10 @@ Run network congestion tests outside of RAPS:
 
     python scripts/run_inter_job_congestion.py --config config/lassen.yaml -v
 
+net-dev plus:
+
+    raps run --system lassen -w inter_job_congestion --net -t 15m --numjobs 80 --congestion-job-sizes "4 8 16 32 64 128" --txfrac 0.5
+
 ## Snapshot of extracted workload data
 
 To reduce the expense of extracting the needed data from the telemetry parquet files,

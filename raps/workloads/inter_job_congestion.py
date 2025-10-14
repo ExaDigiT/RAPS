@@ -15,10 +15,11 @@ class InterJobCongestionWorkload:
             topology=topology,
             J=args.numjobs,
             trace_quanta=legacy_cfg.get("TRACE_QUANTA", 20),
-            tx_fraction_per_job=getattr(args, 'txfrac', 0.35), # Assuming txfrac might be an arg
+            tx_fraction_per_job=args.congestion_tx_fraction,
+            job_sizes=args.congestion_job_sizes,
+            job_mix=args.congestion_job_mix,
             seed=args.seed
         )
-
 
 def infer_group_params(legacy_cfg: dict, topology: str) -> Tuple[int, int, str]:
     """
@@ -69,6 +70,8 @@ def nodes_in_group(group_idx: int, H: int, total_nodes: int, n: int) -> List[int
     start = group_idx * H
     end = min(start + H, total_nodes)
     n = min(n, end - start)
+    if n <= 0:
+        return []
     base = random.randrange(start, end - n + 1) if (end - start - n) > 0 else start
     return list(range(base, base + n))
 
@@ -79,6 +82,8 @@ def generate_jobs(
     J: int = 60,
     trace_quanta: int = 20,
     tx_fraction_per_job: float = 0.35,
+    job_sizes: list[int] = [2, 4, 8, 16, 32, 64],
+    job_mix: list[float] = [0.6, 0.25, 0.15],
     seed: int = 42
 ) -> List[Job]:
     """Generate synthetic jobs spanning and overlapping local groups."""
@@ -86,36 +91,53 @@ def generate_jobs(
     total_nodes = int(legacy_cfg["TOTAL_NODES"])
     H, R, label = infer_group_params(legacy_cfg, topology)
     per_tick_bw = max_throughput_per_tick(legacy_cfg, trace_quanta)
-    per_dir = tx_fraction_per_job * per_tick_bw
+    # This is the total traffic for the JOB, to be divided among its nodes.
+    total_job_traffic = tx_fraction_per_job * per_tick_bw
 
     print(f"[INFO] topology={topology}, {label}s={R}, hosts_per_{label}={H}")
-    print(f"[INFO] total_nodes={total_nodes}, per-dir={per_dir:.2e} B/tick")
+    print(f"[INFO] total_nodes={total_nodes}, total_job_traffic={total_job_traffic:.2e} B/tick")
 
     jobs: List[Job] = []
     jid = 1
 
-    # Roughly 60% cross-group, 25% intra-group, 15% multi-group
-    n_cross = int(J * 0.6)
-    n_intra = int(J * 0.25)
+    # Unpack job mix
+    cross_frac, intra_frac, multi_frac = job_mix
+    n_cross = int(J * cross_frac)
+    n_intra = int(J * intra_frac)
     n_multi = J - n_cross - n_intra
 
     for _ in range(n_cross):
+        job_size = random.choice(job_sizes)
+        nodes_per_group = max(1, job_size // 2)
         a, b = pick_two_distinct_groups(R)
-        nodes = nodes_in_group(a, H, total_nodes, 1) + nodes_in_group(b, H, total_nodes, 1)
-        jobs.append(make_job(jid, nodes, per_dir, trace_quanta))
-        jid += 1
+        nodes = nodes_in_group(a, H, total_nodes, nodes_per_group) + \
+                nodes_in_group(b, H, total_nodes, job_size - nodes_per_group)
+        if nodes:
+            per_node_traffic = total_job_traffic / len(nodes)
+            jobs.append(make_job(jid, nodes, per_node_traffic, trace_quanta))
+            jid += 1
 
     for _ in range(n_intra):
+        job_size = random.choice(job_sizes)
         g = random.randrange(0, R)
-        nodes = nodes_in_group(g, H, total_nodes, 2)
-        jobs.append(make_job(jid, nodes, per_dir, trace_quanta))
-        jid += 1
+        nodes = nodes_in_group(g, H, total_nodes, job_size)
+        if nodes:
+            per_node_traffic = total_job_traffic / len(nodes)
+            jobs.append(make_job(jid, nodes, per_node_traffic, trace_quanta))
+            jid += 1
 
     for _ in range(n_multi):
+        job_size = random.choice(job_sizes)
+        nodes_per_group = max(1, job_size // 2)
         a, b = pick_two_distinct_groups(R)
-        nodes = nodes_in_group(a, H, total_nodes, 2) + nodes_in_group(b, H, total_nodes, 2)
-        jobs.append(make_job(jid, nodes, per_dir, trace_quanta))
-        jid += 1
+        # This is the same as cross-group, but could be extended
+        # for now, it just creates larger cross-group jobs
+        nodes = nodes_in_group(a, H, total_nodes, nodes_per_group) + \
+                nodes_in_group(b, H, total_nodes, job_size - nodes_per_group)
+        if nodes:
+            per_node_traffic = total_job_traffic / len(nodes)
+            jobs.append(make_job(jid, nodes, per_node_traffic, trace_quanta))
+            jid += 1
 
     print(f"[INFO] jobs={len(jobs)} (cross={n_cross}, intra={n_intra}, multi={n_multi})")
     return jobs

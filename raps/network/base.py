@@ -4,6 +4,24 @@ from raps.utils import get_current_utilization
 from raps.network.fat_tree import node_id_to_host_name
 from raps.network.torus3d import link_loads_for_job_torus, torus_host_from_real_index
 
+def get_host_list_for_job(job, network_model, legacy_cfg):
+    """Helper function to get the list of host names for a job based on topology."""
+    if network_model.topology == "fat-tree":
+        k = int(legacy_cfg.get("FATTREE_K", 32))
+        return [node_id_to_host_name(n, k) for n in job.scheduled_nodes]
+    elif network_model.topology == "dragonfly":
+        return [network_model.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
+    elif network_model.topology == "torus3d":
+        X = int(legacy_cfg.get("TORUS_X", 12))
+        Y = int(legacy_cfg.get("TORUS_Y", 12))
+        Z = int(legacy_cfg.get("TORUS_Z", 12))
+        hosts_per_router = int(legacy_cfg.get("HOSTS_PER_ROUTER", 1))
+        return [
+            torus_host_from_real_index(n, X, Y, Z, hosts_per_router)
+            for n in job.scheduled_nodes
+        ]
+    return []
+
 def debug_print_trace(job, label: str = ""):
     """Print either the length (if iterable) or the value of job.gpu_trace."""
     if hasattr(job.gpu_trace, "__len__"):
@@ -186,26 +204,14 @@ def simulate_inter_job_congestion(network_model, jobs, legacy_cfg, debug=False):
         job.trace_start_time = 0
         net_tx = get_current_utilization(job.ntx_trace, job)
 
-        job_loads = {}
-        if network_model.topology in ("fat-tree", "dragonfly"):
-            if network_model.topology == "fat-tree":
-                k = int(legacy_cfg.get("FATTREE_K", 32))
-                host_list = [node_id_to_host_name(n, k) for n in job.scheduled_nodes]
-            else:  # dragonfly
-                host_list = [network_model.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
-            
-            job_loads = link_loads_for_job(network_model.net_graph, host_list, net_tx)
+        host_list = get_host_list_for_job(job, network_model, legacy_cfg)
 
+        if network_model.topology in ("fat-tree", "dragonfly"):
+            job_loads = link_loads_for_job(network_model.net_graph, host_list, net_tx)
         elif network_model.topology == "torus3d":
-            X = int(legacy_cfg.get("TORUS_X", 12))
-            Y = int(legacy_cfg.get("TORUS_Y", 12))
-            Z = int(legacy_cfg.get("TORUS_Z", 12))
-            hosts_per_router = int(legacy_cfg.get("HOSTS_PER_ROUTER", 1))
-            host_list = [
-                torus_host_from_real_index(n, X, Y, Z, hosts_per_router)
-                for n in job.scheduled_nodes
-            ]
             job_loads = link_loads_for_job_torus(network_model.net_graph, network_model.meta, host_list, net_tx)
+        else:
+            job_loads = {}
 
         for edge, load in job_loads.items():
             edge_key = tuple(sorted(edge))

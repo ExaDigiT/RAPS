@@ -29,9 +29,12 @@ from raps.power import (
 )
 from raps.network import (
     NetworkModel,
-    apply_job_slowdown,
-    compute_system_network_stats,
-    simulate_inter_job_congestion
+    network_utilization,
+    link_loads_for_job,
+    link_loads_for_job_torus,
+    get_host_list_for_job,
+    max_throughput_per_tick,
+    get_link_util_stats,
 )
 from raps.telemetry import Telemetry
 from raps.cooling import ThermoFluidsModel
@@ -541,15 +544,9 @@ class Engine:
         scheduled_nodes = []
         cpu_utils = []
         gpu_utils = []
-        net_congs = []
         net_utils = []
-        net_tx_list = []
-        net_rx_list = []
-
-        slowdown_factors = []
 
         for job in self.running:
-
             job.running_time = self.current_timestep - job.start_time
 
             if job.current_state != JobState.RUNNING:
@@ -557,77 +554,94 @@ class Engine:
                     f"Job {job.id} is in running list, "
                     + f"but state is not RUNNING: job.state == {job.current_state}"
                 )
-            else:  # if job.state == JobState.RUNNING:
-                # Error checks
-                if job.running_time > job.time_limit and job.end_time is not None:
-                    raise Exception(f"Job exceded time limit! "
-                                    f"{job.running_time} > {job.time_limit}"
-                                    f"\n{job}"
-                                    f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
-                                    )
-                if replay and job.running_time > job.expected_run_time:
-                    raise Exception(f"Job should have ended in replay! "
-                                    f" {job.running_time} > {job.expected_run_time}"
-                                    f"\n{job}"
-                                    f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
-                                    )
+            
+            # Error checks for time limits
+            if job.running_time > job.time_limit and job.end_time is not None:
+                raise Exception(f"Job exceded time limit! "
+                                f"{job.running_time} > {job.time_limit}"
+                                f"\n{job}"
+                                f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
+                                )
+            if replay and job.running_time > job.expected_run_time:
+                raise Exception(f"Job should have ended in replay! "
+                                f" {job.running_time} > {job.expected_run_time}"
+                                f"\n{job}"
+                                f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
+                                )
 
-                # Aggregate scheduled nodes
-                scheduled_nodes.append(job.scheduled_nodes)
+            scheduled_nodes.append(job.scheduled_nodes)
+            cpu_utils.append(get_current_utilization(job.cpu_trace, job))
+            gpu_utils.append(get_current_utilization(job.gpu_trace, job))
 
-                # Get CPU utilization
-                cpu_util = get_current_utilization(job.cpu_trace, job)
-                cpu_utils.append(cpu_util)
-                # Percentage Utilization!
+        # --- Per-Job Network Simulation and Slowdown ---
+        avg_tx, avg_rx, avg_net_util, slowdown_per_job = None, None, None, 0
+        if self.simulate_network and self.network_model and self.running:
+            # Stage 1: Aggregate loads from all running jobs
+            total_loads = {tuple(sorted(edge)): 0.0 for edge in self.network_model.net_graph.edges()}
+            per_job_loads = {}
 
-                # Get GPU utilization
-                gpu_util = get_current_utilization(job.gpu_trace, job)
-                gpu_utils.append(gpu_util)
-                # Percentage Utilization!
+            for job in self.running:
+                net_tx = get_current_utilization(job.ntx_trace, job)
+                net_rx = get_current_utilization(job.nrx_trace, job)
+                max_tp_util = self.network_model.max_link_bw * job.trace_quanta
+                net_utils.append(network_utilization(net_tx, net_rx, max_tp_util))
 
-                # Simulate network utilization
-                if self.simulate_network:
+                host_list = get_host_list_for_job(job, self.network_model, self.config)
 
-                    net_util, net_cong, net_tx, net_rx, max_throughput = \
-                        self.network_model.simulate_network_utilization(job=job, debug=self.debug)
-
-                    net_utils.append(net_util)
-                    net_congs.append(net_cong)
-                    net_tx_list.append(net_tx)
-                    net_rx_list.append(net_rx)
-
+                if self.network_model.topology in ("fat-tree", "dragonfly"):
+                    job_loads = link_loads_for_job(self.network_model.net_graph, host_list, net_tx)
+                elif self.network_model.topology == "torus3d":
+                    job_loads = link_loads_for_job_torus(self.network_model.net_graph, self.network_model.meta, host_list, net_tx)
                 else:
-                    net_util, net_cong, net_tx, net_rx = 0.0, 0.0, 0.0, 0.0
-                    max_throughput = 0
-                    net_utils.append(net_util)
-                    net_congs.append(net_cong)
-                    net_tx_list.append(net_tx)
-                    net_rx_list.append(net_rx)
+                    job_loads = {}
+                
+                per_job_loads[job.id] = job_loads
+                
+                for edge, load in job_loads.items():
+                    edge_key = tuple(sorted(edge))
+                    if edge_key in total_loads:
+                        total_loads[edge_key] += load
 
-                # Apply slowdowns
-                slowdown_factor = apply_job_slowdown(job=job,
-                                                     max_throughput=max_throughput,
-                                                     net_util=net_util,
-                                                     net_cong=net_cong,
-                                                     net_tx=net_tx,
-                                                     net_rx=net_rx,
-                                                     debug=self.debug)
-                slowdown_factors.append(slowdown_factor)
+            # Stage 2: Apply per-job slowdown based on contention
+            for job in self.running:
+                job_loads_keys = per_job_loads.get(job.id, {}).keys()
+                job_worst_congestion = 0.0
+                max_tp_cong = self.network_model.max_link_bw * job.trace_quanta
 
-        # All required values for each jobs have been an collected.
-        # Continue with calculations for the whole system:
+                if job_loads_keys:
+                    for link in job_loads_keys:
+                        link_key = tuple(sorted(link))
+                        if link_key in total_loads:
+                            link_congestion = (total_loads[link_key] * 8) / max_tp_cong
+                            if link_congestion > job_worst_congestion:
+                                job_worst_congestion = link_congestion
+                
+                slowdown_factor = max(1.0, job_worst_congestion)
+                job.slowdown_factor = slowdown_factor # Store for potential reporting
+                if slowdown_factor > 1.0 and not getattr(job, 'dilated', False):
+                    job.apply_dilation(slowdown_factor)
+                    job.dilated = True
+
+            # For reporting, calculate overall stats from total_loads
+            if self.running:
+                slowdown_per_job = sum(getattr(j, 'slowdown_factor', 1.0) for j in self.running) / len(self.running)
+                
+            if total_loads:
+                trace_quanta = self.running[0].trace_quanta
+                max_tp_stats = max_throughput_per_tick(self.config, trace_quanta)
+                congestion_stats = get_link_util_stats(total_loads, max_tp_stats)
+                self.net_congestion_history.append((self.current_timestep, congestion_stats['max']))
+                avg_net_util = congestion_stats['mean']
+            else:
+                avg_net_util = 0.0
+
+        else:
+            net_utils = [0.0] * len(self.running)
+        # --- End of Network Logic ---
 
         # System Utilization Statistics
         system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
         self.record_util_stats(system_util=system_util)
-
-        # --- Inter-Job Network Congestion ---
-        if self.simulate_network and self.network_model and self.running:
-            total_congestion = simulate_inter_job_congestion(
-                self.network_model, self.running, self.config, self.debug
-            )
-            self.net_congestion_history.append((self.current_timestep, total_congestion))
-        # ---
 
         # System Power
         if self.power_manager:  # Power is always simulated
@@ -662,20 +676,7 @@ class Engine:
 
         # System Network
         if self.network_model:
-            avg_tx, avg_rx, avg_net = compute_system_network_stats(net_utils=net_utils,
-                                                                   net_tx_list=net_tx_list,
-                                                                   net_rx_list=net_rx_list,
-                                                                   slowdown_factors=slowdown_factors
-                                                                   )
-            slowdown_per_job = sum(slowdown_factors) / len(slowdown_factors) if len(slowdown_factors) != 0 else 0
-            self.record_network_stats(avg_tx=avg_tx,
-                                      avg_rx=avg_rx,
-                                      avg_net=avg_net)
-        else:
-            avg_tx, avg_rx, avg_net = None, None, None
-            slowdown_per_job = 0
-
-        # Continue with System Simulation
+            self.record_network_stats(avg_tx=0, avg_rx=0, avg_net=avg_net_util)
 
         # Calculate node occupancy
         node_occupancy = {node['id']: 0 for node in self.resource_manager.nodes}  # Initialize even if no running jobs
@@ -695,7 +696,7 @@ class Engine:
             fmu_outputs=cooling_outputs,
             avg_net_tx=avg_tx,
             avg_net_rx=avg_rx,
-            avg_net_util=avg_net,
+            avg_net_util=avg_net_util,
             slowdown_per_job=slowdown_per_job,
             node_occupancy=node_occupancy,
         )

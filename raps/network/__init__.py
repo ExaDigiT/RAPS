@@ -10,6 +10,7 @@ from .base import (
     network_utilization,
     worst_link_util,
     get_link_util_stats,
+    get_host_list_for_job,
     simulate_inter_job_congestion,
     max_throughput_per_tick,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "simulate_inter_job_congestion",
     "max_throughput_per_tick",
     "get_link_util_stats",
+    "get_host_list_for_job",
 ]
 
 
