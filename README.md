@@ -93,6 +93,10 @@ To simulate synthetic network tests:
 
     raps run --system lassen -w network_test --net -t 15m
 
+Run network congestion tests outside of RAPS:
+
+    python scripts/run_inter_job_congestion.py --config config/lassen.yaml -v
+
 ## Snapshot of extracted workload data
 
 To reduce the expense of extracting the needed data from the telemetry parquet files,
