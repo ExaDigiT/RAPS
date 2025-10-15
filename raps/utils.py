@@ -6,7 +6,8 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
+from collections.abc import Iterable
 from enum import Enum
 import os
 import hashlib
@@ -69,6 +70,13 @@ def to_dict(arg):
         return vars(arg)
     else:
         raise ValueError(f"Cannot convert {arg} to dict")
+
+DateType = TypeVar("DateType", date, datetime)
+def date_range(start: DateType, end: DateType, step = timedelta(days=1)) -> Iterable[DateType]:
+    window_start = start
+    while window_start < end:
+        yield window_start
+        window_start += step
 
 
 def sum_values(values):

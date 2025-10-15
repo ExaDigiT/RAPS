@@ -10,13 +10,16 @@
     python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 """
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
+import subprocess
 from tqdm import tqdm
+from pathlib import Path
 
 from ..job import job_dict, Job
-from ..utils import power_to_utilization, encrypt, WorkloadData
+from ..utils import power_to_utilization, encrypt, WorkloadData, date_range
 
 
 def aging_boost(nnodes):
@@ -609,3 +612,42 @@ def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     name = CDU_NAMES[index - 1]
     row, col = int(name[2]), int(name[3:5])
     return (row, col)
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    HOST = "dtn.ccs.ornl.gov"
+    DATA_LAKE = "/lustre/orion/stf218/proj-shared/data/lake/frontier"
+
+    print("Downloading the Frontier dataset requires access permissions.")
+    print("If you have access you can download via SSH.")
+    USERNAME = input("NCCS Username: ")
+    # jobs are indexed by submission time so download a few extra days to make sure we get all that
+    # ran over start -> end
+    if start:
+        start = (start - timedelta(days = 2)).astimezone(ZoneInfo("UTC"))
+    else:
+        start = datetime.fromisoformat("2023-09-01T00:00:00Z")
+    if end:
+        end = (end + timedelta(days = 2)).astimezone(ZoneInfo("UTC"))
+    else:
+        end = datetime.now(ZoneInfo("UTC"))
+
+    days = list(date_range(start, end))
+
+    dest.mkdir(parents=True)
+    subprocess.run(["rsync", "-rvm",
+        *[f"--include=date={d.date().isoformat()}/***" for d in days],
+        "--exclude", '*',
+        f"{USERNAME}@{HOST}:{DATA_LAKE}/jobprofile/jobprofile/",
+        str(dest / "jobprofile")
+    ], check=True, text=True)
+
+    (dest / 'slurm').mkdir(parents=True)
+    subprocess.run(["rsync", "-rvm",
+        *[f"--include=date={d.date().isoformat()}/***" for d in days],
+        "--exclude", '*',
+        f"{USERNAME}@{HOST}:{DATA_LAKE}/slurm/joblive/",
+        str(dest / "slurm/joblive")
+    ], check=True, text=True)
+
+    print("Done!")
