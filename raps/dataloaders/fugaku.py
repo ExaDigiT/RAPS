@@ -1,5 +1,5 @@
 """
-Use the fugaku dataset published at https://zenodo.org/records/11467483
+Uses the fugaku dataset published at https://zenodo.org/records/11467483
 
 Note that F-Data doesn't give a list of nodes used, so we set 'scheduled_nodes' to None
 which triggers the scheduler to schedule the nodes itself.

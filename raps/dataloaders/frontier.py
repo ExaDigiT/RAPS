@@ -1,13 +1,13 @@
 """
-    Note: Frontier telemetry data is not publicly available.
+Note: Frontier telemetry data is not publicly available.
 
-    # To simulate
-    DATEDIR="date=2024-01-18"
-    DPATH=/path/to/data
-    raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
+# To simulate
+DATEDIR="date=2024-01-18"
+DPATH=/path/to/data
+raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
-    # To analyze the data
-    python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
+# To analyze the data
+python -m raps.telemetry -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 """
 import time
 from datetime import datetime, timezone, timedelta

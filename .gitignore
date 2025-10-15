@@ -9,3 +9,4 @@ models/fmu-models
 .shell-completion-cache
 raps-output-*
 ppo_raps_logs
+/data

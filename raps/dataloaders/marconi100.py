@@ -6,7 +6,11 @@ of The International Conference on High Performance Computing,
 Network, Storage, and Analysis. 2023.
 
 # get the data
-Download `job_table.parquet` from https://zenodo.org/records/10127767
+Download the dataset with
+```
+raps download --system marconi100
+```
+This will download the dataset from https://zenodo.org/records/10127767
 
 # to simulate the dataset
 raps run -f /path/to/job_table.parquet --system marconi100
