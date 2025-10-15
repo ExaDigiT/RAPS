@@ -69,7 +69,7 @@ def main(cli_args: list[str] | None = None):
 
     from raps.run_sim import run_sim_add_parser, run_parts_sim_add_parser, show_add_parser
     from raps.workloads import run_workload_add_parser
-    from raps.telemetry import run_telemetry_add_parser
+    from raps.telemetry import run_telemetry_add_parser, run_download_add_parser
     from raps.train_rl import train_rl_add_parser
 
     parser = argparse.ArgumentParser(
@@ -85,6 +85,7 @@ def main(cli_args: list[str] | None = None):
     show_add_parser(subparsers)
     run_workload_add_parser(subparsers)
     run_telemetry_add_parser(subparsers)
+    run_download_add_parser(subparsers)
     train_rl_add_parser(subparsers)
     shell_completion_add_parser(subparsers)
 
