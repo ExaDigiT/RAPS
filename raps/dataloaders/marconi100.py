@@ -1,31 +1,34 @@
 """
-    # Reference
-    Antici, Francesco, et al. "PM100: A Job Power Consumption Dataset of a
-    Large-scale Production HPC System." Proceedings of the SC'23 Workshops
-    of The International Conference on High Performance Computing,
-    Network, Storage, and Analysis. 2023.
+# Reference
+Antici, Francesco, et al. "PM100: A Job Power Consumption Dataset of a
+Large-scale Production HPC System." Proceedings of the SC'23 Workshops
+of The International Conference on High Performance Computing,
+Network, Storage, and Analysis. 2023.
 
-    # get the data
-    Download `job_table.parquet` from https://zenodo.org/records/10127767
+# get the data
+Download `job_table.parquet` from https://zenodo.org/records/10127767
 
-    # to simulate the dataset
-    raps run -f /path/to/job_table.parquet --system marconi100
+# to simulate the dataset
+raps run -f /path/to/job_table.parquet --system marconi100
 
-    # to replay using differnt schedulers
-    raps run -f /path/to/job_table.parquet --system marconi100 --policy fcfs --backfill easy
-    raps run -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
+# to replay using differnt schedulers
+raps run -f /path/to/job_table.parquet --system marconi100 --policy fcfs --backfill easy
+raps run -f /path/to/job_table.parquet --system marconi100 --policy priority --backfill firstfit
 
-    # to fast-forward 60 days and replay for 1 day
-    raps run -f /path/to/job_table.parquet --system marconi100 --start 2020-07-05T00:00:00+00:00 -t 1d
+# to fast-forward 60 days and replay for 1 day
+raps run -f /path/to/job_table.parquet --system marconi100 --start 2020-07-05T00:00:00+00:00 -t 1d
 
-    # to analyze dataset
-    python -m raps.telemetry -f /path/to/job_table.parquet --system marconi100 -v
-
+# to analyze dataset
+python -m raps.telemetry -f /path/to/job_table.parquet --system marconi100 -v
 """
 import uuid
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pathlib import Path
+from datetime import datetime
+import requests
+import urllib.request
 
 from ..job import job_dict, Job
 from ..utils import power_to_utilization, WorkloadData
@@ -241,3 +244,15 @@ def cdu_index_to_name(index: int, config: dict):
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
     return (0, index)  # TODO
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    files = requests.get("https://zenodo.org/api/records/10127767").json()["files"]
+
+    # marconi100 is just one big parquet, nothing to pre-filter
+    dest.mkdir(parents = True)
+    for file in files:
+        print(f"Downloading {file['key']}")
+        urllib.request.urlretrieve(file['links']['self'], dest / file['key'])
+
+    print("Done!")
