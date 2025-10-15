@@ -371,7 +371,7 @@ def run_telemetry(args: TelemetryArgs):
 
 class DownloadArgs(RAPSBaseModel):
     system: str
-    dest: ResolvedPath
+    dest: ResolvedPath | None = None
     start: AutoAwareDatetime | None = None
     end: AutoAwareDatetime | None = None
 
@@ -387,4 +387,5 @@ def run_download_add_parser(subparsers: SubParsers):
 def run_download(args: DownloadArgs):
     config = get_system_config(args.system).get_legacy()
     td = Telemetry(system = args.system, config = config)
-    td.download_data(args.dest, args.start, args.end)
+    dest = args.dest if args.dest else Path("./data").resolve() / args.system
+    td.download_data(dest, args.start, args.end)
