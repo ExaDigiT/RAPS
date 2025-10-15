@@ -35,6 +35,8 @@ import uuid
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pathlib import Path
+import subprocess, shutil
 from datetime import datetime, timedelta
 
 from ..job import job_dict, Job
@@ -339,3 +341,12 @@ if __name__ == "__main__":
 
     tx_sequence, rx_sequence = generate_network_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
     print(tx_sequence, rx_sequence)
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    dest.mkdir(parents = True)
+    subprocess.run(["git", "clone", "https://github.com/LLNL/LAST/", str(dest / 'repo')], check=True, text=True)
+    subprocess.run(["git", "lfs", "pull"], check=True, text=True, cwd=dest / "repo")
+    (dest / "repo" / "Lassen-Supercomputer-Job-Dataset").rename(dest / "Lassen-Supercomputer-Job-Dataset")
+    shutil.rmtree(dest / 'repo')
+    print("Done!")
