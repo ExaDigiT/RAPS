@@ -85,9 +85,13 @@ class Telemetry:
         self.system = kwargs['system']
         self.config = kwargs.get('config')
 
+        if kwargs.get("dataloader"):
+            module = kwargs['dataloader']
+        else:
+            module = f"raps.dataloaders.{self.system.split('/')[0]}"
+
         try:
-            module = self.system.split("/")[0]
-            self.dataloader = importlib.import_module(f"raps.dataloaders.{module}", package=__package__)
+            self.dataloader = importlib.import_module(module, package=__package__)
         except ImportError as e:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None

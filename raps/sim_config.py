@@ -118,6 +118,13 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     replay: list[ResolvedPath] | None = None
     """ Either: path/to/joblive path/to/jobprofile OR filename.npz """
 
+    dataloader: str | None = None
+    """
+    Python module path to use as the dataloader when loading replay data. Only relevant if replay is
+    set. E.g. Defaults to "raps.dataloaders.<system>" but can be set to your own custom dataloader
+    as well.
+    """
+
     encrypt: bool = False
     """ Encrypt sensitive data in telemetry """
 
