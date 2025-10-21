@@ -9,6 +9,9 @@ from .base import (
     network_slowdown,
     network_utilization,
     worst_link_util,
+    get_link_util_stats,
+    simulate_inter_job_congestion,
+    max_throughput_per_tick,
 )
 
 from .fat_tree import build_fattree, node_id_to_host_name, subsample_hosts
@@ -32,6 +35,9 @@ __all__ = [
     "build_torus3d",
     "build_dragonfly",
     "dragonfly_node_id_to_host_name",
+    "simulate_inter_job_congestion",
+    "max_throughput_per_tick",
+    "get_link_util_stats",
 ]
 
 
