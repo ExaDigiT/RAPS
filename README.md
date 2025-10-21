@@ -83,7 +83,7 @@ Microsoft Azure - 2017 Philly Traces
     python main.py run-parts -x philly -w multitenant
 
     # Telemetry replay
-    python main.py run-parts -x philly -f /opt/data/philly/trace-data --start 2017-10-03T00:00 --end 2017-10-04T00:00
+    python main.py run-parts -x philly -f /opt/data/philly/trace-data --start 2017-10-03T00:14:56Z  --end 2017-10-04T00:00
 
 For Lumi
 
