@@ -1,3 +1,14 @@
+"""
+See raps/dataloaders/philly.py for how to download philly traces.
+
+Run following to parse philly traces into separate files for each day:
+
+    python /path/to/raps/scripts/parse_philly_traces.py cluster_cpu_util
+    python /path/to/raps/scripts/parse_philly_traces.py cluster_gpu_util
+
+This will parse these two files into two directories, cpu_by_day and gpu_by_day,
+creating one file for each day and adding the lines for that day into the files.
+"""
 import os
 import sys
 from datetime import datetime
@@ -23,7 +34,6 @@ with open(input_file) as f:
     output_dir = "cpu_by_day" if is_cpu else "gpu_by_day"
     os.makedirs(output_dir, exist_ok=True)
 
-    #for i, line in enumerate(f, 1):
     for line in tqdm(f, total=total_lines, desc="Processing lines"):
         parts = line.strip().split(",")
 
