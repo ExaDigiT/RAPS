@@ -623,9 +623,13 @@ class Engine:
 
         # --- Inter-Job Network Congestion ---
         if self.simulate_network and self.network_model and self.running:
-            total_congestion = simulate_inter_job_congestion(
+            congestion_stats = simulate_inter_job_congestion(
                 self.network_model, self.running, self.config, self.debug
             )
+            if isinstance(congestion_stats, dict):
+                total_congestion = congestion_stats['mean']
+            else:
+                total_congestion = congestion_stats
             self.net_congestion_history.append((self.current_timestep, total_congestion))
         # ---
 
