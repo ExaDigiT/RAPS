@@ -29,7 +29,7 @@ Note: Requires python3.12 or greater.
 
     # Frontier
     DATEDIR="date=2024-01-18"
-    DPATH=~/data/frontier-sample-2024-01-18
+    DPATH=/opt/data/frontier
     raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
 ## Open Telemetry dataset
@@ -37,7 +37,7 @@ Note: Requires python3.12 or greater.
 For Marconi supercomputer, download `job_table.parquet` from https://zenodo.org/records/10127767
 
     # Marconi100
-    raps run --system marconi100 -f ~/data/marconi100/job_table.parquet
+    raps run --system marconi100 -f /opt/data/marconi100/job_table.parquet
 
 For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from https://zenodo.org/records/14007065
 
@@ -46,10 +46,10 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
 
 For Google cluster trace v2
 
-    raps run --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
+    raps run --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
 
     # analyze dataset
-    raps telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
+    raps telemetry --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample -v
 
 For MIT Supercloud
 
