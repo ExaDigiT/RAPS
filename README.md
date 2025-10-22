@@ -29,7 +29,7 @@ Note: Requires python3.12 or greater.
 
     # Frontier
     DATEDIR="date=2024-01-18"
-    DPATH=~/data/frontier-sample-2024-01-18
+    DPATH=/opt/data/frontier
     raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
 ## Open Telemetry dataset
@@ -37,7 +37,7 @@ Note: Requires python3.12 or greater.
 For Marconi supercomputer, download `job_table.parquet` from https://zenodo.org/records/10127767
 
     # Marconi100
-    raps run --system marconi100 -f ~/data/marconi100/job_table.parquet
+    raps run --system marconi100 -f /opt/data/marconi100/job_table.parquet
 
 For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from https://zenodo.org/records/14007065
 
@@ -46,10 +46,10 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
 
 For Google cluster trace v2
 
-    raps run --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
+    raps run --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
 
     # analyze dataset
-    raps telemetry --system gcloudv2 -f ~/data/gcloud/v2/google_cluster_data_2011_sample -v
+    raps telemetry --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample -v
 
 For MIT Supercloud
 
@@ -95,7 +95,17 @@ For Lumi
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to
 get the datasets. To run a network simulation, use the following command:
 
-    raps run -f ~/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net 
+    raps run -f /opt/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net
+
+To simulate synthetic network tests:
+
+    raps run --system lassen -w network_test --net -t 15m
+
+    raps run --system lassen -w inter_job_congestion --net -t 15m
+
+Run network congestion tests outside of RAPS:
+
+    python scripts/run_inter_job_congestion.py --config config/lassen.yaml -v
 
 ## Snapshot of extracted workload data
 

@@ -2,7 +2,50 @@ import networkx as nx
 from itertools import combinations
 
 
-def build_dragonfly(D: int, A: int, P: int) -> nx.Graph:
+import networkx as nx
+
+def build_dragonfly(d, a, p):
+    """
+    Build a Dragonfly network graph.
+    d = routers per group
+    a = global connections per router
+    p = compute nodes per router
+    """
+    G = nx.Graph()
+    num_groups = a + 1  # standard Dragonfly rule
+
+    # --- Routers and hosts ---
+    for g in range(num_groups):
+        for r in range(d):
+            router = f"r_{g}_{r}"
+            G.add_node(router, layer="router", group=g)
+
+            # attach p hosts to each router
+            for h in range(p):
+                host = f"h_{g}_{r}_{h}"
+                G.add_node(host, layer="host", group=g)
+                G.add_edge(router, host)
+
+    # --- Intra-group full mesh ---
+    for g in range(num_groups):
+        routers = [f"r_{g}_{r}" for r in range(d)]
+        for i in range(d):
+            for j in range(i + 1, d):
+                G.add_edge(routers[i], routers[j])
+
+    # --- Inter-group (global) links ---
+    for g in range(num_groups):
+        for r in range(d):
+            src = f"r_{g}_{r}"
+            for offset in range(1, a + 1):
+                dst_group = (g + offset) % num_groups
+                dst = f"r_{dst_group}_{r % d}"
+                G.add_edge(src, dst)
+
+    return G
+
+
+def build_dragonfly2(D: int, A: int, P: int) -> nx.Graph:
     """
     Build a “simple” k-ary Dragonfly with:
        D = # of groups
@@ -17,6 +60,12 @@ def build_dragonfly(D: int, A: int, P: int) -> nx.Graph:
       1. All routers within a group form a full clique.
       2. Each router r in group g has exactly one “global link” to router r in each other group.
       3. Each router r in group g attaches to P hosts ("h_{g}_{r}_{0..P−1}").
+
+    Examples
+    --------
+    >>> from raps.plotting import plot_network_graph
+    >>> G = build_dragonfly(D=2, A=2, P=2)
+    >>> plot_network_graph(G, 'dragonfly.png')
     """
     G = nx.Graph()
 
@@ -55,21 +104,41 @@ def build_dragonfly(D: int, A: int, P: int) -> nx.Graph:
 
 def dragonfly_node_id_to_host_name(fat_idx: int, D: int, A: int, P: int) -> str:
     """
-    Given a contiguous fat‐index ∈ [0..(D*A*P − 1)], return "h_{g}_{r}_{p}".
-    Hosts are laid out in order:
-      0..(P−1)    → group=0, router=0, p=0..P−1
-      P..2P−1     → group=0, router=1, p=0..P−1
-      …
-      (A*P)..(2A*P−1) → group=1, router=0, …
-    In general:
-       host_offset      = fat_idx % P
-       router_offset    = (fat_idx // P) % A
-       group            = fat_idx // (A*P)
-    """
-    total_hosts = D * A * P
-    assert 0 <= fat_idx < total_hosts, "fat_idx out of range"
+    Convert a contiguous Dragonfly host index to its hierarchical name.
 
-    host_offset = fat_idx % P
-    router_group = (fat_idx // P) % A
-    pod = fat_idx // (A * P)
-    return f"h_{pod}_{router_group}_{host_offset}"
+    For a Dragonfly with:
+      D routers per group,
+      A global links per router  ⇒ num_groups = A + 1,
+      P compute nodes per router.
+
+    Hosts are laid out in contiguous order:
+      group g = floor(fat_idx / (D * P))
+      router r = (fat_idx // P) % D
+      host   h = fat_idx % P
+    """
+    num_groups = A + 1
+    total_hosts = num_groups * D * P
+    assert 0 <= fat_idx < total_hosts, f"fat_idx {fat_idx} out of range (max {total_hosts-1})"
+
+    group = fat_idx // (D * P)
+    router = (fat_idx // P) % D
+    host = fat_idx % P
+    return f"h_{group}_{router}_{host}"
+
+
+def build_dragonfly_idx_map(d: int, a: int, p: int, total_real_nodes: int) -> dict[int, str]:
+    """
+    Build a mapping {real_node_index: host_name} for Dragonfly.
+    Wrap around if total_real_nodes > total_hosts.
+    """
+    num_groups = a + 1
+    total_hosts = num_groups * d * p
+
+    mapping = {}
+    for i in range(total_real_nodes):
+        fat_idx = i % total_hosts  # <- wrap safely
+        group = fat_idx // (d * p)
+        router = (fat_idx // p) % d
+        host = fat_idx % p
+        mapping[i] = f"h_{group}_{router}_{host}"
+    return mapping

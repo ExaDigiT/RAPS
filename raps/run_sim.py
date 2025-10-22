@@ -53,7 +53,7 @@ def run_sim(sim_config: SingleSimConfig):
 
     out = sim_config.get_output()
     if out:
-        out.mkdir(parents=True)
+        out.mkdir(parents=True, exist_ok=True)
         engine.telemetry.save_snapshot(
             dest=str(out / 'snapshot.npz'),
             result=engine.get_workload_data(),
@@ -136,6 +136,9 @@ def run_sim(sim_config: SingleSimConfig):
                 pl.plot_history(df['time'], df[ylabel])
             else:
                 print('Cooling model not enabled... skipping output of plot')
+
+        if 'net' in sim_config.plot:
+            engine.network_model.plot_topology(out)
 
         if 'temp' in sim_config.plot:
             if engine.cooling_model:

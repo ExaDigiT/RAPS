@@ -1,3 +1,4 @@
+import random
 import networkx as nx
 
 
@@ -13,7 +14,7 @@ def node_id_to_host_name(node_id: int, k: int) -> str:
     return f"h_{pod}_{edge}_{host}"
 
 
-def build_fattree(k):
+def build_fattree(k, total_nodes):
     """
     Build a k-ary fat-tree:
       - k pods
@@ -25,7 +26,19 @@ def build_fattree(k):
       - edge switches "e_{pod}_{edge}"
       - agg   switches "a_{pod}_{agg}"
       - core  switches "c_{i}_{j}"
+
+    Examples
+    --------
+    >>> from raps.plotting import plot_network_graph
+    >>> G = build_fattree(k=4, total_nodes=16)
+    >>> plot_network_graph(G, 'fat_tree.png')
     """
+    num_hosts = (k**3) // 4
+    if num_hosts < total_nodes:
+        raise ValueError(
+           f"Fat-tree network with k={k} has {num_hosts} hosts, but the system has {total_nodes} nodes. "
+           f"Please increase the value of 'fattree_k' in the system configuration file."
+        )
     G = nx.Graph()
     # core
     # num_core = (k//2)**2  # Unused!
@@ -56,4 +69,14 @@ def build_fattree(k):
                 host = f"h_{pod}_{edge}_{h}"
                 G.add_node(host, type="host")
                 G.add_edge(e, host)
+    return G
+
+
+def subsample_hosts(G, num_hosts):
+    """Reduce the number of host nodes in the FatTree graph to match system size."""
+    hosts = [n for n in G if n.startswith("h")]
+    if num_hosts < len(hosts):
+        keep = set(random.sample(hosts, num_hosts))
+        remove = [n for n in hosts if n not in keep]
+        G.remove_nodes_from(remove)
     return G

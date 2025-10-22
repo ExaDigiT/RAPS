@@ -15,6 +15,8 @@ from .constants import JOB_NAMES, ACCT_NAMES, MAX_PRIORITY
 from .distribution import DistributionWorkload
 from .live import continuous_job_generation
 from .multitenant import MultitenantWorkload
+from .network import NetworkTestWorkload
+from .inter_job_congestion import InterJobCongestionWorkload
 from .utils import plot_job_hist
 
 
@@ -53,6 +55,8 @@ class Workload(
     DistributionWorkload,
     BasicWorkload,
     MultitenantWorkload,
+    NetworkTestWorkload,
+    InterJobCongestionWorkload,
     Calculon
 ):
     """Final workload class with all workload types."""

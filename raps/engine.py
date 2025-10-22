@@ -30,7 +30,8 @@ from raps.power import (
 from raps.network import (
     NetworkModel,
     apply_job_slowdown,
-    compute_system_network_stats
+    compute_system_network_stats,
+    simulate_inter_job_congestion
 )
 from raps.telemetry import Telemetry
 from raps.cooling import ThermoFluidsModel
@@ -292,6 +293,7 @@ class Engine:
         self.avg_net_tx = []
         self.avg_net_rx = []
         self.net_util_history = []
+        self.net_congestion_history = []
         self.avg_slowdown_history = []
         self.max_slowdown_history = []
         self.node_occupancy_history = []
@@ -328,7 +330,7 @@ class Engine:
             available_nodes = self.resource_manager.available_nodes
             self.network_model = NetworkModel(
                 available_nodes=available_nodes,
-                config=self.config,
+                config=self.config
             )
         else:
             self.network_model = None
@@ -620,6 +622,18 @@ class Engine:
         # System Utilization Statistics
         system_util = self.num_active_nodes / self.config['AVAILABLE_NODES'] * 100
         self.record_util_stats(system_util=system_util)
+
+        # --- Inter-Job Network Congestion ---
+        if self.simulate_network and self.network_model and self.running:
+            congestion_stats = simulate_inter_job_congestion(
+                self.network_model, self.running, self.config, self.debug
+            )
+            if isinstance(congestion_stats, dict):
+                total_congestion = congestion_stats['mean']
+            else:
+                total_congestion = congestion_stats
+            self.net_congestion_history.append((self.current_timestep, total_congestion))
+        # ---
 
         # System Power
         if self.power_manager:  # Power is always simulated

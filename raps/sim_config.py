@@ -109,7 +109,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Enable verbose output """
     layout: Literal["layout1", "layout2"] = "layout1"
     """ UI layout """
-    plot: list[Literal["power", "loss", "pue", "temp", "util"]] | None = None
+    plot: list[Literal["power", "loss", "pue", "temp", "util", "net"]] | None = None
     """ Plots to generate """
 
     imtype: Literal["png", "svg", "jpg", "pdf", "eps"] = "png"
@@ -134,8 +134,9 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Grab data from live system. """
 
     # Workload arguments (TODO split into separate model)
-    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic', 
-                      'multitenant', 'replay', 'randomAI', 'calculon'] = "random"
+    workload: Literal['random', 'benchmark', 'peak', 'idle', 'synthetic',
+                      'multitenant', 'replay', 'randomAI', 'network_test',
+                      'inter_job_congestion', 'calculon'] = "random"
 
     """ Type of synthetic workload """
     multimodal: list[float] = [1.0]
@@ -327,7 +328,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         if self.jobsize_is_power_of is not None and self.jobsize_is_of_degree is not None:
             raise ValueError("jobsize_is_power_of and jobsize_is_of_degree are mutually exclusive")
 
-        if self.plot and not self.output:
+        if self.plot and self.output == "none":
             raise ValueError("plot requires an output directory to be set")
 
         if self.live and not self.replay and self.time is None:

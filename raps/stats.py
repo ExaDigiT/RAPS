@@ -140,6 +140,16 @@ def get_network_stats(engine: Engine):
         max_job_slow = 1.0
     stats["max_per_job_slowdown"] = max_job_slow
 
+    if engine.net_congestion_history:
+        congestion_values = [c for t, c in engine.net_congestion_history]
+        stats['avg_inter_job_congestion'] = sum(congestion_values) / len(congestion_values)
+        stats['max_inter_job_congestion'] = max(congestion_values)
+        stats['min_inter_job_congestion'] = min(congestion_values)
+    else:
+        stats['avg_inter_job_congestion'] = 0.0
+        stats['max_inter_job_congestion'] = 0.0
+        stats['min_inter_job_congestion'] = 0.0
+
     return stats
 
 
@@ -414,6 +424,9 @@ def print_formatted_report(engine_stats=None,
         "avg_network_util": "{:.2f}%",
         "avg_per_job_slowdown": "{:.2f}x",
         "max_per_job_slowdown": "{:.2f}x",
+        "avg_inter_job_congestion": "{:.2f}",
+        "max_inter_job_congestion": "{:.2f}",
+        "min_inter_job_congestion": "{:.2f}",
     })
 
 

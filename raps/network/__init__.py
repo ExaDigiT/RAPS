@@ -1,3 +1,6 @@
+import os
+import warnings
+
 from .base import (
     all_to_all_paths,
     apply_job_slowdown,
@@ -7,11 +10,16 @@ from .base import (
     network_slowdown,
     network_utilization,
     worst_link_util,
+    get_link_util_stats,
+    simulate_inter_job_congestion,
+    max_throughput_per_tick,
 )
 
-from .fat_tree import build_fattree, node_id_to_host_name
-from .torus3d import build_torus3d, link_loads_for_job_torus
-from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name
+from .fat_tree import build_fattree, node_id_to_host_name, subsample_hosts
+from .torus3d import build_torus3d, link_loads_for_job_torus, torus_host_from_real_index
+from .dragonfly import build_dragonfly, dragonfly_node_id_to_host_name, build_dragonfly_idx_map
+from raps.plotting import plot_fattree_hierarchy, plot_dragonfly, plot_torus2d, plot_torus3d
+
 from raps.utils import get_current_utilization
 
 __all__ = [
@@ -28,6 +36,9 @@ __all__ = [
     "build_torus3d",
     "build_dragonfly",
     "dragonfly_node_id_to_host_name",
+    "simulate_inter_job_congestion",
+    "max_throughput_per_tick",
+    "get_link_util_stats",
 ]
 
 
@@ -39,8 +50,11 @@ class NetworkModel:
         self.real_to_fat_idx = kwargs.get("real_to_fat_idx", {})
 
         if self.topology == "fat-tree":
+            total_nodes = config['TOTAL_NODES'] - len(config['DOWN_NODES'])
             self.fattree_k = config.get("FATTREE_K")
-            self.net_graph = build_fattree(self.fattree_k)
+            self.net_graph = build_fattree(self.fattree_k, total_nodes)
+            # TODO: future testing of subsampling feature
+            #self.net_graph = subsample_hosts(self.net_graph, num_hosts=4626)
 
         elif self.topology == "torus3d":
             dims = (
@@ -67,11 +81,22 @@ class NetworkModel:
                             nid += 1
 
         elif self.topology == "dragonfly":
-            self.net_graph = build_dragonfly(
-                int(config["DRAGONFLY_D"]),
-                int(config["DRAGONFLY_A"]),
-                int(config.get("DRAGONFLY_P", 1))
-            )
+            D = self.config["DRAGONFLY_D"]
+            A = self.config["DRAGONFLY_A"]
+            P = self.config["DRAGONFLY_P"]
+            self.net_graph = build_dragonfly(D, A, P)
+
+            # total nodes seen by scheduler or job trace
+            total_real_nodes = getattr(self, "available_nodes", None)
+            if total_real_nodes is None:
+                total_real_nodes = 4626  # fallback for Lassen
+
+            # if available_nodes is a list, take its length
+            if not isinstance(total_real_nodes, int):
+                total_real_nodes = len(total_real_nodes)
+
+            self.real_to_fat_idx = build_dragonfly_idx_map(D, A, P, total_real_nodes)
+            print(f"[DEBUG] Dragonfly mapping: {len(self.real_to_fat_idx)} entries")
 
         elif self.topology == "capacity":
             # Capacity-only model: no explicit graph
@@ -100,18 +125,28 @@ class NetworkModel:
                 print("  fat-tree hosts:", host_list)
 
         elif self.topology == "dragonfly":
-            D, A, P = self.config["DRAGONFLY_D"], self.config["DRAGONFLY_A"], self.config["DRAGONFLY_P"]
-            host_list = [
-                dragonfly_node_id_to_host_name(self.real_to_fat_idx[real_n], D, A, P)
-                for real_n in job.scheduled_nodes
-            ]
+            D = self.config["DRAGONFLY_D"]
+            A = self.config["DRAGONFLY_A"]
+            P = self.config["DRAGONFLY_P"]
+            # Directly use mapped host names
+            host_list = [self.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
             if debug:
                 print("  dragonfly hosts:", host_list)
+            print("Example nodes in graph:", list(self.net_graph.nodes)[:10])
+            print("Contains h_0_9_0?", "h_0_9_0" in self.net_graph)
             loads = link_loads_for_job(self.net_graph, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
 
         elif self.topology == "torus3d":
-            host_list = [self.id_to_host[n] for n in job.scheduled_nodes]
+            X = self.config["TORUS_X"]
+            Y = self.config["TORUS_Y"]
+            Z = self.config["TORUS_Z"]
+            hosts_per_router = self.config["HOSTS_PER_ROUTER"]
+            #host_list = [self.id_to_host[n] for n in job.scheduled_nodes]
+            host_list = [
+                torus_host_from_real_index(n, X, Y, Z, hosts_per_router)
+                for n in job.scheduled_nodes
+            ]
             loads = link_loads_for_job_torus(self.net_graph, self.meta, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
             if debug:
@@ -124,3 +159,23 @@ class NetworkModel:
             raise ValueError(f"Unsupported topology: {self.topology}")
 
         return net_util, net_cong, net_tx, net_rx, max_throughput
+
+    def plot_topology(self, output_dir):
+        """Plot network topology - save as png file in output_dir."""
+        if output_dir:
+            if self.topology == "fat-tree":
+                save_path = output_dir / "net-fat-tree.png"
+                plot_fattree_hierarchy(self.net_graph, k=self.fattree_k, save_path=save_path)
+            elif self.topology == "dragonfly":
+                save_path = output_dir / "net-dragonfly.png"
+                plot_dragonfly(self.net_graph, save_path=save_path)
+            elif self.topology == "torus3d":
+                save_path = output_dir / "net-torus2d.png"
+                plot_torus2d(self.net_graph, save_path=save_path)
+                save_path = output_dir / "net-torus3d.png"
+                plot_torus3d(self.net_graph, save_path=save_path)
+            else:
+                warnings.warn(
+                    f"plotting not supported for {self.topology} topology",
+                    UserWarning
+                )
