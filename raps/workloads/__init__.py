@@ -10,6 +10,7 @@ from raps.sim_config import SingleSimConfig
 from raps.telemetry import Telemetry
 
 from .basic import BasicWorkload
+from .calculon import Calculon
 from .constants import JOB_NAMES, ACCT_NAMES, MAX_PRIORITY
 from .distribution import DistributionWorkload
 from .live import continuous_job_generation
@@ -55,7 +56,8 @@ class Workload(
     BasicWorkload,
     MultitenantWorkload,
     NetworkTestWorkload,
-    InterJobCongestionWorkload
+    InterJobCongestionWorkload,
+    Calculon
 ):
     """Final workload class with all workload types."""
     pass
