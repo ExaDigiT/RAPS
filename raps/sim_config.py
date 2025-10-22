@@ -327,7 +327,7 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         if self.jobsize_is_power_of is not None and self.jobsize_is_of_degree is not None:
             raise ValueError("jobsize_is_power_of and jobsize_is_of_degree are mutually exclusive")
 
-        if self.plot and not self.output:
+        if self.plot and self.output == "none":
             raise ValueError("plot requires an output directory to be set")
 
         if self.live and not self.replay and self.time is None:

@@ -137,6 +137,9 @@ def run_sim(sim_config: SingleSimConfig):
             else:
                 print('Cooling model not enabled... skipping output of plot')
 
+        if 'net' in sim_config.plot:
+            engine.network_model.plot_topology(out)
+
         if 'temp' in sim_config.plot:
             if engine.cooling_model:
                 ylabel = 'Tr_pri_Out[1]'

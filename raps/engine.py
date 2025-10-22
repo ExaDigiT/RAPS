@@ -330,9 +330,7 @@ class Engine:
             available_nodes = self.resource_manager.available_nodes
             self.network_model = NetworkModel(
                 available_nodes=available_nodes,
-                config=self.config,
-                plot=self.sim_config.plot,
-                output_dir=self.sim_config.get_output(),
+                config=self.config
             )
         else:
             self.network_model = None
