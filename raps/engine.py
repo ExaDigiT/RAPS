@@ -411,8 +411,12 @@ class Engine:
             # Free the nodes via the resource manager.
             self.resource_manager.free_nodes_from_job(job)
 
-        killed_jobs = [job for job in self.running if
-                       job.end_time is not None and job.start_time + job.time_limit <= self.current_timestep]
+        if not replay:
+            killed_jobs = [job for job in self.running if
+                           job.end_time is not None and
+                           job.start_time + job.time_limit <= self.current_timestep]
+        else:
+            killed_jobs = []
 
         need_reschedule = need_reschedule or (killed_jobs != [])
 
@@ -555,7 +559,7 @@ class Engine:
                 )
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
-                if job.running_time > job.time_limit and job.end_time is not None:
+                if not replay and job.running_time > job.time_limit and job.end_time is not None:
                     raise Exception(f"Job exceded time limit! "
                                     f"{job.running_time} > {job.time_limit}"
                                     f"\n{job}"
