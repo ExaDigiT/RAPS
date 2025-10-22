@@ -45,7 +45,8 @@ class NetworkModel:
     def __init__(self, *, available_nodes, config, **kwargs):
         self.config = config
         self.output_dir = kwargs.get('output_dir')
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if self.output_dir:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
         self.topology = config.get("TOPOLOGY")
         self.max_link_bw = config.get("NETWORK_MAX_BW", 1e9)  # default safeguard
         self.real_to_fat_idx = kwargs.get("real_to_fat_idx", {})
@@ -54,9 +55,11 @@ class NetworkModel:
             total_nodes = config['TOTAL_NODES'] - len(config['DOWN_NODES'])
             self.fattree_k = config.get("FATTREE_K")
             self.net_graph = build_fattree(self.fattree_k, total_nodes)
+            # TODO: future testing of subsampling feature
             #self.net_graph = subsample_hosts(self.net_graph, num_hosts=4626)
-            save_path = os.path.join(self.output_dir, "net-fat-tree.png")
-            plot_fattree_hierarchy(self.net_graph, k=self.fattree_k, save_path=save_path)
+            if self.output_dir:
+                save_path = os.path.join(self.output_dir, "net-fat-tree.png")
+                plot_fattree_hierarchy(self.net_graph, k=self.fattree_k, save_path=save_path)
 
         elif self.topology == "torus3d":
             dims = (
@@ -70,10 +73,11 @@ class NetworkModel:
             # Build the graph and metadata
             self.net_graph, self.meta = build_torus3d(dims, wrap, hosts_per_router=hosts_per_router)
 
-            save_path = os.path.join(self.output_dir, "net-torus2d.png")
-            plot_torus2d(self.net_graph, save_path=save_path)
-            save_path = os.path.join(self.output_dir, "net-torus3d.png")
-            plot_torus3d(self.net_graph, save_path=save_path)
+            if self.output_dir:
+                save_path = os.path.join(self.output_dir, "net-torus2d.png")
+                plot_torus2d(self.net_graph, save_path=save_path)
+                save_path = os.path.join(self.output_dir, "net-torus3d.png")
+                plot_torus3d(self.net_graph, save_path=save_path)
 
             # Deterministic numeric → host mapping
             X, Y, Z = self.meta["dims"]
@@ -105,8 +109,9 @@ class NetworkModel:
             self.real_to_fat_idx = build_dragonfly_idx_map(D, A, P, total_real_nodes)
             print(f"[DEBUG] Dragonfly mapping: {len(self.real_to_fat_idx)} entries")
 
-            save_path = os.path.join(self.output_dir, "net-dragonfly.png")
-            plot_dragonfly(self.net_graph, save_path=save_path)
+            if self.output_dir:
+                save_path = os.path.join(self.output_dir, "net-dragonfly.png")
+                plot_dragonfly(self.net_graph, save_path=save_path)
 
         elif self.topology == "capacity":
             # Capacity-only model: no explicit graph
