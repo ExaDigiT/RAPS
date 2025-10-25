@@ -13,6 +13,7 @@ from .basic import BasicWorkload
 from .calculon import Calculon
 from .constants import JOB_NAMES, ACCT_NAMES, MAX_PRIORITY
 from .distribution import DistributionWorkload
+from .hpl import HPL
 from .live import continuous_job_generation
 from .multitenant import MultitenantWorkload
 from .network import NetworkTestWorkload
@@ -57,7 +58,8 @@ class Workload(
     MultitenantWorkload,
     NetworkTestWorkload,
     InterJobCongestionWorkload,
-    Calculon
+    Calculon,
+    HPL
 ):
     """Final workload class with all workload types."""
     pass
