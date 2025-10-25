@@ -1,8 +1,16 @@
 """
+Hao Lu's analytical HPL model. Ref:
+
+    Lu et al., "Insights from Optimizing HPL Performance on Exascale Systems: 
+    A Comparative Analysis of Panel Factorization", in SC'25 Proceedings.
+
 Test using:
 
     python main.py run -w hpl -d
+
+or:
     python raps/workloads/hpl.py    
+
 """
 from raps.job import Job, job_dict
 import numpy as np
@@ -101,6 +109,7 @@ class HPL:
 
         return {"T_total": total_T, "gpu_util": gpu_util, "cpu_util": cpu_util}
 
+
 if __name__ == "__main__":
     import json
     import numpy as np
@@ -137,4 +146,3 @@ if __name__ == "__main__":
         print(f"Avg GPU util: {np.mean(job.gpu_trace):.3f}")
         print(f"Expected run time: {job.expected_run_time:.2f}")
         print()
-
