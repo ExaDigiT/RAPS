@@ -1,7 +1,7 @@
 """
 Hao Lu's analytical HPL model. Ref:
 
-    Lu et al., "Insights from Optimizing HPL Performance on Exascale Systems: 
+    Lu et al., "Insights from Optimizing HPL Performance on Exascale Systems:
     A Comparative Analysis of Panel Factorization", in SC'25 Proceedings.
 
 Test using:
@@ -9,12 +9,12 @@ Test using:
     python main.py run -w hpl -d
 
 or:
-    python raps/workloads/hpl.py    
+    python raps/workloads/hpl.py
 
 """
 from raps.job import Job, job_dict
 import numpy as np
-import math, random, json
+import math
 
 
 class HPL:
@@ -32,7 +32,7 @@ class HPL:
             {"M": 16777216, "b": 576, "P": 192, "Q": 192, "Rtype": "1-ring"},
         ]
 
-        #GCDS_PER_GPU = 2
+        # GCDS_PER_GPU = 2
 
         for test in hpl_tests:
             for partition in self.partitions:
@@ -43,7 +43,7 @@ class HPL:
                 results = self._run_hpl_model(**test)
 
                 total_time = results["T_total"]
-                gpu_util = results["gpu_util"]
+                gpu_util = self.config_map[self.args.system]['GPUS_PER_NODE'] * results["gpu_util"]
                 cpu_util = results["cpu_util"]
 
                 num_samples = math.ceil(total_time / trace_quanta) + 1
@@ -51,7 +51,7 @@ class HPL:
                 cpu_trace = np.full(num_samples, cpu_util)
 
                 job_info = job_dict(
-                    #nodes_required=test["P"] * test["Q"] // (cfg["GPUS_PER_NODE"] * GCDS_PER_GPU),
+                    # nodes_required=test["P"] * test["Q"] // (cfg["GPUS_PER_NODE"] * GCDS_PER_GPU),
                     nodes_required=test["P"] * test["Q"] // cfg["GPUS_PER_NODE"],
                     scheduled_nodes=[],
                     name=f"HPL_{test['M']}x{test['M']}",
@@ -111,8 +111,6 @@ class HPL:
 
 
 if __name__ == "__main__":
-    import json
-    import numpy as np
 
     # Mock minimal configuration values to mimic ExaDigiT runtime
     class DummyHPL(HPL):
