@@ -27,9 +27,9 @@ class HPL:
         jobs = []
         # Example: parameter sweep across node counts or block sizes
         hpl_tests = [
-            #{"M": 131072, "b": 576, "P": 192, "Q": 384, "Rtype": "1-ring"},
-            #{"M": 131072, "b": 576, "P": 16, "Q": 32, "Rtype": "1-ring"},
-            {"M": 741455, "b": 576, "P": 16, "Q": 32, "Rtype": "1-ring"},
+            {"M": 1482910, "b": 576, "P": 16, "Q": 32, "Rtype": "1-ring"},
+            {"M": 2965820, "b": 576, "P": 32, "Q": 32, "Rtype": "1-ring"},
+            {"M": 16777216, "b": 576, "P": 192, "Q": 192, "Rtype": "1-ring"},
         ]
 
         #GCDS_PER_GPU = 2
