@@ -640,7 +640,7 @@ def get_current_utilization(trace, job: Job):
     if not job.trace_quanta:
         raise ValueError("job.trace_quanta is not set; cannot compute utilization.")
 
-    time_quanta_index = int((job.running_time - job.trace_start_time) // job.trace_quanta)
+    time_quanta_index = int((job.current_run_time - job.trace_start_time) // job.trace_quanta)
     if time_quanta_index < 0:
         time_quanta_index = 0
 
@@ -699,6 +699,7 @@ def validate_resolved_path(path: str | Path, info: ValidationInfo):
         if not path.is_relative_to(base_path):
             raise ValueError(f"{path} is not under {base_path}")
     return path
+
 
 ResolvedPath = A[Path, AfterValidator(validate_resolved_path)]
 """
@@ -829,7 +830,7 @@ def read_yaml(config_file: str | None) -> dict:
     return result
 
 
-def read_yaml_parsed(cls: type[T], config_file = None) -> dict:
+def read_yaml_parsed(cls: type[T], config_file=None) -> dict:
     """
     Like read_yaml, but parses the input to resolve paths etc.
     Exits on error after printing message (for use in the CLI)

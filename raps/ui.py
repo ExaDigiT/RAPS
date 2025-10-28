@@ -191,10 +191,10 @@ class LayoutManager:
                 nodes_display = col_nodelist
 
             if self.engine.downscale != 1:
-                running_time_str = convert_seconds_to_hhmmss(job.running_time // self.engine.downscale) + \
-                    f" +{job.running_time % self.engine.downscale}/{self.engine.downscale}s"
+                running_time_str = convert_seconds_to_hhmmss(job.current_run_time // self.engine.downscale) + \
+                    f" +{job.current_run_time % self.engine.downscale}/{self.engine.downscale}s"
             else:
-                running_time_str = convert_seconds_to_hhmm(job.running_time)
+                running_time_str = convert_seconds_to_hhmm(job.current_run_time)
 
             row = [
                 str(job.id).zfill(5),
@@ -269,13 +269,13 @@ class LayoutManager:
         # Add data row with white values
         time_in_s = time // self.engine.downscale
         if (time_in_s < 946684800):  # Introducing Y2K into our codebase! Kek
-            time_str = convert_seconds_to_hhmm(time_in_s)
+            time_str = convert_seconds_to_hhmmss(time_in_s)
         else:
             # For the curious: If the simulation time in seconds is large than
             # unix timestamp for Jan 2000 this is a unix timestamp,
             time_str = f"{datetime.fromtimestamp(time_in_s).strftime('%Y-%m-%d %H:%M')}"
         if timestep_start != 0:  # append time simulated
-            time_str += f"\nSim: {convert_seconds_to_hhmm(time_in_s - timestep_start)}"
+            time_str += f"\nSim: {convert_seconds_to_hhmmss(time_in_s - timestep_start)}"
 
         row.append(time_str)
         row.append(str(nrun))

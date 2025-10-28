@@ -4,6 +4,7 @@ from raps.utils import get_current_utilization
 from raps.network.fat_tree import node_id_to_host_name
 from raps.network.torus3d import link_loads_for_job_torus, torus_host_from_real_index
 
+
 def debug_print_trace(job, label: str = ""):
     """Print either the length (if iterable) or the value of job.gpu_trace."""
     if hasattr(job.gpu_trace, "__len__"):
@@ -138,6 +139,7 @@ def worst_link_util(loads, throughput):
             max_util = util
     return max_util
 
+
 def get_link_util_stats(loads, throughput, top_n=10):
     """
     Calculates a distribution of link utilization stats.
@@ -148,9 +150,9 @@ def get_link_util_stats(loads, throughput, top_n=10):
 
     # Calculate utilization for every link
     utilizations = {(edge): (byte_load * 8) / throughput for edge, byte_load in loads.items()}
-    
+
     util_values = list(utilizations.values())
-    
+
     stats = {
         'max': np.max(util_values),
         'mean': np.mean(util_values),
@@ -161,13 +163,15 @@ def get_link_util_stats(loads, throughput, top_n=10):
     # Get top N congested links
     sorted_links = sorted(utilizations.items(), key=lambda item: item[1], reverse=True)
     stats['top_links'] = sorted_links[:top_n]
-    
+
     return stats
+
 
 def max_throughput_per_tick(legacy_cfg: dict, trace_quanta: int) -> float:
     """Return bytes-per-tick throughput of a single link."""
     bw = legacy_cfg.get("NETWORK_MAX_BW") or 12.5e9
     return float(bw) * trace_quanta
+
 
 def simulate_inter_job_congestion(network_model, jobs, legacy_cfg, debug=False):
     """
@@ -181,8 +185,8 @@ def simulate_inter_job_congestion(network_model, jobs, legacy_cfg, debug=False):
     trace_quanta = jobs[0].trace_quanta if jobs else 0
 
     for job in jobs:
-        # Assuming job.running_time is 0 for this static simulation
-        job.running_time = 0
+        # Assuming job.current_run_time is 0 for this static simulation
+        job.current_run_time = 0
         job.trace_start_time = 0
         net_tx = get_current_utilization(job.ntx_trace, job)
 
@@ -193,7 +197,7 @@ def simulate_inter_job_congestion(network_model, jobs, legacy_cfg, debug=False):
                 host_list = [node_id_to_host_name(n, k) for n in job.scheduled_nodes]
             else:  # dragonfly
                 host_list = [network_model.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
-            
+
             job_loads = link_loads_for_job(network_model.net_graph, host_list, net_tx)
 
         elif network_model.topology == "torus3d":
@@ -214,5 +218,5 @@ def simulate_inter_job_congestion(network_model, jobs, legacy_cfg, debug=False):
 
     max_throughput = max_throughput_per_tick(legacy_cfg, trace_quanta)
     net_stats = get_link_util_stats(total_loads, max_throughput)
-    
+
     return net_stats
