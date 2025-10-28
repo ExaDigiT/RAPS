@@ -191,10 +191,10 @@ class LayoutManager:
                 nodes_display = col_nodelist
 
             if self.engine.downscale != 1:
-                running_time_str = convert_seconds_to_hhmmss(job.running_time // self.engine.downscale) + \
-                    f" +{job.running_time % self.engine.downscale}/{self.engine.downscale}s"
+                running_time_str = convert_seconds_to_hhmmss(job.current_run_time // self.engine.downscale) + \
+                    f" +{job.current_run_time % self.engine.downscale}/{self.engine.downscale}s"
             else:
-                running_time_str = convert_seconds_to_hhmm(job.running_time)
+                running_time_str = convert_seconds_to_hhmm(job.current_run_time)
 
             row = [
                 str(job.id).zfill(5),

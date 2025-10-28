@@ -180,7 +180,7 @@ class Job:
         self.trace_start_time = None  # Relative start time of the trace (to running time)
         self.trace_end_time = None    # Relative end time of the trace
         self.trace_quanta = None  # Trace quanta associated with the job # None means single value!
-        self.running_time = 0     # Current running time updated when simulating
+        self.current_run_time = 0     # Current running time updated when simulating
 
         # If a job dict was given, override the values from the job_dict:
         for key, value in job_dict.items():
@@ -232,7 +232,7 @@ class Job:
                 f"trace_start_time={self.trace_start_time}, "
                 f"trace_end_time={self.trace_end_time}, "
                 f"trace_quanta={self.trace_quanta}, "
-                f"running_time={self.running_time}, "
+                f"current_run_time={self.current_run_time}, "
                 f"power={self.power}, "
                 f"power_history={self.power_history})")
 
@@ -296,7 +296,7 @@ class JobStatistics:
         self.account = job.account
         self.num_nodes = len(job.scheduled_nodes)
         self.scheduled_nodes = job.scheduled_nodes
-        self.run_time = job.running_time
+        self.run_time = job.current_run_time
         self.submit_time = job.submit_time
         self.start_time = job.start_time
         self.end_time = job.end_time
