@@ -319,12 +319,18 @@ class SimConfig(RAPSBaseModel, abc.ABC):
             if td is not None:
                 convert_to_time_unit(td, self.time_unit)  # will throw if invalid
 
-        if "workload" not in self.model_fields_set and self.replay:
-            self.workload = "replay"  # default to replay if --replay is set
-        if self.workload == "replay" and not self.replay:
-            raise ValueError('--replay must be set when workload type is "replay"')
-        elif self.workload != "replay" and self.replay:
-            raise ValueError('workload must be either omitted or "replay" when --replay is set')
+        if self.replay:
+            if "workload" not in self.model_fields_set:
+                self.workload = "replay"  # default to replay if --replay is set
+            if not self.policy:
+                self.policy = "replay"
+            if self.workload != "replay" or self.policy != 'replay':
+                raise ValueError('workload & policy must be either omitted or "replay" when --replay is set')
+            if self.scheduler != 'default':
+                raise ValueError('scheduler must be omitted or set to default when --replay is set')
+        else:
+            if self.workload == "replay" or self.policy == "replay":
+                raise ValueError('--replay must be set when workload type is "replay"')
 
         if self.cooling:
             self.layout = "layout2"
