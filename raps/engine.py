@@ -499,7 +499,7 @@ class Engine:
         # update Running time
         for job in self.running:
             if job.current_state == JobState.RUNNING:
-                job.running_time = self.current_timestep - job.start_time
+                job.current_run_time = self.current_timestep - job.start_time
 
         # Stop the simulation if no more jobs are running or in the queue or in the job list.
         if autoshutdown and \
@@ -552,7 +552,7 @@ class Engine:
 
         for job in self.running:
 
-            job.running_time = self.current_timestep - job.start_time
+            job.current_run_time = self.current_timestep - job.start_time
 
             if job.current_state != JobState.RUNNING:
                 raise ValueError(
@@ -561,15 +561,15 @@ class Engine:
                 )
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
-                if not replay and job.running_time > job.time_limit and job.end_time is not None:
+                if not replay and job.current_run_time > job.time_limit and job.end_time is not None:
                     raise Exception(f"Job exceded time limit! "
-                                    f"{job.running_time} > {job.time_limit}"
+                                    f"{job.current_run_time} > {job.time_limit}"
                                     f"\n{job}"
                                     f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
                                     )
-                if replay and job.running_time > job.expected_run_time:
+                if replay and job.current_run_time > job.expected_run_time:
                     raise Exception(f"Job should have ended in replay! "
-                                    f" {job.running_time} > {job.expected_run_time}"
+                                    f" {job.current_run_time} > {job.expected_run_time}"
                                     f"\n{job}"
                                     f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
                                     )

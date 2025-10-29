@@ -55,7 +55,7 @@ def compute_node_power(cpu_util, gpu_util, net_util, config):
     power_gpu = gpu_util * config['POWER_GPU_MAX'] + \
         (config['GPUS_PER_NODE'] - gpu_util) * config['POWER_GPU_IDLE']
 
-    if config.get("POWER_NIC_IDLE") != None and config.get("POWER_NIC_MAX") != None:
+    if config.get("POWER_NIC_IDLE") is not None and config.get("POWER_NIC_MAX") is not None:
         power_nic = config['POWER_NIC_IDLE'] + \
             (config['POWER_NIC_MAX'] - config['POWER_NIC_IDLE']) * net_util
     else:
@@ -432,7 +432,6 @@ class PowerManager:
         jobs_power = self.update_power_state(scheduled_nodes, cpu_utils, gpu_utils, net_utils)
 
         for i, job in enumerate(running_jobs):
-            # if job.running_time % self.config['TRACE_QUANTA'] == 0:
             job.power_history.append(jobs_power[i] * len(job.scheduled_nodes))
 
         # Update the power array UI component
