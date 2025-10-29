@@ -4,7 +4,7 @@ system:
   nodes_per_rack: 4
   rectifiers_per_rack: 32
   chassis_per_rack: 4
-  nodes_per_blade: 2
+  nodes_per_blade: 1
   switches_per_chassis: 4
   nics_per_node: 4
   rectifiers_per_chassis: 4
