@@ -192,7 +192,7 @@ def download(dest: Path, start: datetime | None, end: datetime | None):
 
     files = requests.get("https://zenodo.org/api/records/11467483").json()["files"]
     files = [f for f in files if f['key'].endswith(".parquet")]
-    files = sorted(files, key = lambda f: f['key'])
+    files = sorted(files, key=lambda f: f['key'])
 
     # TODO: I think fugaku data is indexed by submission time not start time, so filtering by
     # filename will probably miss some jobs that ran over start -> end
@@ -202,8 +202,8 @@ def download(dest: Path, start: datetime | None, end: datetime | None):
     if end:
         end_file = end.astimezone(tz).strftime("%y_%m.parquet")
         files = [f for f in files if f['key'] <= end_file]
-    
-    dest.mkdir(parents = True)
+
+    dest.mkdir(parents=True)
     for file in files:
         print(f"Downloading {file['key']}")
         urllib.request.urlretrieve(file['links']['self'], dest / file['key'])

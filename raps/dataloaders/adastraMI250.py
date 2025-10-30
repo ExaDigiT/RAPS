@@ -284,7 +284,7 @@ def cdu_pos(index: int, config: dict) -> tuple[int, int]:
 
 
 def download(dest: Path, start: datetime | None, end: datetime | None):
-    dest.mkdir(parents = True)
+    dest.mkdir(parents=True)
     filename = "AdastaJobsMI250_15days.parquet"
     print(f"Downloading {filename}")
     urllib.request.urlretrieve(f"https://zenodo.org/records/14007065/files/{filename}", dest / filename)

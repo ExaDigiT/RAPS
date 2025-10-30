@@ -71,8 +71,11 @@ def to_dict(arg):
     else:
         raise ValueError(f"Cannot convert {arg} to dict")
 
+
 DateType = TypeVar("DateType", date, datetime)
-def date_range(start: DateType, end: DateType, step = timedelta(days=1)) -> Iterable[DateType]:
+
+
+def date_range(start: DateType, end: DateType, step=timedelta(days=1)) -> Iterable[DateType]:
     window_start = start
     while window_start < end:
         yield window_start

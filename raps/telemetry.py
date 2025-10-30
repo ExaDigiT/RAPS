@@ -390,6 +390,6 @@ def run_download_add_parser(subparsers: SubParsers):
 
 def run_download(args: DownloadArgs):
     config = get_system_config(args.system).get_legacy()
-    td = Telemetry(system = args.system, config = config)
+    td = Telemetry(system=args.system, config=config)
     dest = args.dest if args.dest else Path("./data").resolve() / args.system
     td.download_data(dest, args.start, args.end)

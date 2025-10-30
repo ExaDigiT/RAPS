@@ -624,11 +624,11 @@ def download(dest: Path, start: datetime | None, end: datetime | None):
     # jobs are indexed by submission time so download a few extra days to make sure we get all that
     # ran over start -> end
     if start:
-        start = (start - timedelta(days = 2)).astimezone(ZoneInfo("UTC"))
+        start = (start - timedelta(days=2)).astimezone(ZoneInfo("UTC"))
     else:
         start = datetime.fromisoformat("2023-09-01T00:00:00Z")
     if end:
-        end = (end + timedelta(days = 2)).astimezone(ZoneInfo("UTC"))
+        end = (end + timedelta(days=2)).astimezone(ZoneInfo("UTC"))
     else:
         end = datetime.now(ZoneInfo("UTC"))
 
@@ -636,18 +636,18 @@ def download(dest: Path, start: datetime | None, end: datetime | None):
 
     dest.mkdir(parents=True)
     subprocess.run(["rsync", "-rvm",
-        *[f"--include=date={d.date().isoformat()}/***" for d in days],
-        "--exclude", '*',
-        f"{USERNAME}@{HOST}:{DATA_LAKE}/jobprofile/jobprofile/",
-        str(dest / "jobprofile")
-    ], check=True, text=True)
+                    *[f"--include=date={d.date().isoformat()}/***" for d in days],
+                    "--exclude", '*',
+                    f"{USERNAME}@{HOST}:{DATA_LAKE}/jobprofile/jobprofile/",
+                    str(dest / "jobprofile")
+                    ], check=True, text=True)
 
     (dest / 'slurm').mkdir(parents=True)
     subprocess.run(["rsync", "-rvm",
-        *[f"--include=date={d.date().isoformat()}/***" for d in days],
-        "--exclude", '*',
-        f"{USERNAME}@{HOST}:{DATA_LAKE}/slurm/joblive/",
-        str(dest / "slurm/joblive")
-    ], check=True, text=True)
+                    *[f"--include=date={d.date().isoformat()}/***" for d in days],
+                    "--exclude", '*',
+                    f"{USERNAME}@{HOST}:{DATA_LAKE}/slurm/joblive/",
+                    str(dest / "slurm/joblive")
+                    ], check=True, text=True)
 
     print("Done!")

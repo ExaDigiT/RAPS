@@ -35,7 +35,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
-import subprocess, shutil
+import subprocess
+import shutil
 from datetime import datetime, timedelta
 
 from ..job import job_dict, Job
@@ -343,7 +344,7 @@ if __name__ == "__main__":
 
 
 def download(dest: Path, start: datetime | None, end: datetime | None):
-    dest.mkdir(parents = True)
+    dest.mkdir(parents=True)
     subprocess.run(["git", "clone", "https://github.com/LLNL/LAST/", str(dest / 'repo')], check=True, text=True)
     subprocess.run(["git", "lfs", "pull"], check=True, text=True, cwd=dest / "repo")
     (dest / "repo" / "Lassen-Supercomputer-Job-Dataset").rename(dest / "Lassen-Supercomputer-Job-Dataset")

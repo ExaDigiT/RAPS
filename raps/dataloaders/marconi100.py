@@ -254,7 +254,7 @@ def download(dest: Path, start: datetime | None, end: datetime | None):
     files = requests.get("https://zenodo.org/api/records/10127767").json()["files"]
 
     # marconi100 is just one big parquet, nothing to pre-filter
-    dest.mkdir(parents = True)
+    dest.mkdir(parents=True)
     for file in files:
         print(f"Downloading {file['key']}")
         urllib.request.urlretrieve(file['links']['self'], dest / file['key'])

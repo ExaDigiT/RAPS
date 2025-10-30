@@ -454,7 +454,7 @@ class RunningStats:
         # Infinite generator used for the RunningStats logic
         def running_sum_values(values, last_value, last_index):
             return last_value + sum_values(values[last_index:])
-        
+
         def running_min_value(values, last_value, last_index):
             if last_index < len(values):
                 new_min = min_value(values[last_index:])
