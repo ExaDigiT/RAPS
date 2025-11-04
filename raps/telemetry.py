@@ -9,7 +9,7 @@ helper functions for data encryption and conversion between node name and index 
 from typing import Literal
 import random
 from pathlib import Path
-# import json
+from datetime import datetime
 from typing import Optional
 from types import ModuleType
 import importlib
@@ -21,6 +21,7 @@ from pydantic import model_validator
 from raps.sim_config import SimConfig
 from raps.system_config import get_system_config
 from raps.job import Job, job_dict
+from raps.utils import AutoAwareDatetime
 import matplotlib.pyplot as plt
 from raps.plotting import (
     plot_jobs_gantt,
@@ -84,9 +85,13 @@ class Telemetry:
         self.system = kwargs['system']
         self.config = kwargs.get('config')
 
+        if kwargs.get("dataloader"):
+            module = kwargs['dataloader']
+        else:
+            module = f"raps.dataloaders.{self.system.split('/')[0]}"
+
         try:
-            module = self.system.split("/")[0]
-            self.dataloader = importlib.import_module(f"raps.dataloaders.{module}", package=__package__)
+            self.dataloader = importlib.import_module(module, package=__package__)
         except ImportError as e:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
@@ -182,6 +187,13 @@ class Telemetry:
         """Load telemetry data using custom data loaders."""
         assert self.dataloader
         return self.dataloader.load_live_data(**self.kwargs)
+
+    def download_data(self, dest: Path, start: datetime | None, end: datetime | None):
+        """Load telemetry data using custom data loaders."""
+        assert self.dataloader
+        if not hasattr(self.dataloader, "download"):
+            raise ValueError("Dataloader does not support download")
+        return self.dataloader.download(dest, start, end)
 
     def node_index_to_name(self, index: int):
         """ Convert node index into a name"""
@@ -359,3 +371,25 @@ def run_telemetry(args: TelemetryArgs):
         print(f"Saved to: {filename}")
     else:
         plt.show()
+
+
+class DownloadArgs(RAPSBaseModel):
+    system: str
+    dest: ResolvedPath | None = None
+    start: AutoAwareDatetime | None = None
+    end: AutoAwareDatetime | None = None
+
+
+def run_download_add_parser(subparsers: SubParsers):
+    parser = subparsers.add_parser("download", description="""
+        Download telemetry data
+    """)
+    model_validate = pydantic_add_args(parser, DownloadArgs)
+    parser.set_defaults(impl=lambda args: run_download(model_validate(args, {})))
+
+
+def run_download(args: DownloadArgs):
+    config = get_system_config(args.system).get_legacy()
+    td = Telemetry(system=args.system, config=config)
+    dest = args.dest if args.dest else Path("./data").resolve() / args.system
+    td.download_data(dest, args.start, args.end)

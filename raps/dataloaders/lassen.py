@@ -10,23 +10,22 @@ Reference:
 
 Usage Instructions:
 
-    git clone https://github.com/LLNL/LAST/ && cd LAST
-    git lfs pull
+    raps download --system lassen
 
     # to analyze dataset and plot histograms
-    raps telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --plot
+    raps telemetry -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --plot
 
     # to simulate the dataset as submitted
-    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen
 
     # to modify the submit times of the telemetry according to Poisson distribution
-    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
     # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
-    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
 
     # For the network replay this command gives suiteable snapshots:
-    raps run -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
 
 """
 import math
@@ -35,6 +34,9 @@ import uuid
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pathlib import Path
+import subprocess
+import shutil
 from datetime import datetime, timedelta
 
 from ..job import job_dict, Job
@@ -339,3 +341,12 @@ if __name__ == "__main__":
 
     tx_sequence, rx_sequence = generate_network_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
     print(tx_sequence, rx_sequence)
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    dest.mkdir(parents=True)
+    subprocess.run(["git", "clone", "https://github.com/LLNL/LAST/", str(dest / 'repo')], check=True, text=True)
+    subprocess.run(["git", "lfs", "pull"], check=True, text=True, cwd=dest / "repo")
+    (dest / "repo" / "Lassen-Supercomputer-Job-Dataset").rename(dest / "Lassen-Supercomputer-Job-Dataset")
+    shutil.rmtree(dest / 'repo')
+    print("Done!")

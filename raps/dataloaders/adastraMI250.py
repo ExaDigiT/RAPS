@@ -1,28 +1,30 @@
 """
+# get the data
+```
+raps download --system adastraMI250
+```
+This will download the dataset from https://zenodo.org/records/14007065/files/AdastaJobsMI250_15days.parquet
 
-    # get the data
-    Download `AdastaJobsMI250_15days.parquet` from
-    https://zenodo.org/records/14007065/files/AdastaJobsMI250_15days.parquet
+# to simulate the dataset
+raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250
 
+# to replay with different scheduling policy
+raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
 
-    # to simulate the dataset
-    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250
+# to run a specific time range
+raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 \
+    --start 2024-11-01T00:00:00Z --end 2024-11-02T00:00:00Z
 
-    # to replay with different scheduling policy
-    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250  --policy priority --backfill easy
-
-    # to run a specific time range
-    raps run -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 \
-        --start 2024-11-01T00:00:00Z --end 2024-11-02T00:00:00Z
-
-    # to analyze dataset
-    python -m raps.telemetry -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 -v
-
+# to analyze dataset
+python -m raps.telemetry -f /path/to/AdastaJobsMI250_15days.parquet --system adastraMI250 -v
 """
 import uuid
 import numpy as np
 import pandas as pd
+from pathlib import Path
+from datetime import datetime
 from tqdm import tqdm
+import urllib.request
 
 from ..job import job_dict, Job
 from ..utils import WorkloadData
@@ -279,3 +281,11 @@ def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     name = CDU_NAMES[index - 1]
     row, col = int(name[2]), int(name[3:5])
     return (row, col)
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    dest.mkdir(parents=True)
+    filename = "AdastaJobsMI250_15days.parquet"
+    print(f"Downloading {filename}")
+    urllib.request.urlretrieve(f"https://zenodo.org/records/14007065/files/{filename}", dest / filename)
+    print("Done!")

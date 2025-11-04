@@ -6,7 +6,8 @@ generating random numbers, summarizing and expanding ranges, determining job sta
 
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
+from collections.abc import Iterable
 from enum import Enum
 import os
 import hashlib
@@ -69,6 +70,16 @@ def to_dict(arg):
         return vars(arg)
     else:
         raise ValueError(f"Cannot convert {arg} to dict")
+
+
+DateType = TypeVar("DateType", date, datetime)
+
+
+def date_range(start: DateType, end: DateType, step=timedelta(days=1)) -> Iterable[DateType]:
+    window_start = start
+    while window_start < end:
+        yield window_start
+        window_start += step
 
 
 def sum_values(values):
@@ -637,15 +648,16 @@ def get_current_utilization(trace, job: Job):
     """Return utilization for a trace at the job's current running time.
        Note: this should move to a trace.py and a Trace class!
     """
-    if not job.trace_quanta:
-        raise ValueError("job.trace_quanta is not set; cannot compute utilization.")
-
-    time_quanta_index = int((job.current_run_time - job.trace_start_time) // job.trace_quanta)
-    if time_quanta_index < 0:
-        time_quanta_index = 0
-
     if (isinstance(trace, list) and trace) or \
        (isinstance(trace, np.ndarray) and trace.size != 0):
+
+        if not job.trace_quanta:
+            raise ValueError("job.trace_quanta is not set; cannot compute utilization.")
+
+        time_quanta_index = int((job.current_run_time - job.trace_start_time) // job.trace_quanta)
+        if time_quanta_index < 0:
+            time_quanta_index = 0
+
         if time_quanta_index < len(trace):
             util = get_utilization(trace, time_quanta_index)
         else:
@@ -653,6 +665,7 @@ def get_current_utilization(trace, job: Job):
     elif isinstance(trace, (float, int)):
         util = trace
     else:
+        raise ValueError(f"trace is of unexpected type: {type(trace)}.")
         util = 0.0
 
     return util

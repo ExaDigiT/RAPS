@@ -16,11 +16,11 @@ def test_main_withdata_run(system, system_config, system_files, sim_output):
 
     engine, stats = run_engine({
         "system": system,
-        "time": "10m",
+        "time": "20m",
         "replay": system_files,
     })
 
     # Check that it at least loaded some data
-    assert stats['tick_count'] == 10 * 60
+    assert stats['tick_count'] == 20 * 60
     assert stats['job']['jobs_total'] > 0
     assert len(stats['job']['jobs_still_running']) + stats['job']['jobs_completed'] > 0

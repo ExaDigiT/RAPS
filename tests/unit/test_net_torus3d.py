@@ -1,5 +1,5 @@
-import pytest
 from raps.network.torus3d import build_torus3d, torus_route_xyz
+
 
 def test_build_torus3d():
     """Test building a small 3D torus network."""
@@ -8,22 +8,24 @@ def test_build_torus3d():
 
     # Check number of nodes
     num_routers = dims[0] * dims[1] * dims[2]
-    num_hosts = num_routers # hosts_per_router=1
+    hosts_per_router = 1  # Default! Assumption
+    num_hosts = num_routers * hosts_per_router
     total_nodes = num_routers + num_hosts
     assert len(G.nodes) == total_nodes
 
     # Check number of edges
     # Router to router edges
-    router_edges = (num_routers * 3) // 2 # Each router has 3 neighbors in a 3D torus
+    router_edges = (num_routers * 3)  # Each router has 3 neighbors in a 3D torus
     # Host to router edges
-    host_router_edges = num_hosts
+    host_router_edges = num_routers * hosts_per_router
     total_edges = router_edges + host_router_edges
     assert len(G.edges) == total_edges
 
     # Check node types
-    node_types = [data["kind"] for _, data in G.nodes(data=True)]
+    node_types = [data["type"] for _, data in G.nodes(data=True)]
     assert node_types.count("router") == num_routers
     assert node_types.count("host") == num_hosts
+
 
 def test_torus_route_xyz():
     """Test the torus_route_xyz function."""

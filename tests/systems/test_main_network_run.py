@@ -11,7 +11,10 @@ pytestmark = [
 ]
 
 
-def test_main_network_run(system, system_config, sim_output):
+def test_main_network_run(system, system_config, sim_output, pytestconfig):
+    if system == "lassen" and not pytestconfig.getoption("--runlong"):
+        pytest.skip("This test for \"lassen\" is very long; pass --runlong to run it")
+
     if not system_config.get("main", False):
         pytest.skip(f"{system} does not support basic main run.")
 

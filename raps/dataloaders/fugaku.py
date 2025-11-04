@@ -1,21 +1,26 @@
 """
-    Download parquet files from https://zenodo.org/records/11467483
+Uses the fugaku dataset published at https://zenodo.org/records/11467483
 
-    Note that F-Data doesn't give a list of nodes used, so we set 'scheduled_nodes' to None
-    which triggers the scheduler to schedule the nodes itself.
+Note that F-Data doesn't give a list of nodes used, so we set 'scheduled_nodes' to None
+which triggers the scheduler to schedule the nodes itself.
 
-    Also, power in F-Data is only given at node-level. We can use node-level power by
-    adding the --validate option.
+Also, power in F-Data is only given at node-level. We can use node-level power by
+adding the --validate option.
 
-    The '--arrival poisson' will compute submit times from Poisson distribution, instead of using
-    the submit times given in F-Data.
+The '--arrival poisson' will compute submit times from Poisson distribution, instead of using
+the submit times given in F-Data.
 
-    raps run --system fugaku -f /path/to/21_04.parquet
-    raps run --system fugaku -f /path/to/21_04.parquet --validate
-    raps run --system fugaku -f /path/to/21_04.parquet --policy priority --backfill easy
+raps run --system fugaku -f /path/to/21_04.parquet
+raps run --system fugaku -f /path/to/21_04.parquet --validate
+raps run --system fugaku -f /path/to/21_04.parquet --policy priority --backfill easy
 """
 import pandas as pd
 from tqdm import tqdm
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+import urllib.request
+import requests
 from ..job import job_dict, Job
 from ..utils import WorkloadData
 
@@ -180,3 +185,27 @@ def cdu_index_to_name(index: int, config: dict):
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
     return (0, index)  # TODO
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    tz = ZoneInfo("Asia/Tokyo")
+
+    files = requests.get("https://zenodo.org/api/records/11467483").json()["files"]
+    files = [f for f in files if f['key'].endswith(".parquet")]
+    files = sorted(files, key=lambda f: f['key'])
+
+    # TODO: I think fugaku data is indexed by submission time not start time, so filtering by
+    # filename will probably miss some jobs that ran over start -> end
+    if start:
+        start_file = start.astimezone(tz).strftime("%y_%m.parquet")
+        files = [f for f in files if f['key'] >= start_file]
+    if end:
+        end_file = end.astimezone(tz).strftime("%y_%m.parquet")
+        files = [f for f in files if f['key'] <= end_file]
+
+    dest.mkdir(parents=True)
+    for file in files:
+        print(f"Downloading {file['key']}")
+        urllib.request.urlretrieve(file['links']['self'], dest / file['key'])
+
+    print("Done!")

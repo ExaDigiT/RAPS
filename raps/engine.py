@@ -200,11 +200,9 @@ class Engine:
         if sim_config.start:
             start = sim_config.start
             diff = start - wd.start_date
-            if diff.total_seconds() < 0:
-                raise Exception(
-                    f"{start.isoformat()} is before data range in workload. "
-                    + f"Workload data begins at {wd.start_date.isoformat()}"
-                )
+            # diff may be negative if start is before the first job in the workload. We'll still
+            # shift telemetry_start to match with sim_config.start, even if that leaves a blank
+            # spot at the beginning.
             wd.telemetry_start += int(diff.total_seconds())
             wd.start_date = start
         else:
