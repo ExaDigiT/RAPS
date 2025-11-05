@@ -33,9 +33,11 @@ class LayoutManager:
         if args_dict is not None:
             self.noui = args_dict.get("noui")
             self.simulate_network = args_dict.get("simulate_network")
+            self.encrypt = args_dict.get("encrypt")
         else:
             self.noui = False
             self.simulate_network = False
+            self.encrypt = False
         self.engine = engine
         self.config = config
         self.topology = self.engine.config.get("TOPOLOGY", "none")
@@ -196,11 +198,16 @@ class LayoutManager:
             else:
                 running_time_str = convert_seconds_to_hhmm(job.current_run_time)
 
+            if self.encrypt:
+                job_name_str="hidden"
+            else:
+                job_name_str=str(job.name)
+
             row = [
                 str(job.id).zfill(5),
                 convert_seconds_to_hhmm(job.time_limit // self.engine.downscale),
                 # str(job.wall_time),
-                str(job.name),
+                job_name_str,
                 str(job.account),
                 job.current_state.value,
                 str(job.nodes_required),
