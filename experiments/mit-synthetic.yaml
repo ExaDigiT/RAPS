@@ -1,0 +1,3 @@
+# raps run-multi-part experiments/mit-synthetic.yaml
+partitions: ["mit_supercloud/part-cpu", "mit_supercloud/part-gpu"]
+workload: multitenant

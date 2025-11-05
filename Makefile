@@ -1,4 +1,6 @@
 #Makefile
+SHELL := /bin/bash
+
 .PHONY: pip run docker_build docker_run
 all: pip
 
@@ -8,6 +10,8 @@ pip:
 run:
 	python3 ./main.py
 
+test:
+	pytest -n 8
 
 IMAGE_NAME = raps
 
@@ -17,3 +21,9 @@ docker_build:
 docker_run:
 	docker run --platform linux/amd64 -it $(IMAGE_NAME)
 
+fetch-fmu-models:
+	if [ ! -d ./models/fmu-models ]; then \
+		git clone git@code.ornl.gov:exadigit/fmu-models.git ./models/fmu-models; \
+	else \
+		git -C ./models/fmu-models pull; \
+	fi

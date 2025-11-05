@@ -1,0 +1,63 @@
+system:
+  num_cdus: 36
+  racks_per_cdu: 6
+  nodes_per_rack: 128
+  chassis_per_rack: 8
+  nodes_per_blade: 2
+  switches_per_chassis: 4
+  nics_per_node: 4
+  rectifiers_per_chassis: 4
+  nodes_per_rectifier: 4
+  missing_racks: []
+  down_nodes: []
+  cpus_per_node: 2
+  gpus_per_node: 0
+  cpu_peak_flops: 264960000000.0
+  gpu_peak_flops: 0
+  cpu_fp_ratio: 0.667
+  gpu_fp_ratio: 0
+power:
+  power_gpu_idle: 0
+  power_gpu_max: 0
+  power_cpu_idle: 38
+  power_cpu_max: 95
+  power_mem: 74.26
+  power_nic: 20
+  power_nvme: 30
+  power_switch: 250
+  power_cdu: 8473.47
+  power_update_freq: 15
+  rectifier_peak_threshold: 13670
+  sivoc_loss_constant: 13
+  sivoc_efficiency: 0.98
+  rectifier_loss_constant: 17
+  rectifier_efficiency: 0.96
+  power_cost: 0.094
+scheduler:
+  job_arrival_time: 100
+  mtbf: 11
+  trace_quanta: 60
+  min_wall_time: 60
+  max_wall_time: 43200
+  ui_update_freq: 900
+  max_nodes_per_job: 26884
+  job_end_probs:
+    COMPLETED: 0.63
+    FAILED: 0.13
+    CANCELLED: 0.12
+    TIMEOUT: 0.11
+    NODE_FAIL: 0.01
+network:
+  topology: torus3d
+  #topology: capacity
+  #network_max_bw: 9.6E9
+  network_max_bw: 1E7
+  torus_x: 24
+  torus_y: 24
+  torus_z: 24
+  torus_wrap: true
+  hosts_per_router: 2
+  torus_link_bw: 9600000000.0
+  latency_per_hop: 1.0e-06
+  torus_routing: DOR_XYZ
+  node_coords_csv: null

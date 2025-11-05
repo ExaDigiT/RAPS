@@ -10,43 +10,48 @@ Reference:
 
 Usage Instructions:
 
-    git clone https://github.com/LLNL/LAST/ && cd LAST
-    git lfs pull
+    raps download --system lassen
 
-    # to analyze dataset
-    python -m raps.telemetry -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -v
+    # to analyze dataset and plot histograms
+    raps telemetry -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --plot
 
     # to simulate the dataset as submitted
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen
 
-    # to reschedule
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen --reschedule poisson
+    # to modify the submit times of the telemetry according to Poisson distribution
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --arrival poisson
 
-    # to fast-forward 37 days and replay for 1 day
-    python main.py -f /path/to/LAST/Lassen-Supercomputer-Job-Dataset --system lassen -ff 37d -t 1d
+    # to fast-forward 365 days and replay for 1 day. This region day has 2250 jobs with 1650 jobs executed.
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --start '2019-08-22T00:00:00+00:00' -t 1d
+
+    # For the network replay this command gives suiteable snapshots:
+    raps run -f ./data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit -t 12h --arrival poisson  # noqa
+
 """
 import math
-import numpy as np
 import os
+import uuid
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pathlib import Path
+import subprocess
+import shutil
+from datetime import datetime, timedelta
 
-try:
-    from ..job import job_dict
-    from ..utils import power_to_utilization, next_arrival
-
-except:
-    pass
+from ..job import job_dict, Job
+from ..utils import power_to_utilization, WorkloadData
 
 
 def load_data(path, **kwargs):
     """
     Loads data from the given file paths and returns job info.
     """
-    nrows = 1E4
-    alloc_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows)
-    node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows)
-    step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows)
+    nrows = None
+    alloc_df = pd.read_csv(os.path.join(
+        path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
+    node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
+    step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
     return load_data_from_df(alloc_df, node_df, step_df, **kwargs)
 
 
@@ -56,24 +61,47 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     """
     config = kwargs.get('config')
     jid = kwargs.get('jid', '*')
-    reschedule = kwargs.get('reschedule')
-    fastforward = kwargs.get('fastforward')
+    validate = kwargs.get('validate')
     verbose = kwargs.get('verbose')
-    min_time = kwargs.get('min_time', None)
+    start = datetime.fromisoformat(kwargs['start']) if kwargs.get('start') else None
 
-    if fastforward:
-        print(f"fast-forwarding {fastforward} seconds")
+    allocation_df['job_submit_timestamp'] = pd.to_datetime(
+        allocation_df['job_submit_time'], format='mixed', errors='coerce')
+    allocation_df['begin_timestamp'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
+    allocation_df['end_timestamp'] = pd.to_datetime(allocation_df['end_time'], format='mixed', errors='coerce')
 
-    allocation_df['begin_time'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
-    allocation_df['end_time'] = pd.to_datetime(allocation_df['end_time'], format='mixed', errors='coerce')
+    telemetry_start_timestamp = allocation_df['begin_timestamp'].min()
+    telemetry_start_time = 0
+    telemetry_end_timestamp = allocation_df['end_timestamp'].max()
+    diff = telemetry_end_timestamp - telemetry_start_timestamp
+    telemetry_end_time = int(math.ceil(diff.total_seconds()))
 
-    if not min_time:
-        min_time = pd.to_datetime(allocation_df['begin_time']).min()
+    # Too large dataset! Cut by fastforward and time to simulate!
+    if start is None:
+        fastforward_timedelta = timedelta(seconds=0)
+    else:
+        fastforward_timedelta = start - telemetry_start_timestamp.tz_localize("UTC")
+    time_to_simulate_timedelta = timedelta(seconds=kwargs['time'])
+
+    simulation_start_timestamp = telemetry_start_timestamp + fastforward_timedelta
+    simulation_end_timestamp = simulation_start_timestamp + time_to_simulate_timedelta
+
+    # As these are >1.4M jobs, filtered to the simulated timestamps before creating the job structs.
+    # Job should not have ended before the simulation time
+    allocation_df = allocation_df[allocation_df['end_timestamp'] >= simulation_start_timestamp]
+    # Job has to have been submited before or during the simulaion time
+    allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]
 
     job_list = []
 
     for _, row in tqdm(allocation_df.iterrows(), total=len(allocation_df), desc="Processing Jobs"):
-        job_id = row['primary_job_id']
+
+        account = row['hashed_user_id']
+        job_id = int(row['primary_job_id'])
+        # allocation_id = row['allocation_id']  # Unused
+        nodes_required = row['num_nodes']
+        end_state = row['exit_status']
+        name = str(uuid.uuid4())[:6]  # This generates a random 6 char identifier....
 
         if not jid == '*':
             if int(jid) == int(job_id):
@@ -83,76 +111,139 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
 
         node_data = node_df[node_df['allocation_id'] == row['allocation_id']]
 
-        nodes_required = row['num_nodes']
+        wall_time = compute_wall_time(row['begin_timestamp'], row['end_timestamp'])
 
-        wall_time = compute_wall_time(row['begin_time'], row['end_time'])
         samples = math.ceil(wall_time / config['TRACE_QUANTA'])
 
-        # Compute GPU power
-        gpu_energy = node_data['gpu_energy'].sum()  # Joules
-        # divide by nodes_required to get average gpu_usage per node
-        gpu_usage = node_data['gpu_usage'].sum() / 1E6 / nodes_required  # seconds
-        gpu_power = gpu_energy / gpu_usage if gpu_usage > 0 else 0
-        #gpu_power = gpu_energy / wall_time
-        gpu_power_array = np.array([gpu_power] * samples)
+        if validate:
+            # Validate should represent the node power and not split it according to cpu and gpu.
+            # Not sure if this is correct.
+            cpu_power = (node_data['energy'].sum() / nodes_required) / wall_time
+            cpu_trace = cpu_power
+            gpu_trace = 0  # = cpu_trace  # Is this correct?
+        else:
+            # Compute GPU power
+            gpu_node_idle_power = config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
+            # Note: GPU_Power is on a per node basis.
+            # The current simulator uses the same time series for every node of the job
+            # Therefore we sum over all nodes and form the average node power.
+            # TODO: Jobs could have a time-series per node!
+            gpu_node_energy = node_data['gpu_energy'].copy()
+            gpu_node_energy[gpu_node_energy < 0] = 0.0
+            gpu_node_energy[gpu_node_energy == np.nan] = 0.0
+            if len(gpu_node_energy) < 1:
+                gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
+            else:
+                if wall_time > 0:
+                    gpu_power = (gpu_node_energy.sum() / nodes_required) / wall_time  # This is a single value
+                else:
+                    gpu_power = gpu_node_idle_power
+            if gpu_power < gpu_node_idle_power:
+                # print(gpu_power, gpu_node_idle_power)
+                # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
+                gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
+            assert gpu_power >= gpu_node_idle_power, f"{gpu_power} >= {gpu_node_idle_power}" + \
+                f" gpu_power = ({gpu_node_energy.sum()} / {nodes_required}) / {wall_time}"
+            gpu_min_power = gpu_node_idle_power
+            gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
+            # power_to_utilization has issues! As it is unclear if gpu_power is for a single gpu or all gpus of a node.
+            # The multiplication by GPUS_PER_NODE fixes this but is patch-work! TODO Refactor and fix
+            gpu_util = power_to_utilization(gpu_power, gpu_min_power, gpu_max_power)
+            # gpu_util should to be between 0 an 4 (4 GPUs), where 4 is all GPUs full utilization.
+            gpu_util_scalar = gpu_util * config['GPUS_PER_NODE']
 
-        gpu_min_power = nodes_required * config['POWER_GPU_IDLE']
-        gpu_max_power = nodes_required * config['POWER_GPU_MAX']
-        gpu_util = power_to_utilization(gpu_power_array, gpu_min_power, gpu_max_power)
-        # GPU power can be 0:
-        # Utilization is defined in the range of [0 to GPUS_PER_NODE].
-        # gpu_util will be negative if power reports 0, which is smaller than POWER_GPU_IDLE
-        # Therefore: gpu_util should be set to zero if it is smaller than 0.
-        gpu_trace = np.maximum(0, gpu_util)
+            # Compute CPU power from CPU usage time
+            # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
+            # Same
+            cpu_node_usage = node_data['cpu_usage'].copy()
+            cpu_node_usage[cpu_node_usage < 0] = 0.0
+            cpu_node_usage[cpu_node_usage == np.nan] = 0.0
+            if wall_time > 0:
+                threads_per_core = config['THREADS_PER_CORE']
+                cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core
+            else:
+                cpu_util = 0.0
+            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / 10e9 " \
+                f"/ {nodes_required} / {wall_time} / {threads_per_core}"
 
-        # Compute CPU power from CPU usage time
-        # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
-        cpu_usage = node_data['cpu_usage'].sum() / 1E9 / nodes_required / config['CORES_PER_CPU'] # seconds
-        cpu_usage_array = np.array([cpu_usage] * samples)
-        cpu_util = cpu_usage_array / wall_time
-        cpu_trace = cpu_util  # * CPUS_PER_NODE
-        # TODO use total energy for validation
-        # Only Node Energy and GPU Energy is reported!
-        # total_energy = node_data['energy'].sum() # Joules
+            # cpu_util should be between 0 an 2 (2 CPUs)
+
+            cpu_util_scalar = cpu_util
+            # TODO use total energy for validation
+            # Only Node Energy and GPU Energy is reported!
+            # total_energy = node_data['energy'].sum() # Joules
+
+            # Expand into lists of length=samples
+            cpu_trace = [cpu_util_scalar] * samples
+            gpu_trace = [gpu_util_scalar] * samples
 
         # Network utilization - since values are given in octets / quarter of a byte, multiply by 4 to get bytes
-        ib_tx = 4 * node_data['ib_tx'].values[0] if node_data['ib_tx'].values.size > 0 else []
-        ib_rx = 4 * node_data['ib_rx'].values[0] if node_data['ib_rx'].values.size > 0 else []
+        total_ib_tx = 4 * node_data['ib_tx'].sum() if node_data['ib_tx'].values.size > 0 else 0
+        total_ib_rx = 4 * node_data['ib_rx'].sum() if node_data['ib_rx'].values.size > 0 else 0
 
-        net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        n = nodes_required
+        ib_tx_per_node = total_ib_tx / n  # average bytes per node
+        ib_rx_per_node = total_ib_rx / n  # average bytes per node
 
-        if reschedule == 'poisson':  # Let the scheduler reschedule the jobs
-            scheduled_nodes = None
-            time_offset = next_arrival(1/config['JOB_ARRIVAL_TIME'])
-        elif reschedule == 'submit-time':
-            raise NotImplementedError
-        else:
-            scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
-            time_offset = compute_time_offset(row['begin_time'], min_time)
-            if fastforward:
-                time_offset -= fastforward
+        # net_tx, net_rx = [],[]  # generate_network_sequences generates errors (e.g. --ff 800d -t 1d )
+        # net_tx, net_rx = generate_network_sequences(ib_tx, ib_rx, samples, lambda_poisson=0.3)
+        net_tx, net_rx = throughput_traces(ib_tx_per_node, ib_rx_per_node, samples)
+
+        # no priorities defined!
+        priority = row.get('priority', 0)
+        partition = row.get('partition', "0")
+
+        scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
+        submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
+        start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
+        end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
+
+        time_limit = row['time_limit']
+
+        trace_quanta = config['TRACE_QUANTA']
+        trace_time = wall_time
+        trace_start_time = start_time
+        trace_end_time = end_time
+        trace_missing_values = False
 
         if verbose:
-            print('ib_tx, ib_rx, samples:', ib_tx, ib_rx, samples)
+            print('ib_tx, ib_rx, samples:', net_tx, net_rx, samples)
             print('tx:', net_tx)
             print('rx:', net_rx)
             print('scheduled_nodes:', nodes_required, scheduled_nodes)
 
-        if time_offset >= 0:
+        if wall_time >= 0:
+            job_info = job_dict(nodes_required=nodes_required,
+                                name=name,
+                                account=account,
+                                cpu_trace=cpu_trace,
+                                gpu_trace=gpu_trace,
+                                ntx_trace=net_tx,
+                                nrx_trace=net_rx,
+                                end_state=end_state,
+                                scheduled_nodes=scheduled_nodes,
+                                id=job_id,
+                                priority=priority,
+                                partition=partition,
+                                submit_time=submit_time,
+                                time_limit=time_limit,
+                                start_time=start_time,
+                                end_time=end_time,
+                                expected_run_time=wall_time,
+                                trace_time=trace_time,
+                                trace_start_time=trace_start_time,
+                                trace_end_time=trace_end_time,
+                                trace_quanta=trace_quanta,
+                                trace_missing_values=trace_missing_values)
+            job = Job(job_info)
+            job_list.append(job)
 
-            job_info = job_dict(nodes_required,
-                                row['hashed_user_id'],
-                                row['hashed_user_group_id'],
-                                cpu_trace, gpu_trace, net_tx, net_rx, wall_time,
-                                row['exit_status'],
-                                scheduled_nodes,
-                                time_offset,
-                                job_id,
-                                row.get('priority', 0))
-
-            job_list.append(job_info)
-
-    return job_list
+    return WorkloadData(
+        jobs=job_list,
+        telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
+        # TODO: Confirm whether lassen timestamps are UTC or PDT
+        start_date=telemetry_start_timestamp.tz_localize("UTC"),
+    )
 
 
 def get_scheduled_nodes(allocation_id, node_df):
@@ -185,14 +276,14 @@ def compute_time_offset(begin_time, reference_time):
 def adjust_bursts(burst_intervals, total, intervals):
     bursts = burst_intervals / np.sum(burst_intervals) * total
     bursts = np.round(bursts).astype(int)
-    adjustment = total - np.sum(bursts)
+    # adjustment = total - np.sum(bursts)  # Unused
 
     # Distribute adjustment across non-zero elements to avoid negative values
-    if adjustment != 0:
-        for i in range(len(bursts)):
-            if bursts[i] > 0:
-                bursts[i] += adjustment
-                break  # Apply adjustment only once where it won't cause a negative
+    # if adjustment != 0:
+    #    for i in range(len(bursts)):
+    #        if bursts[i] > 0:
+    #            bursts[i] += adjustment % (2^64-1)  # This can overflow!
+    #            break  # Apply adjustment only once where it won't cause a negative
 
     return bursts
 
@@ -215,6 +306,17 @@ def generate_network_sequences(total_tx, total_rx, intervals, lambda_poisson):
     return tx_bursts, rx_bursts
 
 
+def throughput_traces(total_tx, total_rx, intervals):
+
+    if not total_tx or not total_rx:
+        return None, None
+
+    tx_bursts = [total_tx // intervals] * intervals
+    rx_bursts = [total_rx // intervals] * intervals
+
+    return tx_bursts, rx_bursts
+
+
 def node_index_to_name(index: int, config: dict):
     """ Converts an index value back to an name string based on system configuration. """
     return f"node{index:04d}"
@@ -226,7 +328,7 @@ def cdu_index_to_name(index: int, config: dict):
 
 def cdu_pos(index: int, config: dict) -> tuple[int, int]:
     """ Return (row, col) tuple for a cdu index """
-    return (0, index) # TODO
+    return (0, index)  # TODO
 
 
 if __name__ == "__main__":
@@ -237,5 +339,14 @@ if __name__ == "__main__":
     intervals = 20  # number of 20-second intervals
     lambda_poisson = 0.3  # control sporadicity
 
-    tx_sequence, rx_sequence = generate_ib_tx_rx_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
+    tx_sequence, rx_sequence = generate_network_sequences(total_ib_tx, total_ib_rx, intervals, lambda_poisson)
     print(tx_sequence, rx_sequence)
+
+
+def download(dest: Path, start: datetime | None, end: datetime | None):
+    dest.mkdir(parents=True)
+    subprocess.run(["git", "clone", "https://github.com/LLNL/LAST/", str(dest / 'repo')], check=True, text=True)
+    subprocess.run(["git", "lfs", "pull"], check=True, text=True, cwd=dest / "repo")
+    (dest / "repo" / "Lassen-Supercomputer-Job-Dataset").rename(dest / "Lassen-Supercomputer-Job-Dataset")
+    shutil.rmtree(dest / 'repo')
+    print("Done!")

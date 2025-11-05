@@ -1,10 +1,10 @@
 """
-This module provides functionality for simulating a thermo-fluids model using 
+This module provides functionality for simulating a thermo-fluids model using
 an FMU (Functional Mock-up Unit).
 
-The module defines a `ThermoFluidsModel` class that encapsulates the 
+The module defines a `ThermoFluidsModel` class that encapsulates the
 initialization, simulation step execution,
-data conversion, and cleanup processes for the FMU-based model. 
+data conversion, and cleanup processes for the FMU-based model.
 """
 import shutil
 import re
@@ -16,13 +16,16 @@ from fmpy import read_model_description, extract
 from fmpy.fmi2 import FMU2Slave
 from datetime import timedelta
 
+from raps.weather import Weather
+
+
 def get_matching_variables(variables, pattern):
     # Regex pattern to match strings containing .summary
     pattern = re.compile(pattern)
 
     # Filtering the list using the regex pattern
     filtered_vars = [var for var in variables if pattern.match(var)]
-    
+
     return filtered_vars
 
 
@@ -30,9 +33,9 @@ class ThermoFluidsModel:
     """
     A class to represent a thermo-fluids model using an FMU (Functional Mock-up Unit).
 
-    This class encapsulates the initialization, simulation step execution, data conversion, 
-    and cleanup processes for the FMU-based thermo-fluids model. It provides methods to 
-    initialize the model, execute simulation steps, generate runtime values, calculate Power 
+    This class encapsulates the initialization, simulation step execution, data conversion,
+    and cleanup processes for the FMU-based thermo-fluids model. It provides methods to
+    initialize the model, execute simulation steps, generate runtime values, calculate Power
     Usage Effectiveness (PUE), and properly manage the FMU resources.
 
     Attributes
@@ -40,7 +43,7 @@ class ThermoFluidsModel:
     FMU_PATH : str
         The file path to the FMU file.
     fmu_history : list
-        A list to store the history of FMU states, combining cooling input, datacenter output, 
+        A list to store the history of FMU states, combining cooling input, datacenter output,
         and central energy plant (CEP) output for each simulation step.
     inputs : list
         A list of input variables for the FMU.
@@ -56,23 +59,24 @@ class ThermoFluidsModel:
     Methods
     -------
     initialize():
-        Initializes the FMU by extracting the file, reading the model description, setting up input and output variables, 
-        and preparing the model for simulation.
+        Initializes the FMU by extracting the file, reading the model description,
+        setting up input and output variables, and preparing the model for simulation.
     generate_runtime_values(cdu_power, sc) -> dict:
         Generates runtime values dynamically for the FMU inputs based on CDU power and other configuration parameters.
     generate_fmu_inputs(runtime_values: dict, uncertainties: bool = False) -> list:
         Converts runtime values to a list suitable for FMU inputs, handling uncertainties if specified.
     calculate_pue(cooling_input: dict, datacenter_output: dict, cep_output: dict) -> float:
-        Calculates the Power Usage Effectiveness (PUE) of the data center based on the cooling, datacenter, 
+        Calculates the Power Usage Effectiveness (PUE) of the data center based on the cooling, datacenter,
         and CEP output power values.
     step(current_time: float, fmu_inputs: list, step_size: float) -> Tuple[dict, dict, dict, float]:
-        Executes a simulation step with the given inputs and step size. Returns the cooling input, datacenter output, 
+        Executes a simulation step with the given inputs and step size. Returns the cooling input, datacenter output,
         CEP output, and PUE for the current step.
     terminate():
         Terminates the FMU instance, ensuring that all resources are properly released.
     cleanup():
         Cleans up the extracted FMU directory, ensuring no temporary files are left behind.
     """
+
     def __init__(self, **config):
         """
         Constructs all the necessary attributes for the ThermoFluidsModel object.
@@ -88,8 +92,8 @@ class ThermoFluidsModel:
         self.outputs = None
         self.unzipdir = None
         self.fmu = None
-        self.weather = None
-    
+        self.weather: Weather | None = None
+
     def initialize(self):
         """
         Initializes the FMU by extracting the file and setting up the model.
@@ -115,7 +119,7 @@ class ThermoFluidsModel:
         # Get the value references for the variables we want to get/set
         self.inputs = [v for v in model_description.modelVariables if v.causality == 'input']
         self.outputs = [v for v in model_description.modelVariables if v.name in outputs]
-        
+
         # Instantiate and initialize the FMU
         self.fmu = FMU2Slave(guid=model_description.guid,
                              unzipDirectory=self.unzipdir,
@@ -126,7 +130,7 @@ class ThermoFluidsModel:
         self.fmu.enterInitializationMode()
         self.fmu.exitInitializationMode()
 
-    def generate_runtime_values(self, cdu_power, sc) -> dict:
+    def generate_runtime_values(self, cdu_power, engine) -> dict:
         """
         Generate the runtime values for the FMU inputs dynamically.
 
@@ -139,18 +143,20 @@ class ThermoFluidsModel:
         """
         # Dynamically generate the power inputs
         runtime_values = {
-        f"simulator_1_datacenter_1_computeBlock_{i+1}_cabinet_1_sources_Q_flow_total": cdu_power[i] * self.config['COOLING_EFFICIENCY'] / self.config['RACKS_PER_CDU']
-        for i in range(self.config['NUM_CDUS'])
+            f"simulator_1_datacenter_1_computeBlock_{i + 1}"
+            f"_cabinet_1_sources_Q_flow_total": cdu_power[i] *
+            self.config['COOLING_EFFICIENCY'] / self.config['RACKS_PER_CDU']
+            for i in range(self.config['NUM_CDUS'])
         }
 
         # Default temperature is from the config
         temperature = self.config['WET_BULB_TEMP']
 
         # If replay mode is on and weather data is available
-        if sc.replay and self.weather and self.weather.start is not None and self.weather.has_coords:
+        if self.weather and self.weather.has_coords:
             # Convert total seconds to timedelta object
-            delta = timedelta(seconds=sc.current_time)
-            target_datetime = self.weather.start + delta
+            delta = timedelta(seconds=engine.current_timestep - engine.timestep_start)
+            target_datetime = engine.start + delta
 
             # Get temperature from weather data
             temperature = self.weather.get_temperature(target_datetime) or self.config['WET_BULB_TEMP']
@@ -160,7 +166,7 @@ class ThermoFluidsModel:
             runtime_values[temperature_key] = temperature
 
         return runtime_values
-    
+
     def generate_fmu_inputs(self, runtime_values, uncertainties=False):
         """
         Convert the runtime values based on the cooling model's inputs to a list suitable for FMU inputs.
@@ -183,7 +189,7 @@ class ThermoFluidsModel:
 
         # Helper function to process uncertainty
         def process_uncertainty(value):
-            """Strip uncertainty if present, otherwise return the value as-is."""    
+            """Strip uncertainty if present, otherwise return the value as-is."""
             # Convert to nominal value if it's an AffineScalarFunc and uncertainties flag is set
             return unumpy.nominal_values(value) if uncertainties and isinstance(value, AffineScalarFunc) else value
 
@@ -201,7 +207,6 @@ class ThermoFluidsModel:
             fmu_inputs.append(process_uncertainty(value))
 
         return fmu_inputs
-
 
     def calculate_pue(self, cooling_input, cooling_output):
         """
@@ -233,7 +238,8 @@ class ThermoFluidsModel:
 
         # Get the sum of the work done by all CDU pumps
         W_CDUPs = sum(
-            convert_to_watts(cooling_output.get(f'simulator[1].datacenter[1].computeBlock[{idx+1}].cdu[1].summary.W_flow_CDUP_kW'))
+            convert_to_watts(cooling_output.get(
+                f'simulator[1].datacenter[1].computeBlock[{idx + 1}].cdu[1].summary.W_flow_CDUP_kW'))
             for idx in range(self.config['NUM_CDUS'])
         )
 
@@ -244,10 +250,11 @@ class ThermoFluidsModel:
         total_input_power = np.maximum(total_cooling_input_power, 1e-3)
 
         # Calculate PUE
-        pue = (total_input_power + np.sum(W_CDUPs) + np.sum(W_HTWPs) + np.sum(W_CTWPs) + np.sum(W_CTs)) / total_input_power
+        pue = (total_input_power + np.sum(W_CDUPs) + np.sum(W_HTWPs) +
+               np.sum(W_CTWPs) + np.sum(W_CTs)) / total_input_power
 
         return pue
-    
+
     def step(self, current_time, fmu_inputs, step_size):
         """
         Executes a simulation step with the given inputs and step size.
@@ -315,3 +322,15 @@ class ThermoFluidsModel:
         """
         # Cleanup - at the end of the simulation
         shutil.rmtree(self.unzipdir, ignore_errors=True)
+
+    def simulate_cooling(self, *, rack_power, engine):
+        cdu_power = rack_power.T[-1] * 1000
+        runtime_values = self.generate_runtime_values(cdu_power, engine)
+
+        # FMU inputs are N powers and the wetbulb temp
+        fmu_inputs = self.generate_fmu_inputs(runtime_values,
+                                              uncertainties=engine.power_manager.uncertainties)
+        cooling_inputs, cooling_outputs = self.step(engine.current_timestep,
+                                                    fmu_inputs,
+                                                    engine.config['POWER_UPDATE_FREQ'])
+        return cooling_inputs, cooling_outputs

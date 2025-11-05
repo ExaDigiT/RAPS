@@ -1,0 +1,49 @@
+system:
+  num_cdus: 24
+  racks_per_cdu: 18
+  nodes_per_rack: 368
+  chassis_per_rack: 8
+  nodes_per_blade: 1
+  switches_per_chassis: 2
+  nics_per_node: 1
+  rectifiers_per_chassis: 1
+  nodes_per_rectifier: 48
+  missing_racks: []
+  down_nodes: []
+  cpus_per_node: 1
+  gpus_per_node: 0
+  cpu_peak_flops: 3379000000000.0
+  gpu_peak_flops: 0
+  cpu_fp_ratio: 0.82
+  gpu_fp_ratio: 0.0
+power:
+  power_gpu_idle: 0
+  power_gpu_max: 0
+  power_cpu_idle: 30
+  power_cpu_max: 150
+  power_mem: 10
+  power_nic: 0
+  power_nvme: 0
+  power_switch: 0
+  power_cdu: 0
+  power_update_freq: 10
+  rectifier_peak_threshold: 0
+  sivoc_loss_constant: 13
+  sivoc_efficiency: 0.98
+  rectifier_loss_constant: 17
+  rectifier_efficiency: 0.96
+  power_cost: 0.094
+scheduler:
+  job_arrival_time: 10
+  mtbf: 11
+  trace_quanta: 10
+  min_wall_time: 3600
+  max_wall_time: 43200
+  ui_update_freq: 3600
+  max_nodes_per_job: 3000
+  job_end_probs:
+    COMPLETED: 0.63
+    FAILED: 0.13
+    CANCELLED: 0.12
+    TIMEOUT: 0.11
+    NODE_FAIL: 0.01

@@ -1,0 +1,9 @@
+system: lassen
+replay:
+  - /opt/data/lassen/Lassen-Supercomputer-Job-Dataset
+policy: fcfs
+backfill: firstfit
+fastforward: 365d
+time: 12h
+arrival: poisson
+simulate_network: true

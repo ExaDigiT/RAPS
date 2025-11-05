@@ -7,7 +7,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class Weather:
-    def __init__(self, iso_string, config):
+    def __init__(self, start: datetime | None, config):
         """
         Initialize the Weather class with configuration loaded from a JSON file.
         If zip_code and country_code are provided, the coordinates (lat, lon)
@@ -20,13 +20,7 @@ class Weather:
         self.lon = None
         self.weather_cache = {}  # Cache for storing weather data for the entire day
         self.has_coords = False
-        self.start = None
-
-        try:
-            # Convert the ISO 8601 string to a datetime object
-            self.start = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        except ValueError:
-            print("Invalid ISO 8601 datetime string specified for --start. Using default temperature instead.")
+        self.start = start
 
         # Retrieve coordinates if zip_code and country_code are provided
         if self.zip_code and self.country_code:
@@ -52,13 +46,14 @@ class Weather:
         if not self.zip_code or not self.country_code:
             print("Error: ZIP code or country code is not specified.")
             return None, None
-        
-        geocoding_url = f'https://nominatim.openstreetmap.org/search?postalcode={self.zip_code}&country={self.country_code}&format=json'
+
+        geocoding_url = "https://nominatim.openstreetmap.org/search?" + \
+                        f"postalcode={self.zip_code}&country={self.country_code}&format=json"
         headers = {
             'User-Agent': 'ExaDigiT'  # Custom User-Agent header
         }
         response = requests.get(geocoding_url, headers=headers, verify=False)  # Disable SSL verification temporarily
-        
+
         # Check for successful response
         if response.status_code == 200:
             try:
@@ -82,10 +77,12 @@ class Weather:
         if self.lat is None or self.lon is None:
             print("Error: Latitude and longitude are not set. Please provide valid ZIP code and country code.")
             return
-               
-        weather_url = f'https://archive-api.open-meteo.com/v1/archive?latitude={self.lat}&longitude={self.lon}&start_date={date}&end_date={date}&temperature_unit=celsius&hourly=temperature_2m'
+
+        weather_url = "https://archive-api.open-meteo.com/v1/archive?" + \
+                      f"latitude={self.lat}&longitude={self.lon}&" + \
+                      f"start_date={date}&end_date={date}&temperature_unit=celsius&hourly=temperature_2m"
         response = requests.get(weather_url, verify=False)  # Disable SSL verification temporarily
-        
+
         # Check for successful response
         if response.status_code == 200:
             try:
@@ -93,7 +90,7 @@ class Weather:
                 if 'hourly' in data and 'temperature_2m' in data['hourly']:
                     times = data['hourly']['time']
                     temperatures = data['hourly']['temperature_2m']
-                    
+
                     # Cache the weather data for fast lookup
                     for i, time in enumerate(times):
                         temp_celsius = temperatures[i]
@@ -108,7 +105,6 @@ class Weather:
         else:
             print(f"Error fetching weather data. Status Code: {response.status_code}")
 
-
     def get_temperature(self, target_datetime):
         """
         Get temperature for a specific datetime from cached data.
@@ -116,13 +112,13 @@ class Weather:
         if not self.has_coords:
             print("Error: Latitude and longitude are not set. Please provide valid ZIP code and country code.")
             return None
-        
+
         # Round target_datetime to the nearest previous hour
         target_hour = target_datetime.replace(minute=0, second=0, microsecond=0)
-        
+
         # Convert to string format without timezone info to match cache format
         target_hour_str = target_hour.isoformat(timespec='minutes').replace('+00:00', '')  # Remove timezone information
-        
+
         # Retrieve from cache
         if target_hour_str in self.weather_cache:
             return self.weather_cache[target_hour_str]

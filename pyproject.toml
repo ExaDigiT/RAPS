@@ -4,21 +4,39 @@ build-backend = "hatchling.build"
 
 [project]
 name = "raps"
-version = "0.0.1"
-requires-python = ">=3.9"
+version = "2.0.0.dev0"
+requires-python = ">=3.12"
 description = "RAPS"
 readme = "README.md"
 # license = {file = "LICENSE.txt"}
 
 dependencies = [
-    "matplotlib==3.7.2",
-    "numpy==1.23.5",
-    "rich==13.6.0",
-    "fmpy==0.3.19",
-    "pandas==2.0.3",
-    "scipy==1.10.1",
-    "pyarrow==15.0.1",
-    "tqdm==4.66.5",
-    "uncertainties==3.2.1",
-    "requests==2.32.3"
+    "matplotlib>=3.7.2",
+    "numpy>=1.23.5",
+    "rich>=13.6.0",
+    "fmpy>=0.3.19",
+    "pandas>=2.0.3",
+    "scipy>=1.10.1",
+    "pyarrow>=15.0.1",
+    "tqdm>=4.66.5",
+    "uncertainties>=3.2.1",
+    "requests>=2.32.3",
+    "fsspec>=2025.5.1",
+    "gcsfs>=2025.5.1",
+    "networkx>=3.5",
+    "pytest",
+    "pytest-order",
+    "pytest-xdist",
+    "pyyaml>=6.0.2",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "stable-baselines3==2.7.0",
+    "gym==0.26.2",
+    "dill==0.4.0",
+    "argcomplete==3.6.2",
+    "pyzmq==27.1.0",
+    "pre-commit"
 ]
+
+[project.scripts]
+raps = "main:main"

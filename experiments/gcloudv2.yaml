@@ -1,0 +1,4 @@
+system: gcloudv2
+replay:
+  - /opt/data/gcloud/v2/google_cluster_data_2011_sample
+start: 2011-05-02T00:10:00Z

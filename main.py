@@ -1,258 +1,100 @@
-""" Shortest-job first (SJF) job schedule simulator """
-
-import json
-import numpy as np
-import random
-import pandas as pd
+#!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
+"""
+ExaDigiT Resource Allocator & Power Simulator (RAPS)
+"""
+import argparse
+from pathlib import Path
 import os
-import re
-import time
+import textwrap
+import copy
+import gzip
+import dill
+import argcomplete
 
-from tqdm import tqdm
+# Implement shell completion using argcomplete
+# Importing all of raps' dependencies like pandas etc can be rather slow, often taking 1-2 seconds. So for snappy shell
+# completion we need avoid imports on the shell completion path. We could do this by shuffling the code around to
+# create the parser without importing any heavy-weight libraries. But that would be a pain to maintain and track that
+# pandas or scipy aren't accidentally imported transitively. Pandas can also be convenient to use in validating
+# SimConfig etc, which is needed to build the argparser. So instead, we cache the generated argparser object so that
+# shell completion can run without importing the rest of raps.
+PARSER_CACHE = Path(__file__).parent / '.shell-completion-cache'
 
-from raps.helpers import check_python_version
-check_python_version()
 
-from args import args
-args_dict = vars(args)
-print(args_dict)
+def shell_completion_add_parser(subparsers):
+    parser = subparsers.add_parser("shell-completion", description=textwrap.dedent("""
+        Register shell completion for RAPS.
+    """).strip(), formatter_class=argparse.RawDescriptionHelpFormatter)
 
-from raps.config import ConfigManager
-from raps.constants import OUTPUT_PATH, SEED
-from raps.cooling import ThermoFluidsModel
-from raps.ui import LayoutManager
-from raps.flops import FLOPSManager
-from raps.plotting import Plotter
-from raps.power import PowerManager, compute_node_power, compute_node_power_validate
-from raps.power import compute_node_power_uncertainties, compute_node_power_validate_uncertainties
-from raps.engine import Engine
-from raps.job import Job
-from raps.telemetry import Telemetry
-from raps.workload import Workload
-from raps.account import Accounts
-from raps.weather import Weather
-from raps.utils import create_casename, convert_to_seconds, write_dict_to_file, next_arrival
+    # Run the command from argcomplete, this edits ~/.bash_completion to register argcomplete
+    def impl(args):
+        os.system("activate-global-python-argcomplete")
 
-config = ConfigManager(system_name=args.system).get_config()
+    parser.set_defaults(impl=impl)
 
-if args.seed:
-    random.seed(SEED)
-    np.random.seed(SEED)
 
-if args.cooling:
-    cooling_model = ThermoFluidsModel(**config)
-    cooling_model.initialize()
-    args.layout = "layout2"
-
-    if args_dict['start']:
-        cooling_model.weather = Weather(args_dict['start'], config=config)
-else:
-    cooling_model = None
-
-if args.validate:
-    if args.uncertainties:
-        power_manager = PowerManager(compute_node_power_validate_uncertainties, **config)
-    else:
-        power_manager = PowerManager(compute_node_power_validate, **config)
-else:
-    if args.uncertainties:
-        power_manager = PowerManager(compute_node_power_uncertainties, **config)
-    else:
-        power_manager = PowerManager(compute_node_power, **config)
-args_dict['config'] = config
-flops_manager = FLOPSManager(**args_dict)
-
-sc = Engine(
-    power_manager=power_manager,
-    flops_manager=flops_manager,
-    cooling_model=cooling_model,
-    **args_dict,
-)
-layout_manager = LayoutManager(args.layout, engine=sc, debug=args.debug, **config)
-
-if args.replay:
-
-    if args.fastforward:
-        args.fastforward = convert_to_seconds(args.fastforward)
-
-    td = Telemetry(**args_dict)
-
-    # Try to extract date from given name to use as case directory
-    matched_date = re.search(r"\d{4}-\d{2}-\d{2}", args.replay[0])
-    if matched_date:
-        extracted_date = matched_date.group(0)
-        DIR_NAME = "sim=" + extracted_date
-    else:
-        extracted_date = "Date not found"
-        DIR_NAME = create_casename()
-
-    # Read telemetry data (either npz file or via custom data loader)
-    if args.replay[0].endswith(".npz"):  # Replay .npz file
-        print(f"Loading {args.replay[0]}...")
-        jobs, accounts = td.load_snapshot(args.replay[0])
-
-        if args.scale:
-            for job in tqdm(jobs, desc=f"Scaling jobs to {args.scale} nodes"):
-                job['nodes_required'] = random.randint(1, args.scale)
-                job['requested_nodes'] = None  # Setting to None triggers scheduler to assign nodes
-
-        if args.reschedule == 'poisson':
-            print("available nodes:", config['AVAILABLE_NODES'])
-            for job in tqdm(jobs, desc="Rescheduling jobs"):
-                job['requested_nodes'] = None
-                job['submit_time'] = next_arrival(1 / config['JOB_ARRIVAL_TIME'])
-        elif args.reschedule == 'submit-time':
-            raise NotImplementedError
-
-    else:  # custom data loader
-        print(*args.replay)
-        jobs = td.load_data(args.replay)
-        accounts = Accounts(jobs)
-        sc.accounts = accounts
-        accounts_dict = accounts.to_dict()
-        td.save_snapshot(jobs, accounts, filename=DIR_NAME)
-
-    # Set number of timesteps based on the last job running which we assume
-    # is the maximum value of submit_time + wall_time of all the jobs
-    if args.time:
-        timesteps = convert_to_seconds(args.time)
-    else:
-        timesteps = int(max(job['wall_time'] + job['submit_time'] for job in jobs)) + 1
-
-    print(f'Simulating {len(jobs)} jobs for {timesteps} seconds')
-    time.sleep(1)
-
-else:  # Synthetic jobs
-    wl = Workload(config)
-    jobs = getattr(wl, args.workload)(num_jobs=args.numjobs)
-    job_accounts = Accounts(jobs)
-    if args.accounts_json:
-        loaded_accounts = Accounts.from_json_filename(args.accounts_json)
-        accounts = Accounts.merge(loaded_accounts,job_accounts)
-    else:
-        accounts = job_accounts
-
-    if args.verbose:
-        for job_vector in jobs:
-            job = Job(job_vector, 0)
-            print('jobid:', job.id, '\tlen(gpu_trace):', len(job.gpu_trace), '\twall_time(s):', job.wall_time)
-        time.sleep(2)
-
-    if args.time:
-        timesteps = convert_to_seconds(args.time)
-    else:
-        timesteps = 88200  # 24 hours
-
-    DIR_NAME = create_casename()
-
-OPATH = OUTPUT_PATH / DIR_NAME
-print("Output directory is: ", OPATH)
-sc.opath = OPATH
-sc.accounts = accounts
-
-if args.plot or args.output:
+def shell_complete():
     try:
-        os.makedirs(OPATH)
-    except OSError as error:
-        print(f"Error creating directory: {error}")
+        parser = dill.loads(gzip.decompress(PARSER_CACHE.read_bytes()))
+    except Exception:
+        PARSER_CACHE.unlink(missing_ok=True)  # delete cache if corrupted somehow
+        parser = argparse.ArgumentParser()
+        # Use a dummy parser so that autocomplete still handles sys.exit tab complete if there's no
+        # cache. Cache will be created on first run of `main.py`
 
-if args.verbose:
-    print(jobs)
-
-layout_manager.run(jobs, timesteps=timesteps)
-
-output_stats = sc.get_stats()
-# Following b/c we get the following error when we use PM100 telemetry dataset
-# TypeError: Object of type int64 is not JSON serializable
-try:
-    print(json.dumps(output_stats, indent=4))
-except:
-    print(output_stats)
+    argcomplete.autocomplete(parser, always_complete_options=False)
 
 
-if args.plot:
-    if 'power' in args.plot:
-        pl = Plotter('Time (s)', 'Power (kW)', 'Power History', \
-                     OPATH / f'power.{args.imtype}', \
-                     uncertainties=args.uncertainties)
-        x, y = zip(*power_manager.history)
-        pl.plot_history(x, y)
+def cache_parser(parser: argparse.ArgumentParser):
+    parser = copy.deepcopy(parser)
+    subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    # Don't need to pickle the impl functions
+    for subparser in subparsers.choices.values():
+        subparser.set_defaults(impl=lambda args: None)
 
-    if 'util' in args.plot:
-        pl = Plotter('Time (s)', 'System Utilization (%)', \
-                     'System Utilization History', OPATH / f'util.{args.imtype}')
-        x, y = zip(*sc.sys_util_history)
-        pl.plot_history(x, y)
+    pickled = gzip.compress(dill.dumps(parser), compresslevel=4, mtime=0)
+    if not PARSER_CACHE.exists() or PARSER_CACHE.read_bytes() != pickled:
+        try:  # Ignore if there's some kind of write or permission error
+            PARSER_CACHE.write_bytes(pickled)
+        except Exception:
+            pass
 
-    if 'loss' in args.plot:
-        pl = Plotter('Time (s)', 'Power Losses (kW)', 'Power Loss History', \
-                     OPATH / f'loss.{args.imtype}', \
-                     uncertainties=args.uncertainties)
-        x, y = zip(*power_manager.loss_history)
-        pl.plot_history(x, y)
 
-        pl = Plotter('Time (s)', 'Power Losses (%)', 'Power Loss History', \
-                     OPATH / f'loss_pct.{args.imtype}', \
-                     uncertainties=args.uncertainties)
-        x, y = zip(*power_manager.loss_history_percentage)
-        pl.plot_history(x, y)
+def main(cli_args: list[str] | None = None):
+    shell_complete()  # will output shell completion and sys.exit during tab complete
 
-    if 'pue' in args.plot:
-        if cooling_model:
-            ylabel = 'PUE_Out[1]'
-            title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / f'pue.{args.imtype}', \
-                         uncertainties=args.uncertainties)
-            df = pd.DataFrame(cooling_model.fmu_history)
-            df.to_parquet('cooling_model.parquet', engine='pyarrow')
-            pl.plot_history(df['time'], df[ylabel])
-        else:
-            print('Cooling model not enabled... skipping output of plot')
+    from raps.helpers import check_python_version
+    check_python_version()
 
-    if 'temp' in args.plot:
-        if cooling_model:
-            ylabel = 'Tr_pri_Out[1]'
-            title = 'FMU ' + ylabel + 'History'
-            pl = Plotter('Time (s)', ylabel, title, OPATH / 'temp.svg')
-            df = pd.DataFrame(cooling_model.fmu_history)
-            df.to_parquet('cooling_model.parquet', engine='pyarrow')
-            pl.plot_compare(df['time'], df[ylabel])
-        else:
-            print('Cooling model not enabled... skipping output of plot')
+    from raps.run_sim import run_sim_add_parser, run_parts_sim_add_parser, show_add_parser
+    from raps.workloads import run_workload_add_parser
+    from raps.telemetry import run_telemetry_add_parser, run_download_add_parser
+    from raps.train_rl import train_rl_add_parser
 
-if args.output:
+    parser = argparse.ArgumentParser(
+        description="""
+            ExaDigiT Resource Allocator & Power Simulator (RAPS)
+        """,
+        allow_abbrev=False,
+    )
+    subparsers = parser.add_subparsers(required=True)
 
-    if args.uncertainties:
-        # Parquet cannot handle annotated ufloat format AFAIK
-        print('Data dump not implemented using uncertainties!')
-    else:
-        if cooling_model:
-            df = pd.DataFrame(cooling_model.fmu_history)
-            df.to_parquet(OPATH / 'cooling_model.parquet', engine='pyarrow')
+    run_sim_add_parser(subparsers)
+    run_parts_sim_add_parser(subparsers)
+    show_add_parser(subparsers)
+    run_workload_add_parser(subparsers)
+    run_telemetry_add_parser(subparsers)
+    run_download_add_parser(subparsers)
+    train_rl_add_parser(subparsers)
+    shell_completion_add_parser(subparsers)
 
-        df = pd.DataFrame(power_manager.history)
-        df.to_parquet(OPATH / 'power_history.parquet', engine='pyarrow')
+    cache_parser(parser)
 
-        df = pd.DataFrame(power_manager.loss_history)
-        df.to_parquet(OPATH / 'loss_history.parquet', engine='pyarrow')
+    args = parser.parse_args(cli_args)
+    assert args.impl, "subparsers should add an impl function to args"
+    args.impl(args)
 
-        df = pd.DataFrame(sc.sys_util_history)
-        df.to_parquet(OPATH / 'util.parquet', engine='pyarrow')
 
-        # Schedule history
-        job_history = pd.DataFrame(sc.get_job_history_dict())
-        job_history.to_csv(OPATH / "job_history.csv", index=False)
-
-        try:
-            with open(OPATH / 'stats.out', 'w') as f:
-                json.dump(output_stats, f, indent=4)
-        except:
-            write_dict_to_file(output_stats, OPATH / 'stats.out')
-
-        try:
-            with open(OPATH / 'accounts.json', 'w') as f:
-                json_string = json.dumps(sc.accounts.to_dict())
-                f.write(json_string)
-        except TypeError:
-            raise TypeError(f"{sc.accounts} could not be parsed by json.dump")
-    print("Output directory is: ", OPATH)  # If output is enabled, the user wants this information as last output
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,4 @@
+system: frontier
+replay:
+  - /opt/data/frontier/slurm/joblive/date=2024-01-18
+  - /opt/data/frontier/jobprofile/date=2024-01-18
