@@ -10,3 +10,4 @@ models/fmu-models
 raps-output-*
 ppo_raps_logs
 /data
+models/POWER9CSM/
