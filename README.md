@@ -117,11 +117,14 @@ given instead of the parquet files for more quickly running subsequent simulatio
 
 ## Cooling models
 
-We provide several cooling models in the repo https://code.ornl.gov/exadigit/POWER9CSM
+We provide several example cooling models from the repo https://code.ornl.gov/exadigit/POWER9CSM. To download them run:
 
-    git submodule update --init --recursive
+    sudo apt install make unzip
+    make fetch-example-fmus
 
-Will install the POWER9CSM in the models folder. To activate cooling when running RAPS,
+- Note: May require installation of make and unzip **or** manually download the fmus from the repo.
+
+Once downloaded, to activate cooling when running RAPS,
 use `--cooling` or `-c` argument. e.g.,
 
     raps run --system marconi100 -c
