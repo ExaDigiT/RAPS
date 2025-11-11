@@ -119,7 +119,7 @@ given instead of the parquet files for more quickly running subsequent simulatio
 
 We provide several example cooling models from the repo https://code.ornl.gov/exadigit/POWER9CSM. To download them run:
 
-    sudo apt install make unzip
+    sudo apt install make unzip libgomp1
     make fetch-example-fmus
 
 - Note: May require installation of make and unzip **or** manually download the fmus from the repo.
