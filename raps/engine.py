@@ -393,7 +393,7 @@ class Engine:
 
         # 1 Identify Completed Jobs
         completed_jobs = [job for job in self.running if
-                          job.end_time is not None and job.end_time <= self.current_timestep]
+                          job.end_time is not None and job.current_run_time >= job.expected_run_time]
 
         need_reschedule = need_reschedule or (completed_jobs != [])
 
@@ -413,8 +413,8 @@ class Engine:
 
         if not replay:
             killed_jobs = [job for job in self.running if
-                           job.end_time is not None and
-                           job.start_time + job.time_limit <= self.current_timestep]
+                           job.end_time is not None
+                           and job.start_time + job.time_limit <= job.current_run_time]
         else:
             killed_jobs = []
 
@@ -565,7 +565,7 @@ class Engine:
                                     f"\n{job}"
                                     f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"
                                     )
-                if replay and job.current_run_time > job.expected_run_time:
+                if job.current_run_time > job.expected_run_time:
                     raise Exception(f"Job should have ended in replay! "
                                     f" {job.current_run_time} > {job.expected_run_time}"
                                     f"\n{job}"
