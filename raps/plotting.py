@@ -134,8 +134,8 @@ class Plotter(BasePlotter):
 
         if self.uncertainties:
             nominal_curve = plt.plot(x, unumpy.nominal_values(y))
-            plt.fill_between(x, unumpy.nominal_values(y)-unumpy.std_devs(y),
-                             unumpy.nominal_values(y)+unumpy.std_devs(y),
+            plt.fill_between(x, unumpy.nominal_values(y) - unumpy.std_devs(y),
+                             unumpy.nominal_values(y) + unumpy.std_devs(y),
                              facecolor=nominal_curve[0].get_color(),
                              edgecolor='face', alpha=0.1, linewidth=0)
         else:
@@ -337,7 +337,7 @@ def plot_jobs_gantt(*, ax=None, jobs, bars_are_node_sized):
         ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
     submit_t = [x.submit_time for x in jobs]
-    duration = [x.current_run_time if x.end_time else x.time_limit for x in jobs]
+    duration = [x.end_time - x.start_time if x.end_time and x.start_time else x.time_limit for x in jobs]
     nodes_required = [x.nodes_required for x in jobs]
 
     colors = spaced_colors(len(jobs))
@@ -354,7 +354,7 @@ def plot_jobs_gantt(*, ax=None, jobs, bars_are_node_sized):
     # ax_b labels:
     ax.set_xlabel("time [hh:mm]")
     minx_s = min([x.submit_time for x in jobs])
-    maxx_s = np.ceil(max([x.current_run_tim if x.end_time else x.time_limit for
+    maxx_s = np.ceil(max([x.end_time - x.start_time if x.end_time and x.start_time else x.time_limit for
                           x in jobs]) + max([x.submit_time for x in jobs]))
     x_label_mins = [int(n) for n in np.arange(minx_s // 60, maxx_s // 60)]
     x_label_ticks = [n * 60 for n in x_label_mins[0::60]]
@@ -371,7 +371,7 @@ def plot_nodes_gantt(*, ax=None, jobs):
     if ax is None:
         ax = plt.figure(figsize=(10, 4))
     # Submit_time and Wall_time
-    duration = [x.current_run_time if x.end_time else x.time_limit for x in jobs]
+    duration = [x.end_time - x.start_time if x.end_time and x.start_time else x.time_limit for x in jobs]
     # nodes_required = [x['nodes_required'] for x in jobs]
     start_t = [x.start_time for x in jobs]
     nodeIDs = [x.scheduled_nodes for x in jobs]
@@ -416,9 +416,9 @@ def plot_fattree_hierarchy(G, k=32, save_path='net_fattree.png'):
     layers = ["core", "agg", "edge", "h"]
     layer_prefixes = {
         "core": ["core", "c_"],
-        "agg":  ["agg", "a_"],
+        "agg": ["agg", "a_"],
         "edge": ["edge", "e_"],
-        "h":    ["h", "host"]
+        "h": ["h", "host"]
     }
 
     # --- Compute how many nodes per layer ---
@@ -542,9 +542,9 @@ def plot_torus2d(G, save_path="net_torus2d.png"):
     import matplotlib.pyplot as plt
 
     routers = [n for n, d in G.nodes(data=True) if d["type"] == "router"]
-    hosts   = [n for n, d in G.nodes(data=True) if d["type"] == "host"]
+    hosts = [n for n, d in G.nodes(data=True) if d["type"] == "host"]
 
-    fig, ax = plt.subplots(figsize=(8,8))
+    fig, ax = plt.subplots(figsize=(8, 8))
 
     for u, v, d in G.edges(data=True):
         if d.get("type") == "router_link":
@@ -554,11 +554,11 @@ def plot_torus2d(G, save_path="net_torus2d.png"):
 
     # flatten z by adding it to y or x offset
     xs = [G.nodes[n]["x"] for n in routers]
-    ys = [G.nodes[n]["y"] + 0.05*G.nodes[n]["z"] for n in routers]
+    ys = [G.nodes[n]["y"] + 0.05 * G.nodes[n]["z"] for n in routers]
     ax.scatter(xs, ys, c="orange", s=10, label="Routers", alpha=0.8)
 
     hx = [G.nodes[n]["x"] for n in hosts]
-    hy = [G.nodes[n]["y"] + 0.05*G.nodes[n]["z"] for n in hosts]
+    hy = [G.nodes[n]["y"] + 0.05 * G.nodes[n]["z"] for n in hosts]
     ax.scatter(hx, hy, c="blue", s=4, label="Hosts", alpha=0.5)
 
     ax.set_xlabel("X")
@@ -584,7 +584,8 @@ def plot_torus3d(G, active_edges=None, max_edges=4000, save_path="net_torus3d.pn
     hosts = [n for n, d in G.nodes(data=True) if d["type"] == "host"]
 
     # --- Plot routers ---
-    xs, ys, zs = [G.nodes[n]["x"] for n in routers], [G.nodes[n]["y"] for n in routers], [G.nodes[n]["z"] for n in routers]
+    xs, ys, zs = [G.nodes[n]["x"] for n in routers], [G.nodes[n]["y"]
+                                                      for n in routers], [G.nodes[n]["z"] for n in routers]
     ax.scatter(xs, ys, zs, c="orange", s=6, label="Routers", alpha=0.8)
 
     # --- Plot hosts ---
@@ -622,7 +623,6 @@ def plot_torus3d(G, active_edges=None, max_edges=4000, save_path="net_torus3d.pn
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=300)
-
 
 
 if __name__ == "__main__":
