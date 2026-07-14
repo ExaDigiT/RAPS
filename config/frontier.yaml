@@ -67,8 +67,8 @@ cooling:
   fmu_column_mapping:
     T_sec_r_C: "Rack Return Temperature (°C)"
     T_sec_s_C: "Rack Supply Temperature (°C)"
-    p_sec_r_psig: "Rack Supply Pressure (psig)"
-    p_sec_s_psig: "Rack Return Pressure (psig)"
+    p_sec_r_psig: "Rack Return Pressure (psig)"
+    p_sec_s_psig: "Rack Supply Pressure (psig)"
     V_flow_sec_GPM: "Rack Flowrate (gpm)"
     T_prim_r_C: "Facility Return Temperature (°C)"
     T_prim_s_C: "Facility Supply Temperature (°C)"
