@@ -321,8 +321,13 @@ def load_data(data_path: Union[str, List[str]], **kwargs: Any):
             nrx_trace=[], ntx_trace=[],
             end_state="UNKNOWN", scheduled_nodes=[],
             id=jid, priority=int(row.get('scheduling_class', 0)),
-            # submit_time=row["timestamp"], time_limit=0,
-            submit_time=start, time_limit=0,
+            # submit_time was previously hardcoded to `start` (== start_time),
+            # which silently zeroed out queue wait time for every job. The
+            # real submit timestamp is `row["timestamp"]`, already converted
+            # to seconds above; it must be rebased by `- t0` for the same
+            # reason start/end are, so it lands in the same relative-second
+            # frame as start_time/end_time.
+            submit_time=row["timestamp"] - t0, time_limit=0,
             start_time=start, end_time=end,
             expected_run_time=wall, trace_time=row["timestamp"],
             trace_start_time=start, trace_end_time=end, trace_quanta=trace_quanta
