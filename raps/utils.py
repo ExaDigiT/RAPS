@@ -664,9 +664,18 @@ def get_current_utilization(trace, job: Job):
             util = get_utilization(trace, max(0, len(trace) - 1))
     elif isinstance(trace, (float, int)):
         util = trace
+    elif trace is None or (isinstance(trace, (list, np.ndarray)) and len(trace) == 0):
+        # No trace data recorded for this job/channel -- a legitimate state,
+        # not malformed input. Concretely hit by: (a) lassen.py's
+        # throughput_traces() returning (None, None) for jobs with zero
+        # total network throughput; (b) jobs too short to produce a single
+        # trace sample, which the prep pipeline emits as `[]` (this is the
+        # previously-documented, unfixed D-E13c defect -- see
+        # notes/e13-crossreplay-findings.md in hpc-oda-26). Treat as idle/no
+        # utilization rather than crashing the simulation.
+        util = 0.0
     else:
         raise ValueError(f"trace is of unexpected type: {type(trace)}.")
-        util = 0.0
 
     return util
 
