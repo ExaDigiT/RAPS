@@ -28,7 +28,19 @@ class Scheduler:
         elif self.policy == PolicyType.LJF:
             return sorted(queue, key=lambda job: job.nodes_required, reverse=True)
         elif self.policy == PolicyType.REPLAY:
-            return sorted(queue, key=lambda job: job.start_time)
+            # job.start_time is None when telemetry.update_jobs() has
+            # replaced the recorded arrival process with synthetic
+            # (--arrival poisson) arrivals: it deliberately clears
+            # start_time/end_time since the original observed start is no
+            # longer meaningful, and only submit_time drives arrival order
+            # in that mode. Fall back to submit_time so replay ordering
+            # still has a well-defined key instead of crashing (or, pre-fix,
+            # crashing one level up in schedule() on `job.start_time >
+            # current_time` for the same reason).
+            return sorted(
+                queue,
+                key=lambda job: job.start_time if job.start_time is not None else job.submit_time,
+            )
         else:
             raise ValueError(f"Policy not implemented: {self.policy}")
 
@@ -40,7 +52,11 @@ class Scheduler:
         # Iterate over a copy of the queue since we might remove items
         for job in queue[:]:
             if self.policy == PolicyType.REPLAY:
-                if job.start_time > current_time:
+                # See sort_jobs() above: start_time is None under synthetic
+                # (--arrival poisson) arrivals, where there is no recorded
+                # start to gate on -- treat that as "eligible now" rather
+                # than crashing on None > current_time.
+                if job.start_time is not None and job.start_time > current_time:
                     continue  # Replay: Job didn't start yet. Next!
                 else:
                     # assert job.start_time == current_time, f"{job.start_time} == {current_time}"
