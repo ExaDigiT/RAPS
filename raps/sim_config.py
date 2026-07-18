@@ -323,9 +323,20 @@ class SimConfig(RAPSBaseModel, abc.ABC):
             if "workload" not in self.model_fields_set:
                 self.workload = "replay"  # default to replay if --replay is set
             if not self.policy:
-                self.policy = "replay"
-            if self.workload != "replay" or self.policy != 'replay':
-                raise ValueError('workload & policy must be either omitted or "replay" when --replay is set')
+                self.policy = "replay"  # default to exact replay if no policy given
+            if self.workload != "replay":
+                raise ValueError('workload must be either omitted or "replay" when --replay is set')
+            # policy is intentionally NOT constrained to "replay" here: workload="replay"
+            # only fixes the *source* of jobs (replayed telemetry/accounting data); policy
+            # selects how those jobs get scheduled, and choosing a non-replay policy (fcfs,
+            # priority, sjf, ljf) against replayed workload data is a real, documented mode
+            # -- "policy counterfactual" experiments (what if a different scheduler had run
+            # this same historical workload?). See e.g. lassen.py's own module docstring:
+            # `raps run -f ... --system lassen --policy fcfs --backfill firstfit -t 12h
+            # --arrival poisson`. A prior fix here (a0289115, "Fix config handling of replay
+            # policy") additionally required policy == "replay", which silently broke this
+            # mode for any experiment config setting a non-replay policy alongside replay
+            # data (e.g. experiments/lassen.yaml).
             if self.scheduler != 'default':
                 raise ValueError('scheduler must be omitted or set to default when --replay is set')
         else:
