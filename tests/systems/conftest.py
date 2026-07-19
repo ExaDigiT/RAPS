@@ -64,7 +64,7 @@ SYSTEM_CONFIGS = {
         "net": False,
     },
     "fugaku": {
-        "marks": [],
+        "marks": [pytest.mark.long],  # ~159k nodes; same as 40frontiers, tests are slow per-step.
         "main": True,
         "telemetry": True,
         "workload": True,

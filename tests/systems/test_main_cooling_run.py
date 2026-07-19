@@ -8,6 +8,7 @@ pytestmark = [
     pytest.mark.system,
     pytest.mark.nodata,
     pytest.mark.cooling,
+    pytest.mark.long,
 ]
 
 
