@@ -1,6 +1,6 @@
 system: bluewaters
 replay:
   - /opt/data/hpc/bluewaters
-start: "20170328"
+start: 2017-03-28T00:00:00
 simulate_network: True
-filter: "traffic > 1e8"
+#filter: "traffic > 1e8"

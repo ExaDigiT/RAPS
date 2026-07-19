@@ -153,8 +153,10 @@ PATS = {
     "submit_time": re.compile(r"\bqtime=([0-9]+)", re.I),
     "start_time": re.compile(r"\bstart=([0-9]+)", re.I),
     "end_time": re.compile(r"\bend=([0-9]+)", re.I),
-    # Walltime used
+    # Walltime actually used (elapsed), distinct from the requested time limit below.
     "wall_time": re.compile(r"resources_used\.walltime=(\d{2}:\d{2}:\d{2})", re.I),
+    # Requested walltime limit (what a scheduler's time_limit field means).
+    "requested_walltime": re.compile(r"\bResource_List\.walltime=(\d{2}:\d{2}:\d{2})", re.I),
 }
 
 
@@ -174,6 +176,15 @@ def _parse_line(line: str, debug=False):
     # wall_time
     if rec.get("wall_time"):
         rec["wall_time"] = hms_to_seconds(rec["wall_time"])
+    if rec.get("requested_walltime"):
+        rec["requested_walltime"] = hms_to_seconds(rec["requested_walltime"])
+
+    # Job ID is a positional field (date;record_type;jobid;key=value...), not a
+    # jobid= key-value pair -- the PATS["id"] regex above never matches real
+    # Torque log lines, so pull it directly from the line's third ';'-field.
+    fields = line.split(";")
+    if len(fields) >= 3 and fields[2].strip():
+        rec["id"] = fields[2].strip()
 
     return rec
 
@@ -229,7 +240,7 @@ def load_data(local_dataset_path, **kwargs):
             id=jid,
             priority=0,
             submit_time=sub,
-            time_limit=int(rec.get("wall_time")),
+            time_limit=int(rec.get("requested_walltime") or 0),
             start_time=st,
             end_time=et,
             expected_run_time=duration,
