@@ -29,7 +29,7 @@ Note: Requires python3.12 or greater.
 
     # Frontier
     DATEDIR="date=2024-01-18"
-    DPATH=/opt/data/frontier
+    DPATH=/opt/data/hpc/frontier
     raps run -f $DPATH/slurm/joblive/$DATEDIR,$DPATH/jobprofile/$DATEDIR
 
 ## Open Telemetry dataset
@@ -37,7 +37,7 @@ Note: Requires python3.12 or greater.
 For Marconi supercomputer, download `job_table.parquet` from https://zenodo.org/records/10127767
 
     # Marconi100
-    raps run --system marconi100 -f /opt/data/marconi100/job_table.parquet
+    raps run --system marconi100 -f /opt/data/hpc/marconi100/job_table.parquet
 
 For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from https://zenodo.org/records/14007065
 
@@ -46,10 +46,10 @@ For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from 
 
 For Google cluster trace v2
 
-    raps run --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
+    raps run --system gcloudv2 -f /opt/data/hpc/gcloud/v2/google_cluster_data_2011_sample --start '2011-05-02T00:10:00Z'
 
     # analyze dataset
-    raps telemetry --system gcloudv2 -f /opt/data/gcloud/v2/google_cluster_data_2011_sample -v
+    raps telemetry --system gcloudv2 -f /opt/data/hpc/gcloud/v2/google_cluster_data_2011_sample -v
 
 For MIT Supercloud
 
@@ -75,7 +75,7 @@ For MIT Supercloud
     raps run-parts -x mit_supercloud -w multitenant
 
     # Reinforcement learning test case
-    raps train-rl --system mit_supercloud/part-cpu -f /opt/data/mit_supercloud/202201
+    raps train-rl --system mit_supercloud/part-cpu -f /opt/data/hpc/mit_supercloud/202201
 
 Microsoft Azure - 2017 Philly Traces
 
@@ -83,7 +83,7 @@ Microsoft Azure - 2017 Philly Traces
     python main.py run-parts -x philly -w multitenant
 
     # Telemetry replay
-    python main.py run-parts -x philly -f /opt/data/philly/trace-data --start 2017-10-03T00:14:56Z  --end 2017-10-04T00:00
+    python main.py run-parts -x philly -f /opt/data/hpc/philly/trace-data --start 2017-10-03T00:14:56Z  --end 2017-10-04T00:00
 
 For Lumi
 
@@ -95,7 +95,7 @@ For Lumi
 Lassen is one of the few datasets that has networking data. See `raps/dataloaders/lassen.py` for how to
 get the datasets. To run a network simulation, use the following command:
 
-    raps run -f /opt/data/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net
+    raps run -f /opt/data/hpc/lassen/Lassen-Supercomputer-Job-Dataset --system lassen --policy fcfs --backfill firstfit --start '2019-08-22T00:00:00+00:00' -t 12h --arrival poisson --net
 
 To simulate synthetic network tests:
 
@@ -196,15 +196,21 @@ See instructions in [dashboard/README.md](https://code.ornl.gov/exadigit/simulat
 ## Running Tests
 
 RAPS uses [pytest](https://docs.pytest.org/) for its test suite.
-Before running tests, ensure that you have a valid data directory available (e.g., `/opt/data`) and set the environment variable `RAPS_DATA_DIR` to point to it.
+Before running tests that replay telemetry, ensure that you have a valid data directory available (e.g., `/opt/data/hpc`) and set the environment variable `RAPS_DATA_DIR` to point to it.
 
 ### Run all tests
 ```bash
-RAPS_DATA_DIR=/opt/data pytest -n auto -x
+RAPS_DATA_DIR=/opt/data/hpc pytest -n auto -x
 ```
 
 By default, tests are parallelized with `pytest-xdist` (`-n auto`) to speed up execution.
 The `-x` flag stops execution after the first failure. Add `-v` to run in verbose mode.
+
+### Run tests that don't require external data
+
+```bash
+pytest -n auto -x -m nodata
+```
 
 ### Run tests on multi-partition systems
 
@@ -215,7 +221,7 @@ pytest -v -k "multi_part_sim"
 ### Run only network-related tests
 
 ```bash
-RAPS_DATA_DIR=/opt/data pytest -n auto -x -m network
+RAPS_DATA_DIR=/opt/data/hpc pytest -n auto -x -m network
 ```
 
 See `pytest.ini` for the different options for `-m`.
@@ -223,7 +229,7 @@ See `pytest.ini` for the different options for `-m`.
 ### Run a specific test file
 
 ```bash
-RAPS_DATA_DIR=/opt/data pytest tests/systems/test_engine.py
+RAPS_DATA_DIR=/opt/data/hpc pytest tests/systems/test_engine.py
 ```
 
 ### Contributing Code

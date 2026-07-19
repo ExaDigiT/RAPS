@@ -3,7 +3,7 @@ Blue Waters dataloader
 
 Example test case:
 
-    raps run -f /opt/data/bluewaters --start 20170328 --system bluewaters -net
+    raps run -f /opt/data/hpc/bluewaters --start 20170328 --system bluewaters -net
 
 To download the necessary datasets:
 
@@ -31,11 +31,11 @@ To download the necessary datasets:
 
        3. Monet - Blue Waters Network Dataset (140GB) - https://databank.illinois.edu/datasets/IDB-2921318
 
-    We assume these datasets are setup as follows (assuming -f /opt/data/bluewaters):
+    We assume these datasets are setup as follows (assuming -f /opt/data/hpc/bluewaters):
 
-        /opt/data/bluewaters/cray_system_sampler/20170328
-        /opt/data/bluewaters/torque_logs/20170328
-        /opt/data/bluewaters/monet/20170328
+        /opt/data/hpc/bluewaters/cray_system_sampler/20170328
+        /opt/data/hpc/bluewaters/torque_logs/20170328
+        /opt/data/hpc/bluewaters/monet/20170328
 """
 
 import math

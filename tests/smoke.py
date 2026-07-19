@@ -3,7 +3,7 @@ import argparse
 import subprocess
 
 # Define the data path
-DATAPATH = os.getenv("RAPS_DATA_DIR", "/opt/data")
+DATAPATH = os.getenv("RAPS_DATA_DIR", "/opt/data/hpc")
 
 # Standardize the time setting
 DEFAULT_TIME = "1h"

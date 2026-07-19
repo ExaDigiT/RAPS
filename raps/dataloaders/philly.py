@@ -31,11 +31,11 @@ The data portion of the repo can be downloaded using one of the following method
     curl -L -o trace-data.tar.gz \
             https://github.com/msr-fiddle/philly-traces/raw/master/trace-data.tar.gz
 
-After the file is downloaded, assuming its in /opt/data/philly/trace-data directory:
+After the file is downloaded, assuming its in /opt/data/hpc/philly/trace-data directory:
 
-    /opt/data/philly/trace-data/trace-data.tar.gz
+    /opt/data/hpc/philly/trace-data/trace-data.tar.gz
 
-    cd /opt/data/philly/trace-data
+    cd /opt/data/hpc/philly/trace-data
 
     run `tar xvfz trace-data.tar.gz` which will unpack the following files:
 
@@ -67,7 +67,7 @@ After the file is downloaded, assuming its in /opt/data/philly/trace-data direct
 
 Running a replay simulation:
 
-    python main.py run-parts -x philly -f /opt/data/philly/trace-data \
+    python main.py run-parts -x philly -f /opt/data/hpc/philly/trace-data \
             --start 2017-10-03T00:00 --end 2017-10-04T00:00
 
 Once the dataloader has been run at least once, it will dump npz files into a directory,
@@ -177,7 +177,7 @@ def load_data(files, **kwargs):
     Load Philly trace into ExaDigiT Job objects.
 
     Args:
-        files (list[str]): A list with one directory path (e.g., ['/opt/data/philly/trace-data']).
+        files (list[str]): A list with one directory path (e.g., ['/opt/data/hpc/philly/trace-data']).
 
     Returns:
         list[Job]
