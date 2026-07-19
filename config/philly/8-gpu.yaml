@@ -1,8 +1,18 @@
 system:
   num_cdus: 1
   racks_per_cdu: 1
-  nodes_per_rack: 231
-  chassis_per_rack: 3
+  nodes_per_rack: 469 # corrected from stale cluster_machine_list's 231; see
+                      # notes/philly-validation-fix-plan.md in hpc-oda-26 --
+                      # includes nodes empirically upgraded from 2-GPU to
+                      # 8-GPU (and the 24 ambiguous "4-GPU" nodes, folded in)
+
+  chassis_per_rack: 1 # was 3 (chosen so the old stale 231 node count divided
+                      # evenly); compute_rack_power() requires nodes_per_rack
+                      # % chassis_per_rack == 0, and no real per-rack/chassis
+                      # topology data exists for Philly anyway (no power
+                      # accuracy claims made for this system), so 1 keeps the
+                      # reshape valid for any node count without fabricating
+                      # a topology
   nodes_per_blade: 2
   switches_per_chassis: 4
   nics_per_node: 4

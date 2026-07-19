@@ -1,0 +1,5 @@
+partitions: ["philly/2-gpu", "philly/8-gpu"]
+replay:
+  - /opt/data/hpc/philly/trace-data
+start: 2017-10-03T00:00
+end: 2017-10-04T00:00

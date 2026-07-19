@@ -15,7 +15,7 @@ from raps.utils import (
 from raps.system_config import (
     SystemConfig, get_partition_configs, get_system_config, list_systems, resolve_system_reference,
 )
-from pydantic import model_validator, Field, BeforeValidator
+from pydantic import model_validator, Field, BeforeValidator, ConfigDict
 
 Distribution = Literal['uniform', 'weibull', 'normal']
 
@@ -455,6 +455,11 @@ class SimConfig(RAPSBaseModel, abc.ABC):
 
 
 class SingleSimConfig(SimConfig, abc.ABC):
+    # Forbid extra fields (e.g. "partitions") so a multi-partition config passed to `raps run`
+    # fails fast with a clear message instead of silently dropping the field and crashing later
+    # deep inside a dataloader that was never meant to see this config.
+    model_config = ConfigDict(extra="forbid")
+
     # Dynamic help string
     system: A[SystemConfig | str, Field(description=f"""
         Name of the system to simulate or a path to a yaml file containing the SystemConfig.
@@ -484,6 +489,10 @@ class SingleSimConfig(SimConfig, abc.ABC):
 
 
 class MultiPartSimConfig(SimConfig):
+    # Forbid extra fields (e.g. "system") so a single-partition config passed to `raps run-parts`
+    # fails fast with a clear message instead of silently dropping the field.
+    model_config = ConfigDict(extra="forbid")
+
     partitions: A[list[SystemConfig | str], Len(min_length=1)]
     """
     List of multiple systems/partitions to run. Can be names of preconfigured systems, or paths

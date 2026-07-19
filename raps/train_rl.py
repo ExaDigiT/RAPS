@@ -5,7 +5,7 @@ from raps.utils import SubParsers, pydantic_add_args, read_yaml_parsed
 def train_rl_add_parser(subparsers: SubParsers):
     parser = subparsers.add_parser("train-rl", description="""
         Example usage:
-            raps train-rl --system mit_supercloud/part-gpu -f /opt/data/mit_supercloud/202201
+            raps train-rl --system mit_supercloud/part-gpu -f /opt/data/hpc/mit_supercloud/202201
     """)
     parser.add_argument("config_file", nargs="?", default=None, help="""
         YAML sim config file, can be used to configure an experiment instead of using CLI

@@ -866,9 +866,36 @@ def read_yaml_parsed(cls: type[T], config_file=None) -> dict:
             yaml_data = model.model_dump(mode='json', exclude_unset=True)
     except (ValidationError, ValueError, YAMLError) as err:
         print(f'Failed to parse yaml "{config_file}"')
-        print(err)
+        hint = _wrong_run_command_hint(cls, err)
+        if hint:
+            print(hint)
+        else:
+            print(err)
         sys.exit(1)
     return yaml_data
+
+
+def _wrong_run_command_hint(cls: type, err: Exception) -> str | None:
+    """
+    If a `raps run` config was given a "partitions" list (or a `raps run-parts` config was given
+    a "system" name), the pydantic error is just "extra field not permitted", which doesn't tell
+    the user which command they should have used instead. Detect that specific case and return a
+    clearer message, or None if this isn't that case.
+    """
+    if not isinstance(err, ValidationError):
+        return None
+    extra_fields = {e['loc'][0] for e in err.errors() if e['type'] == 'extra_forbidden' and e['loc']}
+    if cls.__name__ == 'SingleSimConfig' and 'partitions' in extra_fields:
+        return (
+            'This config defines multiple partitions ("partitions: [...]"), but `raps run` only '
+            'supports a single partition. Use `raps run-parts` instead.'
+        )
+    if cls.__name__ == 'MultiPartSimConfig' and 'system' in extra_fields:
+        return (
+            'This config defines a single system ("system: ..."), but `raps run-parts` expects '
+            'multiple partitions via "partitions: [...]". Use `raps run` instead.'
+        )
+    return None
 
 
 def is_yaml_file(path: str | Path):
