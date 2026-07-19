@@ -352,25 +352,25 @@ def run_telemetry(args: TelemetryArgs):
 
     if args.plot:
         fig, ax = plt.subplots()
-    if "jobs" in args.plot:
-        plot_jobs_gantt(ax=ax, jobs=jobs, bars_are_node_sized=args.gantt_nodes)
-        ax.invert_yaxis()
-    if "nodes" in args.plot:
-        plot_nodes_gantt(ax=ax, jobs=jobs)
-    if "network" in args.plot:
-        if ntx_means and nrx_means:
-            # combine into total per‐job traffic
-            net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
-            plot_network_histogram(ax=ax, data=net_means)
-    if args.output is not None:
-        if args.output == "":
-            filename = f"{args.output}.svg"
+        if "jobs" in args.plot:
+            plot_jobs_gantt(ax=ax, jobs=jobs, bars_are_node_sized=args.gantt_nodes)
+            ax.invert_yaxis()
+        if "nodes" in args.plot:
+            plot_nodes_gantt(ax=ax, jobs=jobs)
+        if "network" in args.plot:
+            if ntx_means and nrx_means:
+                # combine into total per‐job traffic
+                net_means = [tx + rx for tx, rx in zip(ntx_means, nrx_means)]
+                plot_network_histogram(ax=ax, data=net_means)
+        if args.output is not None:
+            if args.output == "":
+                filename = f"{args.output}.svg"
+            else:
+                filename = args.output
+            plt.savefig(f'{filename}')
+            print(f"Saved to: {filename}")
         else:
-            filename = args.output
-        plt.savefig(f'{filename}')
-        print(f"Saved to: {filename}")
-    else:
-        plt.show()
+            plt.show()
 
 
 class DownloadArgs(RAPSBaseModel):

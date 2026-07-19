@@ -26,7 +26,7 @@ SYSTEM_CONFIGS = {
         "multi-part-sim": False,
         "withdata": True,
         "start": "2024-09-01T02:00:00Z",
-        "files": ["adastraMI250/AdastaJobsMI250_15days.parquet"],
+        "files": ["adastra/AdastaJobsMI250_15days.parquet"],
         "cooling": False,
         "uncertainty": True,
         "time": True,
