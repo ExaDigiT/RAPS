@@ -188,6 +188,10 @@ def load_data(files, **kwargs):
     # extract --start from kwargs
     start_ts = to_epoch(kwargs.get("start", DEFAULT_START))
     end_ts = to_epoch(kwargs.get("end", DEFAULT_END))
+    # start_ts/end_ts get shadowed below (reused for the earliest-observed-
+    # job-submit-time scan); keep the original requested window under its
+    # own name for the empty-partition fallback further down.
+    window_start_ts, window_end_ts = start_ts, end_ts
 
     assert len(files) == 1, "Expecting a single directory path"
     trace_dir = files[0]
@@ -198,6 +202,16 @@ def load_data(files, **kwargs):
         raise ValueError("Must pass gpus_per_node (2 or 8)")
 
     # --- 1. Machine list ---
+    # NOTE: cluster_machine_list's "number of GPUs" column is not trustworthy
+    # on its own -- empirically, 238 of 321 nodes it labels "2 GPUs" actually
+    # show real job usage up to gpu7 (i.e. behave as 8-GPU nodes), consistent
+    # for the entire ~4-month trace period, not a transient/partial artifact.
+    # The paper (Jeon et al., ATC'19, Sec 2.4) states only two server SKUs
+    # exist (2-GPU and 8-GPU); a stale/incorrect capacity label is a far more
+    # likely explanation than a genuine third hardware tier. So: use the
+    # file's label only as a prior, and override with the empirically observed
+    # max GPU index actually used on that node when it disagrees, snapping
+    # any node that isn't a clean "2" to the 8-GPU tier.
     machine_file = os.path.join(trace_dir, "cluster_machine_list")
     machines = {}
     with open(machine_file, encoding="utf-8") as f:
@@ -209,8 +223,42 @@ def load_data(files, **kwargs):
                 "gpu_mem": row[" single GPU mem"].strip(),
             }
 
+    # --- 2. Empirical capacity correction from the raw job log ---
+    # Scan every job's first attempt (regardless of GPU count) for the
+    # highest GPU index observed per node; a node's effective capacity is
+    # the larger of the file's label and (max observed index + 1).
+    observed_max_idx = {}
+    with open(os.path.join(trace_dir, "cluster_job_log"), encoding="utf-8") as f:
+        _raw_job_log = json.load(f)
+    for _raw in _raw_job_log:
+        _attempts = _raw.get("attempts", [])
+        if not _attempts:
+            continue
+        for _detail in _attempts[0].get("detail", []):
+            _mid = _detail.get("ip")
+            if not _mid:
+                continue
+            for _g in _detail.get("gpus", []):
+                try:
+                    _idx = int(str(_g).replace("gpu", ""))
+                except ValueError:
+                    continue
+                if _idx + 1 > observed_max_idx.get(_mid, 0):
+                    observed_max_idx[_mid] = _idx + 1
+
+    effective_capacity = {
+        mid: max(info["num_gpus"], observed_max_idx.get(mid, 0))
+        for mid, info in machines.items()
+    }
+    # Snap to the two known SKUs (Jeon et al. 2019): only capacity == 2 is the
+    # 2-GPU tier; anything else observed/labeled higher (4, 8, or in between)
+    # is folded into the 8-GPU tier rather than treated as a third partition.
+    node_tier = {
+        mid: (2 if cap <= 2 else 8) for mid, cap in effective_capacity.items()
+    }
+
     partition_machines = {
-        mid: info for mid, info in machines.items() if info["num_gpus"] == gpus_per_node
+        mid: info for mid, info in machines.items() if node_tier.get(mid) == gpus_per_node
     }
 
     # Build node → index mapping for this partition
@@ -244,18 +292,25 @@ def load_data(files, **kwargs):
             filtered_log.append(raw)
     job_log = filtered_log
 
-    # Filter job_log to only jobs matching the partition's gpus_per_node
+    # Assign each job to the partition of its first attempt's first node.
+    # PREVIOUSLY this filtered by whether the job's OWN total GPU count divided
+    # evenly by the partition's node size (gpus % gpus_per_node == 0) -- that
+    # only matches jobs using a full node's worth of GPUs, ~3% of real usage.
+    # The overwhelming majority of jobs use a FRACTION of a node's capacity,
+    # sharing it concurrently with other jobs (confirmed: e.g. 65,664 of ~122k
+    # job-node pairs use just 1 GPU on a 2-GPU-capacity node). Node capacity is
+    # a property of the NODE (already resolved into node_tier above), not of
+    # any single job's own GPU count, so admission must be keyed on which
+    # node(s) the job actually ran on.
     if gpus_per_node is not None:
         filtered_log = []
         for raw in job_log:
             attempts = raw.get("attempts", [])
-            if attempts and "detail" in attempts[0]:
-                # Count GPUs from the first detail
-                gpus = sum(
-                    len(detail.get("gpus", [])) for detail in attempts[0]["detail"]
-                )
-                if gpus > 0 and (gpus % gpus_per_node == 0):
-                    filtered_log.append(raw)
+            if not attempts or "detail" not in attempts[0] or not attempts[0]["detail"]:
+                continue
+            first_mid = attempts[0]["detail"][0].get("ip")
+            if node_tier.get(first_mid) == gpus_per_node:
+                filtered_log.append(raw)
         job_log = filtered_log
 
     # --- First pass: find earliest submit time ---
@@ -276,7 +331,17 @@ def load_data(files, **kwargs):
             start_ts = t
 
     if start_ts is None:
-        raise ValueError("No valid submitted_time found in Philly traces")
+        # Legitimate for a single-partition-empty window: e.g. in the
+        # 2017-10-03/04 validation window, every job ran on tier-8 nodes and
+        # the tier-2 partition has zero jobs. Previously this raised and
+        # aborted the whole run-parts invocation (both partitions run in
+        # lockstep); return an empty workload for this partition instead.
+        return WorkloadData(
+            jobs=[],
+            telemetry_start=window_start_ts,
+            telemetry_end=window_end_ts,
+            start_date=datetime.fromtimestamp(window_start_ts, timezone.utc),
+        )
 
     # --- Pre-load all traces for the given date range ---
     cpu_trace_dir = os.path.join(trace_dir, "cpu_by_day")
@@ -429,12 +494,19 @@ def load_data(files, **kwargs):
                     trace_start_time=start_time,  # None,
                     trace_end_time=end_time,  # None,
                     trace_quanta=60,
-                    trace_missing_values=False
+                    trace_missing_values=not (job_cpu_trace and job_gpu_trace),
                 )
-                if job_cpu_trace and job_gpu_trace:
-                    jobs_list.append(Job(job))
-                else:
-                    tqdm.write(f"skipping {job['id']} b/c either no cpu or gpu trace")
+                # PREVIOUSLY jobs with no cpu/gpu trace were dropped entirely.
+                # Scalar validation (nodes_required, run_time, wait_time, etc.
+                # -- see redi/validate.py's _RAPS_STAT_FIELDS) does not need
+                # traces, and get_current_utilization already treats missing
+                # traces as idle (raps/utils.py, closes D-E13c) rather than
+                # crashing. Admit the job and flag it via
+                # trace_missing_values instead of silently excluding it from
+                # ground truth.
+                jobs_list.append(Job(job))
+                if not (job_cpu_trace and job_gpu_trace) and debug:
+                    tqdm.write(f"{job['id']}: admitted with no cpu/gpu trace")
 
             if debug:
                 tqdm.write(f"{job['id']} start: {job['start_time']} end: {job['end_time']}")
