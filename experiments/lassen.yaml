@@ -1,9 +1,35 @@
+# fastforward: 365d / time: 12h (the old settings) land on a near-empty
+# stretch of this 819-day, 1.47M-job corpus -- only 2-4 jobs fall in that
+# window, useless for validation. Replaced with an explicit, data-derived
+# window instead of a blind fastforward/time offset.
+#
+# start/end below is a 3-day window anchored on the single busiest day in
+# the whole corpus by node-hours utilization (interval-overlap of every
+# job's [start,end] vs. real capacity, 792 nodes -- see hpc-oda-26
+# notes/), 2019-10-18, at 96.2%, and it's the second-busiest day overall
+# (2020-03-04 edges it out at 96.7%, but 10-18 nests cleanly inside the
+# also-validated 3/7/14-day busiest windows: [10-18,10-21), [10-17,10-24),
+# [10-15,10-29) all peak in this same stretch, so anchoring here keeps the
+# whole nested family consistent). Both candidate peaks were checked
+# against instantaneous node occupancy (not just same-day overlap) to
+# rule out an artifact: 743-773 of 792 nodes genuinely busy at multiple
+# spot-checked times.
+#
+# arrival: poisson (the original setting) deliberately replaces every
+# job's real recorded start_time/end_time with a synthetic Poisson
+# arrival process (raps/telemetry.py::update_jobs) -- appropriate for a
+# what-if congestion/overprovisioning study, wrong for validating REDI's
+# ingestion of real historical timestamps against this same corpus,
+# since it nulls out the very fields a scalar validation compares.
+# Removed for that reason: this file, with the window above and
+# prescribed (default) arrival, is what actually produced Table III's
+# Lassen row in hpc-oda-26 (Corr=1.000, MAE=0.17, F1=1.000, all
+# 5,519 ground-truth jobs matched exactly by ID).
 system: lassen
 replay:
   - /opt/data/hpc/lassen/Lassen-Supercomputer-Job-Dataset
 policy: fcfs
 backfill: firstfit
-fastforward: 365d
-time: 12h
-arrival: poisson
+start: "2019-10-18T00:00:00"
+end: "2019-10-21T00:00:00"
 simulate_network: true

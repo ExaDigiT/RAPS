@@ -1,5 +1,14 @@
 system:
-  num_cdus: 257
+  # num_cdus was 257 with missing_racks: [44], i.e. (257-1)*18 = 4608 total
+  # nodes -- this is Summit's scale (4,608 nodes), not Lassen's. Real Lassen
+  # is 792 nodes (confirmed against both the raw job trace, whose largest
+  # job uses exactly 792 nodes, and Maiterth et al. SC25 Table 1, which
+  # reports 792). This config was evidently adapted from a Summit config
+  # (same CORAL procurement, POWER9 + GPUs) and never rescaled. Corrected:
+  # 44 cdus x 1 rack/cdu x 18 nodes/rack = 792 exactly; missing_racks
+  # cleared since a 44-rack system only has racks 0-43, and "44" was a
+  # real Summit rack, not a Lassen one.
+  num_cdus: 44
   racks_per_cdu: 1
   nodes_per_rack: 18
   chassis_per_rack: 1
@@ -8,8 +17,7 @@ system:
   nics_per_node: 2
   rectifiers_per_chassis: 5
   nodes_per_rectifier: 4
-  missing_racks:
-    - 44
+  missing_racks: []
   down_nodes: []
   cpus_per_node: 2
   threads_per_core: 4
