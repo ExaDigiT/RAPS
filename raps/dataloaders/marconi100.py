@@ -127,6 +127,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             cpu_min_power = nodes_required * config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
             cpu_max_power = nodes_required * config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
             cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)
+            cpu_util = np.maximum(cpu_util, 0.0)  # residual power dips below idle from sensor noise, not real negative utilization
             cpu_trace = cpu_util * config['CPUS_PER_NODE']
 
             node_power = (jobs_df.loc[jidx, 'node_power_consumption']).tolist()
@@ -145,6 +146,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
             gpu_min_power = nodes_required * config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
             gpu_max_power = nodes_required * config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
             gpu_util = power_to_utilization(gpu_power_array, gpu_min_power, gpu_max_power)
+            gpu_util = np.maximum(gpu_util, 0.0)  # residual power dips below idle from sensor noise, not real negative utilization
             gpu_trace = gpu_util * config['GPUS_PER_NODE']
 
         priority = int(jobs_df.loc[jidx, 'priority'])
