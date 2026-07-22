@@ -3,7 +3,7 @@ import os
 import re
 import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, timezone
 from scipy.sparse import csr_matrix as csr
 from tqdm import tqdm
 
@@ -18,13 +18,22 @@ def to_epoch(s: str) -> int:
         return int(datetime.strptime(s, "%d%m%Y").timestamp())
 
 
-def parse_dt(s: str) -> datetime:
-    try:
-        # handles 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]'
-        return datetime.fromisoformat(s)
-    except ValueError:
-        # legacy support for DDMMYYYY → midnight
-        return datetime.strptime(s, "%d%m%Y")
+def parse_dt(s) -> datetime:
+    if isinstance(s, datetime):
+        dt = s
+    else:
+        try:
+            # handles 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]', with or
+            # without a UTC offset (e.g. from a tz-aware caller re-stringified)
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            # legacy support for DDMMYYYY → midnight
+            dt = datetime.strptime(s, "%d%m%Y")
+    # slurm-log.csv's time_submit is parsed tz-naive (pd.to_datetime(..., unit='s')),
+    # so strip any tzinfo here rather than fail the comparison in load_slurm_log.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def load_slurm_log(slurm_path: str, start_date: str, end_date: str):
