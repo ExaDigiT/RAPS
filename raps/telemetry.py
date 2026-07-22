@@ -19,7 +19,7 @@ from pydantic import model_validator
 # from rich.progress import track
 
 from raps.sim_config import SimConfig
-from raps.system_config import get_system_config
+from raps.system_config import get_system_config, list_systems
 from raps.job import Job, job_dict
 from raps.utils import AutoAwareDatetime
 import matplotlib.pyplot as plt
@@ -389,7 +389,15 @@ def run_download_add_parser(subparsers: SubParsers):
 
 
 def run_download(args: DownloadArgs):
-    config = get_system_config(args.system).get_legacy()
+    systems = list_systems()
+    if args.system in systems:
+        config = get_system_config(args.system).get_legacy()
+    elif args.system in (s.split("/")[0] for s in systems if "/" in s):
+        # Multi-partition system given without a partition (e.g. "mit_supercloud").
+        # Downloading raw telemetry doesn't need a partition-specific config.
+        config = None
+    else:
+        raise FileNotFoundError(f'"{args.system}" not found. Valid systems are: {systems}')
     td = Telemetry(system=args.system, config=config)
     dest = args.dest if args.dest else Path("./data").resolve() / args.system
     td.download_data(dest, args.start, args.end)
