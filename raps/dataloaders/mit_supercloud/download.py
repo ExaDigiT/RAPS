@@ -31,10 +31,15 @@ from botocore import UNSIGNED
 import boto3
 import pandas as pd
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import os
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Concurrent download workers for the (many, small) trace files; override
+# with MIT_SC_DOWNLOAD_WORKERS if the network/S3 side wants tuning.
+MAX_WORKERS = int(os.environ.get("MIT_SC_DOWNLOAD_WORKERS", 16))
 
 
 # Default date window
@@ -135,20 +140,39 @@ def filter_keys_by_jobs(keys, job_ids):
     return sel
 
 
+def _download_one(s3, bucket, prefix, outdir, key):
+    rel = key[len(prefix):]
+    dest = os.path.join(outdir, rel)
+    if os.path.exists(dest):
+        return key, "skipped"
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    s3.download_file(bucket, key, dest)
+    return key, "downloaded"
+
+
 def download_traces(s3, bucket, prefix, outdir, keys, dry_run):
     if dry_run:
         print("Dry-run: sample of matching keys:")
         for key in keys[:10]:
             print("  ", key)
         return
-    for key in tqdm(keys, desc="Downloading traces"):
-        rel = key[len(prefix):]
-        dest = os.path.join(outdir, rel)
-        if os.path.exists(dest):
-            tqdm.write(f"Warning: {dest} exists, skipping.")
-            continue
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        s3.download_file(bucket, key, dest)
+
+    skipped = 0
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(_download_one, s3, bucket, prefix, outdir, key): key
+            for key in keys
+        }
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading traces"):
+            key = futures[future]
+            try:
+                _, status = future.result()
+                if status == "skipped":
+                    skipped += 1
+            except Exception as e:
+                tqdm.write(f"Error downloading {key}: {e}")
+    if skipped:
+        tqdm.write(f"Skipped {skipped} already-downloaded files.")
     print("All requested traces downloaded.")
 
 
@@ -158,9 +182,11 @@ def download(args):
     Downloads slurm-log.csv and all matching CPU/GPU trace files from S3.
     """
     # 1) Initialize anonymous S3 client with SSL verification disabled
+    #    (max_pool_connections raised to match the concurrent download workers,
+    #    since the default of 10 would otherwise bottleneck them)
     s3 = boto3.client(
         's3',
-        config=Config(signature_version=UNSIGNED),
+        config=Config(signature_version=UNSIGNED, max_pool_connections=MAX_WORKERS),
         verify=False
     )
 
