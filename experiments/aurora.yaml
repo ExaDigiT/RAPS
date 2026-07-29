@@ -1,0 +1,3 @@
+system: aurora
+replay:
+  - /opt/data/hpc/aurora/ANL-ALCF-DJC-AURORA_20250127_20251031.csv
