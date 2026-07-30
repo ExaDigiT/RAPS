@@ -85,6 +85,23 @@ Microsoft Azure - 2017 Philly Traces
     # Telemetry replay
     python main.py run-parts -x philly -f /opt/data/hpc/philly/trace-data --start 2017-10-03T00:14:56Z  --end 2017-10-04T00:00
 
+Frontier - public SWF workload trace (JSSPP 2026)
+
+Frontier's private telemetry (joblive/jobprofile) isn't public, but a public Standard
+Workload Format (SWF) trace is available at `/opt/data/hpc/frontier/*.swf` (scheduler
+scalars only -- submit/wait/run times and node counts, no power/utilization traces).
+Preprocess it once into a RAPS-native `.npz` snapshot using REDI's SWF loader
+(https://github.com/ORNL/redi, expected at `~/drai/redi`):
+
+    scripts/preprocess_frontier_swf.sh
+
+Then replay it:
+
+    raps run --replay data/frontier_swf/raps_jobs.npz --system frontier
+
+    # or:
+    raps run experiments/frontier-swf.yaml
+
 For Lumi
 
     # Synthetic test for Lumi:

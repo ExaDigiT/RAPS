@@ -1,0 +1,12 @@
+# Public Frontier workload trace, JSSPP 2026 (Maheshwari, Klusacek, Suter, Brewer),
+# in Standard Workload Format (SWF). Scheduler scalars only (submit/wait/run times,
+# node counts) -- no per-job power/CPU/GPU utilization traces, so this drives
+# job scheduling/queuing replay, not telemetry-based power modeling.
+#
+# Preprocess once via REDI's SWF loader (~5 min for both 2024+2025 files, ~2.2M jobs):
+#   scripts/preprocess_frontier_swf.sh
+#
+# raps run experiments/frontier-swf.yaml
+system: frontier
+replay:
+  - ../data/frontier_swf/raps_jobs.npz
