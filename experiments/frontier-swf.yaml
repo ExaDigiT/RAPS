@@ -9,4 +9,4 @@
 # raps run experiments/frontier-swf.yaml
 system: frontier
 replay:
-  - ../data/frontier_swf/raps_jobs.npz
+  - /opt/data/hpc/frontier/raps_jobs.npz
