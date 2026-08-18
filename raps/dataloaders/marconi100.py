@@ -178,6 +178,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, **kwargs):
         trace_time = gpu_trace.size * config['TRACE_QUANTA']  # seconds
         trace_start_time = 0
         trace_end_time = trace_time
+        trace_missing_values = False
         if wall_time > trace_time:
             missing_trace_time = wall_time - trace_time
             if start_time < 0:

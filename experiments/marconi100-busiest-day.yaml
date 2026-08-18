@@ -1,0 +1,35 @@
+# raps run experiments/marconi100-busiest-day.yaml
+#
+# Replays the single busiest day (by node-hours utilization) in the openly
+# published PM100 (Marconi100) job trace: 2020-10-10, ~800 jobs, ~80%
+# modeled utilization.
+#
+# Derivation: PM100's corpus spans 160.6 days at only 40.1% mean
+# utilization with heavy day-to-day variance. The busiest day was found via
+# interval-overlap node-hours accounting (nodes_required * overlap_seconds
+# per job, summed per calendar day, divided by total_system_nodes * 24h).
+# The busiest 30-day rolling window also lands in the last 30 days of the
+# corpus, at 61-76% utilization, consistent with 2020-10-10 sitting in that
+# same late-corpus stretch rather than being an isolated fluke or a
+# collection-boundary artifact.
+#
+# Start uses an explicit "+00:00" UTC offset rather than a naive string:
+# RAPS interprets a naive datetime as host-local time and converts it to
+# UTC, which silently shifts the window depending on the host's timezone.
+#
+# `replay` points at a pre-filtered subset of the full 231k-job corpus
+# rather than job_table.parquet directly: RAPS's Marconi100 dataloader
+# (raps/dataloaders/marconi100.py::load_data_from_df) processes every job
+# in the input file through a slow per-job Python loop regardless of the
+# start/time window below, so loading the full corpus to replay one day
+# wastes >99.5% of that work. job_table_busiest_day.parquet was produced by
+# scripts/prepare_marconi100_busiest_day.py, which keeps every job whose
+# [start_time, end_time) overlaps 2020-10-10 (962 jobs, including a few
+# already running at midnight) -- an exact node-hours match for the
+# full-corpus replay, just without the other ~230k jobs that never appear
+# in this window anyway. Regenerate it if the target day changes.
+system: marconi100
+replay:
+  - /opt/data/hpc/marconi100/job_table_busiest_day.parquet
+start: "2020-10-10T00:00:00+00:00"
+time: 24h
