@@ -39,6 +39,21 @@ For Marconi supercomputer, download `job_table.parquet` from https://zenodo.org/
     # Marconi100
     raps run --system marconi100 -f /opt/data/hpc/marconi100/job_table.parquet
 
+Marconi100 - busiest single day
+
+The full Marconi100 trace is 231k jobs over 160 days, and RAPS's Marconi100
+dataloader processes every job in the input file regardless of the
+requested replay window, so loading the full corpus just to replay one day
+wastes most of that work. To replay only the busiest single day
+(2020-10-10, by node-hours utilization), first filter the corpus down to
+the jobs that actually overlap it:
+
+    python scripts/prepare_marconi100_busiest_day.py
+
+Then replay it:
+
+    raps run experiments/marconi100-busiest-day.yaml
+
 For Adastra MI250 supercomputer, download 'AdastaJobsMI250_15days.parquet' from https://zenodo.org/records/14007065
 
     # Adastra MI250
