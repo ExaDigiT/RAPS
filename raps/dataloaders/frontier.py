@@ -227,7 +227,8 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         diff = submit_timestamp - telemetry_start_timestamp
         submit_time = diff.total_seconds()
 
-        time_limit = jobs_df.loc[jidx, 'time_limit']  # timelimit in seconds
+        # Slurm records time_limit in minutes (max 10080 = 7 days); RAPS uses seconds.
+        time_limit = jobs_df.loc[jidx, 'time_limit'] * 60
 
         start_timestamp = jobs_df.loc[jidx, 'time_start']
         diff = start_timestamp - telemetry_start_timestamp
