@@ -73,9 +73,10 @@ class SurrogateCoolingModel(ThermoFluidsModel):
         b = json.loads((path / 'bundle.json').read_text())
         if b.get('format_version') != 1:
             raise ValueError(f"unsupported surrogate bundle format {b.get('format_version')}")
-        if b['num_cdus'] != self.config['NUM_CDUS']:
-            raise ValueError(f"surrogate has {b['num_cdus']} CDUs, system has "
-                             f"{self.config['NUM_CDUS']}")
+        if b['num_cdus'] != self.model_num_cdus:
+            raise ValueError(f"surrogate has {b['num_cdus']} CDUs, but the cooling config "
+                             f"expects {self.model_num_cdus} (set cooling.fmu_num_cdus when "
+                             f"borrowing a larger system's model)")
         self.bundle = b
         self._torch = torch
         self.model = torch.jit.load(str(path / 'model.ts'), map_location='cpu').eval()
@@ -240,9 +241,10 @@ class SurrogateCoolingModel(ThermoFluidsModel):
         y = self._advance(t, dt, u)
 
         cooling_inputs = dict(zip(self.input_cols, u.tolist()))
-        cooling_outputs = dict(zip(self.dyn_cols, y.tolist()))
+        cooling_outputs = self.to_system_frame(dict(zip(self.dyn_cols, y.tolist())))
         cooling_outputs['pue'] = self.calculate_pue(
-            {k: v for k, v in cooling_inputs.items() if 'Q_flow' in k}, cooling_outputs)
+            self.pue_inputs({k: v for k, v in cooling_inputs.items() if 'Q_flow' in k}),
+            cooling_outputs)
         cooling_inputs['time'] = t
         self.fmu_history.append({**cooling_inputs, **cooling_outputs})
         return cooling_inputs, cooling_outputs
