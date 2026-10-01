@@ -218,7 +218,11 @@ class Engine:
             continuous_workload = None
 
         if sim_config.cooling:
-            cooling_model = ThermoFluidsModel(**system_config_dict)
+            if sim_config.cooling_model == "surrogate":
+                from raps.cooling_surrogate import SurrogateCoolingModel
+                cooling_model = SurrogateCoolingModel(**system_config_dict)
+            else:
+                cooling_model = ThermoFluidsModel(**system_config_dict)
             cooling_model.initialize()
             if sim_config.weather:
                 cooling_model.weather = Weather(start, config=system_config_dict)

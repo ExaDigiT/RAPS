@@ -138,6 +138,10 @@ class SystemCoolingConfig(RAPSBaseModel):
     w_ctwps_key: str
     w_cts_key: str
     temperature_keys: list[str]
+    surrogate_path: ResolvedPath | None = None
+    """ ML surrogate bundle (model.ts + bundle.json) used when cooling_model is "surrogate" """
+    surrogate_warmup_s: int | None = None
+    """ Model time the surrogate relaxes under the first inputs before reporting (default 1200) """
 
 
 class SystemNetworkConfig(RAPSBaseModel):
