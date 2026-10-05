@@ -64,6 +64,7 @@ cooling:
   zip_code: '37831'
   country_code: US
   fmu_path: "../models/fmu-models/Frontier/Simulator_olcf5_base.fmu"
+  surrogate_path: "../models/surrogates/frontier_phase5_allheads_200h"
   fmu_column_mapping:
     T_sec_r_C: "Rack Return Temperature (°C)"
     T_sec_s_C: "Rack Supply Temperature (°C)"

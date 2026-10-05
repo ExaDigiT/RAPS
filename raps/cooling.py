@@ -19,6 +19,10 @@ from datetime import timedelta
 from raps.weather import Weather
 
 
+CDU_KEY = re.compile(r'computeBlock\[(\d+)\]')
+EXTENSIVE_PREFIXES = ('V_flow', 'm_flow', 'W_flow')
+
+
 def get_matching_variables(variables, pattern):
     # Regex pattern to match strings containing .summary
     pattern = re.compile(pattern)
@@ -93,6 +97,47 @@ class ThermoFluidsModel:
         self.unzipdir = None
         self.fmu = None
         self.weather: Weather | None = None
+        self._system_inputs = None
+
+    # ── borrowed cooling model (heat_scale / fmu_num_cdus) ───────────────────
+    # A system without its own cooling model can borrow another system's as a
+    # scaled design: its NUM_CDUS CDUs drive the first NUM_CDUS CDUs of the
+    # model (FMU_NUM_CDUS in total), each with its heat multiplied by
+    # HEAT_SCALE so every CDU runs at the same fraction of its design capacity.
+    # The model's remaining CDUs carry the mean active load, so the shared
+    # primary loop and plant see that same fraction. Temperatures and pressures
+    # are reported as computed; flows and pump/fan powers (extensive in the
+    # loop size) are divided by HEAT_SCALE, and the plant-level ones also by
+    # the system's share of the plant, NUM_CDUS / FMU_NUM_CDUS.
+    @property
+    def heat_scale(self):
+        return float(self.config.get('HEAT_SCALE') or 1.0)
+
+    @property
+    def model_num_cdus(self):
+        return int(self.config.get('FMU_NUM_CDUS') or self.config['NUM_CDUS'])
+
+    @property
+    def is_scaled(self):
+        return self.heat_scale != 1.0 or self.model_num_cdus != self.config['NUM_CDUS']
+
+    def to_system_frame(self, outputs):
+        """Convert model outputs to the simulated system (in place). Identity unless scaled."""
+        if not self.is_scaled:
+            return outputs
+        n, share = self.config['NUM_CDUS'], self.config['NUM_CDUS'] / self.model_num_cdus
+        for key in list(outputs):
+            m = CDU_KEY.search(key)
+            if m and int(m.group(1)) > n:
+                del outputs[key]                       # filler CDU, not part of the system
+                continue
+            if key.rsplit('.', 1)[-1].startswith(EXTENSIVE_PREFIXES):
+                outputs[key] = outputs[key] / self.heat_scale * (1.0 if m else share)
+        return outputs
+
+    def pue_inputs(self, cooling_inputs):
+        """Heat inputs for the PUE calculation, in the system's own frame."""
+        return self._system_inputs if self.is_scaled else cooling_inputs
 
     def initialize(self):
         """
@@ -148,6 +193,14 @@ class ThermoFluidsModel:
             self.config['COOLING_EFFICIENCY'] / self.config['RACKS_PER_CDU']
             for i in range(self.config['NUM_CDUS'])
         }
+        if self.is_scaled:
+            self._system_inputs = dict(runtime_values)
+            for key in runtime_values:
+                runtime_values[key] = runtime_values[key] * self.heat_scale
+            filler = sum(runtime_values.values()) / len(runtime_values)
+            for i in range(self.config['NUM_CDUS'], self.model_num_cdus):
+                runtime_values[f"simulator_1_datacenter_1_computeBlock_{i + 1}"
+                               f"_cabinet_1_sources_Q_flow_total"] = filler
 
         # Default temperature is from the config
         temperature = self.config['WET_BULB_TEMP']
@@ -290,8 +343,9 @@ class ThermoFluidsModel:
         cooling_inputs = {v.name: self.fmu.getReal([v.valueReference])[0] for v in self.inputs}
         cooling_outputs = {v.name: self.fmu.getReal([v.valueReference])[0] for v in self.outputs}
 
-        # Calculate PUE
-        pue = self.calculate_pue(cooling_inputs, cooling_outputs)
+        # Calculate PUE (in the simulated system's frame when borrowing a model)
+        self.to_system_frame(cooling_outputs)
+        pue = self.calculate_pue(self.pue_inputs(cooling_inputs), cooling_outputs)
 
         # Append time to each dictionary
         cooling_inputs['time'] = current_time

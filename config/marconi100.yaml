@@ -53,6 +53,7 @@ cooling:
   zip_code: '30170'
   country_code: IT
   fmu_path: "../models/POWER9CSM/fmus/marconi100.fmu"
+  surrogate_path: "../models/surrogates/marconi100_phase5_v2"
   fmu_column_mapping:
     T_sec_r_C: "Rack Return Temperature (°C)"
     T_sec_s_C: "Rack Supply Temperature (°C)"

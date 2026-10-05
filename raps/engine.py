@@ -218,7 +218,11 @@ class Engine:
             continuous_workload = None
 
         if sim_config.cooling:
-            cooling_model = ThermoFluidsModel(**system_config_dict)
+            if sim_config.cooling_model == "surrogate":
+                from raps.cooling_surrogate import SurrogateCoolingModel
+                cooling_model = SurrogateCoolingModel(**system_config_dict)
+            else:
+                cooling_model = ThermoFluidsModel(**system_config_dict)
             cooling_model.initialize()
             if sim_config.weather:
                 cooling_model.weather = Weather(start, config=system_config_dict)
@@ -277,6 +281,7 @@ class Engine:
         self.total_initial_jobs = len(jobs)
         self.current_timestep = 0
         self.cooling_model = cooling_model
+        self._last_cooling = None   # most recent (cooling_inputs, cooling_outputs)
         self.sys_power = 0
         self.power_manager = power_manager
         self.flops_manager = flops_manager
@@ -651,9 +656,18 @@ class Engine:
             power_df = None
 
         # System Cooling
+        # Each simulate_cooling() call advances the FMU by POWER_UPDATE_FREQ seconds,
+        # so at a 1 s tick only call it every POWER_UPDATE_FREQ seconds (as
+        # record_power_stats does), otherwise FMU time runs POWER_UPDATE_FREQ times
+        # faster than simulation time. Ticks in between reuse the latest result.
         if self.cooling_model:
-            cooling_inputs, cooling_outputs = self.cooling_model.simulate_cooling(rack_power=rack_power,
-                                                                                  engine=self)
+            due = (time_delta != 1
+                   or self.current_timestep % self.config['POWER_UPDATE_FREQ'] == 0
+                   or self._last_cooling is None)
+            if due:
+                self._last_cooling = self.cooling_model.simulate_cooling(rack_power=rack_power,
+                                                                         engine=self)
+            cooling_inputs, cooling_outputs = self._last_cooling
         else:
             cooling_inputs, cooling_outputs = None, None
 

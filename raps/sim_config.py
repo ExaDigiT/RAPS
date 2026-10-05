@@ -23,6 +23,11 @@ Distribution = Literal['uniform', 'weibull', 'normal']
 class SimConfig(RAPSBaseModel, abc.ABC):
     cooling: bool = False
     """ Include the FMU cooling model """
+    cooling_model: Literal["fmu", "surrogate"] = "fmu"
+    """
+    Cooling backend when --cooling is set: the FMU, or the ML surrogate bundle at
+    the system's cooling.surrogate_path.
+    """
     simulate_network: bool = False
     """ Include network model """
     weather: bool = False
