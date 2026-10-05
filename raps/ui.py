@@ -1,5 +1,6 @@
 import sys
 import os
+import time as time_module
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -8,6 +9,7 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from rich.live import Live
 from rich.progress import (
     Progress,
@@ -25,6 +27,30 @@ from raps.constants import ELLIPSES
 from raps.engine import TickData, Engine
 
 MAX_ROWS = 30
+
+
+class _StatusView:
+    """Renders the status panel plus a live pause/speed banner on its bottom border.
+
+    Rich's Live refreshes this on every redraw, so the banner shows (and a pause
+    persists) even when the simulation loop is not producing new data.
+    """
+
+    def __init__(self, manager):
+        self.manager = manager
+
+    def __rich_console__(self, console, options):
+        panel = self.manager._status_panel
+        state = getattr(self.manager.engine, "sim_state", None)
+        banner = state.banner() if state is not None else None
+        if banner:
+            text, style = banner
+            panel.subtitle = Text(f" {text} ", style=style)
+            panel.border_style = style.split(" on ")[-1] if " on " in style else style
+        else:
+            panel.subtitle = None
+            panel.border_style = "none"
+        yield panel
 
 
 class LayoutManager:
@@ -224,6 +250,36 @@ class LayoutManager:
         # Update the layout
         self.layout["scheduled"].update(Panel(Align(table, align="center")))
 
+    def _realtime_rate(self, sim_seconds):
+        """Smoothed simulated seconds per wall-clock second, as a string like "3.6k"."""
+        now = time_module.monotonic()
+        state = getattr(self.engine, "sim_state", None)
+        epoch = state.pause_epoch if state is not None else 0
+        last = getattr(self, "_rate_last", None)
+        if last is None or last[2] != epoch:
+            self._rate_last = (now, sim_seconds, epoch)  # first sample, or pause/resume: new baseline
+            return getattr(self, "_rate_text", "...")
+        wall = now - last[0]
+        if wall < 0.5:  # too short to measure; keep the previous reading
+            return getattr(self, "_rate_text", "...")
+        inst = (sim_seconds - last[1]) / wall
+        prev = getattr(self, "_rate_ema", None)
+        self._rate_ema = inst if prev is None else 0.7 * prev + 0.3 * inst
+        self._rate_last = (now, sim_seconds, epoch)
+        r = self._rate_ema
+        if state is not None:
+            state.measured_rate = r
+        if r >= 1e6:
+            txt = f"{r / 1e6:.1f}M"
+        elif r >= 1e3:
+            txt = f"{r / 1e3:.1f}k"
+        elif r >= 0.1:
+            txt = f"{r:.1f}"
+        else:
+            txt = f"{r:.2f}"
+        self._rate_text = txt
+        return self._rate_text
+
     def update_status(self,
                       time,
                       nrun,
@@ -264,7 +320,7 @@ class LayoutManager:
         columns.append("Active Nodes")
         columns.append("Free Nodes")
         columns.append("Down Nodes")
-        columns.append("Speed")
+        columns.append("Speed Sim/Real")
 
         if self.simulate_network:
             columns.extend(("Net Util (%)", "Slowdown per job"))
@@ -290,7 +346,7 @@ class LayoutManager:
         row.append(str(active_nodes))
         row.append(str(free_nodes))
         row.append(str(len(down_nodes)))
-        row.append(f"{time_delta}x")
+        row.append(self._realtime_rate(time_in_s))
         if self.simulate_network:
             row.append(f"{avg_net_util * 100:.0f}%")
             row.append(f"{slowdown:.1f}x")
@@ -304,7 +360,8 @@ class LayoutManager:
             column.width = column_width
 
         # Update the layout
-        self.layout["status"].update(Panel(Align(table, align="center"), title="Scheduler Stats"))
+        self._status_panel = Panel(Align(table, align="center"), title="Scheduler Stats")
+        self.layout["status"].update(_StatusView(self))
 
     def update_pressflow_array(self, cooling_outputs):
         fmu_cols = self.config['FMU_COLUMN_MAPPING']
