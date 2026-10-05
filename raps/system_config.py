@@ -138,6 +138,21 @@ class SystemCoolingConfig(RAPSBaseModel):
     w_ctwps_key: str
     w_cts_key: str
     temperature_keys: list[str]
+    surrogate_path: ResolvedPath | None = None
+    """ ML surrogate bundle (model.ts + bundle.json) used when cooling_model is "surrogate" """
+    surrogate_warmup_s: int | None = None
+    """ Model time the surrogate relaxes under the first inputs before reporting (default 1200) """
+    fmu_num_cdus: int | None = None
+    """
+    CDUs in the cooling model, when borrowing a larger system's model (default: num_cdus).
+    The system's CDUs drive the model's first num_cdus; the rest carry the mean active load.
+    """
+    heat_scale: float | None = None
+    """
+    Factor applied to each CDU's heat before it enters a borrowed cooling model, so CDUs run
+    at the same fraction of design capacity (typically model peak / system peak per CDU).
+    Flows and pump/fan powers are divided by it on the way out. Default 1.
+    """
 
 
 class SystemNetworkConfig(RAPSBaseModel):

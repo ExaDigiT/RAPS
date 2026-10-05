@@ -11,3 +11,4 @@ raps-output-*
 ppo_raps_logs
 /data
 models/POWER9CSM/
+models/surrogates
