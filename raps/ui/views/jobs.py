@@ -5,7 +5,7 @@ from textual.binding import Binding
 from textual.widgets import DataTable, Input
 from raps.ui.widgets.textpane import TextPane
 
-from raps.ui.views.base import View, fmt_dur, sync_table
+from raps.ui.views.base import View, clip, fmt_dur, sync_table
 
 # Sort keys: column title -> index into the snapshot job tuple
 _COLUMNS = [("JOBID", 0), ("NAME", 1), ("ACCOUNT", 2), ("ST", 3), ("NODES", 4),
@@ -125,7 +125,7 @@ class Jobs(View):
         net = snap.meta.has_network
         out = []
         for r in rows:
-            cells = [str(r[0]).zfill(5), r[1], r[2], r[3], str(r[4]), fmt_dur(r[5]), fmt_dur(r[6])]
+            cells = [str(r[0]).zfill(5), clip(r[1]), clip(r[2]), r[3], str(r[4]), fmt_dur(r[5]), fmt_dur(r[6])]
             if net:
                 cells.append(f"{r[7]:.2f}x")
             # dilated by network congestion: yellow

@@ -39,6 +39,15 @@ def fmt_dur(seconds):
     return convert_seconds_to_hhmmss(int(seconds))
 
 
+NAME_WIDTH = 24
+
+
+def clip(text, width=NAME_WIDTH):
+    """Shorten text to at most `width` characters, ending in "..." if it was cut."""
+    text = str(text)
+    return text if len(text) <= width else text[:width - 3] + "..."
+
+
 def fmt_num(x, digits=1):
     """Compact number: 12.3k, 4.5M."""
     ax = abs(x)

@@ -7,7 +7,7 @@ from textual.widgets import DataTable
 from raps.ui.widgets.textpane import TextPane
 
 from raps.ui.binning import plan_nodemap, pixel_bin_index, bin_nodes, bin_colors, render_pixels
-from raps.ui.views.base import View, fmt_dur, fmt_num, kv_lines, sync_table
+from raps.ui.views.base import View, clip, fmt_dur, fmt_num, kv_lines, sync_table
 from raps.ui.widgets.pixelgrid import PixelGrid
 from raps.ui.widgets.spark import LabeledSpark
 
@@ -141,7 +141,7 @@ class Overview(View):
         top = sorted((j for j in snap.jobs if j[3] == "R"), key=lambda j: -j[6])[:TOP_JOBS]
         rows = []
         for j in top:
-            row = [str(j[0]), str(j[1]), str(j[4]), fmt_dur(j[6])]
+            row = [str(j[0]), clip(j[1]), str(j[4]), fmt_dur(j[6])]
             if snap.meta.has_network:
                 row.append(f"{j[7]:.2f}x")
             rows.append(tuple(Text(c, style="yellow", no_wrap=True) if j[8] else Text(c, no_wrap=True) for c in row))
