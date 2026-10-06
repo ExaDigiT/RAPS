@@ -146,7 +146,7 @@ def get_link_util_stats(loads, throughput, top_n=10):
     Returns a dictionary with min, mean, max, std_dev, and top N congested links.
     """
     if not loads:
-        return {'max': 0, 'mean': 0, 'min': 0, 'std_dev': 0, 'top_links': []}
+        return {'max': 0, 'mean': 0, 'min': 0, 'std_dev': 0, 'top_links': [], 'histogram': [], 'num_links': 0}
 
     # Calculate utilization for every link
     utilizations = {(edge): (byte_load * 8) / throughput for edge, byte_load in loads.items()}
@@ -163,6 +163,10 @@ def get_link_util_stats(loads, throughput, top_n=10):
     # Get top N congested links
     sorted_links = sorted(utilizations.items(), key=lambda item: item[1], reverse=True)
     stats['top_links'] = sorted_links[:top_n]
+
+    # Distribution over [0, max(1, max util)] for the UI's link-utilization histogram
+    stats['histogram'] = np.histogram(util_values, bins=10, range=(0, max(1.0, float(stats['max']))))[0].tolist()
+    stats['num_links'] = len(util_values)
 
     return stats
 

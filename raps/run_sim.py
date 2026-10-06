@@ -7,7 +7,7 @@ import json
 import pandas as pd
 import sys
 import warnings
-from raps.ui import LayoutManager
+from raps.ui import LayoutManager, resolve_ui
 from raps.plotting import Plotter
 from raps.engine import Engine
 from raps.multi_part_engine import MultiPartEngine
@@ -71,12 +71,27 @@ def run_sim(sim_config: SingleSimConfig):
           f" seconds from {timestep_start} to {timestep_end}.")
     print(f"Simulation time delta: {engine.time_delta}{downscale_str} s,"
           f"Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.")
-    layout_manager = LayoutManager(
-        sim_config.layout, engine=engine,
-        debug=sim_config.debug, total_timesteps=total_timesteps,
-        args_dict=sim_config.get_legacy_args_dict(), **sim_config.system_configs[0].get_legacy(),
-    )
-    layout_manager.run()
+    ui = resolve_ui(sim_config)
+    if ui == "textual":
+        engine.keyboard_owner = False  # Textual owns stdin
+        from raps.ui.app import RapsApp
+        from raps.ui.snapshot import SnapshotBuilder
+        app = RapsApp(engine, SnapshotBuilder(engine, sim_config),
+                      hz=sim_config.ui_hz, cycle=sim_config.ui_cycle)
+        app.run()
+        if app.sim_error is not None:
+            print(app.sim_error[1], file=sys.stderr)
+            sys.exit(1)
+        if app.aborted:
+            print("Simulation aborted.")
+            sys.exit(130)
+    else:
+        layout_manager = LayoutManager(
+            sim_config.layout, engine=engine,
+            debug=sim_config.debug, total_timesteps=total_timesteps,
+            args_dict=sim_config.get_legacy_args_dict(), **sim_config.system_configs[0].get_legacy(),
+        )
+        layout_manager.run()
 
     engine_stats = get_engine_stats(engine)
     job_stats = get_job_stats(engine)

@@ -25,6 +25,34 @@ Note: Requires python3.12 or greater.
 
     raps run
 
+## Console UI
+
+On a terminal, `raps run` opens a multi-view Textual console; each view sizes itself to the
+terminal rather than to the CDU/rack layout of the system config, so large systems such as
+Fugaku or the 40frontiers config are readable without any config changes.
+
+| Key | View |
+|-----|------|
+| `1` | Overview: scheduler, power, cooling and network tiles, sparklines, mini node map, top jobs |
+| `2` | Jobs: every running and queued job, sortable (`s`, `r`) and filterable (`/`) |
+| `3` | Node Map: one pixel per node (or per bin of nodes), colored by state, job or power (`c`); arrows and Enter drill into a rack |
+| `4` | Power: rack power heatmap, totals, hottest racks and CDUs |
+| `5` | Cooling (with `--cooling`): plant schematic and a per-CDU heat grid (`m` changes the metric) |
+| `6` | Network (with `--simulate-network`): link utilization, hottest links, per-job slowdown |
+
+Other keys: `space`/`k` pause, `l`/`+` faster, `j`/`-` slower, `tab`/`shift+tab` next/previous
+view, `a` auto-cycle, `?` help, `q` quit (the final report prints after the app exits).
+
+    raps run --ui classic        # the original single-screen layout (--layout, keyboard controls unchanged)
+    raps run --ui none           # no UI, same as --noui
+    raps run --ui-hz 2           # redraw at most twice per real second (default 4)
+    raps run --ui-cycle 10       # rotate through the views every 10 seconds
+
+`--ui` defaults to `textual` when stdout is a terminal and `classic` otherwise; `--noui` and
+`--debug` always mean no UI. A system YAML may carry an optional display-only `ui:` block
+(`node_map_group`: nodes per Node Map pixel; `cooling_schematic`: a replacement schematic spec, see
+`raps/ui/widgets/schematic.py`) that never affects the models.
+
 ## Run simulator with telemetry replay
 
     # Frontier

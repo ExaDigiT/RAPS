@@ -352,6 +352,10 @@ class Engine:
         self.debug = sim_config.debug
         self.noui = sim_config.noui
         self.sim_state = None
+        # Whether run_simulation starts the termios keyboard listener. The Textual UI
+        # owns stdin itself and sets this to False.
+        self.keyboard_owner = True
+        self.last_link_stats = None  # latest inter-job link utilization stats (max/mean/min/std_dev/top_links)
         self.continuous_workload = continuous_workload
         self.replay = sim_config.replay
         self.downscale = sim_config.downscale  # Factor to downscale the 1s timesteps (power of 10)
@@ -699,6 +703,7 @@ class Engine:
             )
             if isinstance(congestion_stats, dict):
                 total_congestion = congestion_stats['mean']
+                self.last_link_stats = congestion_stats
             else:
                 total_congestion = congestion_stats
             self.net_congestion_history.append((self.current_timestep, total_congestion))
@@ -851,7 +856,7 @@ class Engine:
         self.sim_state = sim_state  # read by the UI for pause/speed banners
         # Keyboard controls (space/k: pause, l/+: faster, j/_: slower); needs an
         # interactive terminal and a UI to be useful.
-        if sys.stdin.isatty() and not self.debug and not self.noui:
+        if self.keyboard_owner and sys.stdin.isatty() and not self.debug and not self.noui:
             listener_thread = threading.Thread(target=keyboard_listener, args=(sim_state,), daemon=True)
             listener_thread.start()
 

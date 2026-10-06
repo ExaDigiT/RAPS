@@ -178,6 +178,14 @@ class SystemNetworkConfig(RAPSBaseModel):
     node_coords_csv: str | None = None
 
 
+class SystemUiConfig(RAPSBaseModel):
+    """ Display-only hints for the Textual UI; never used by the power/cooling/scheduling models. """
+    node_map_group: int | None = None
+    """ Nodes folded into one pixel of the Node Map (default: chosen to fit the terminal) """
+    cooling_schematic: dict | None = None
+    """ Replacement for the default cooling schematic spec (see raps/ui/widgets/schematic.py) """
+
+
 class SystemConfig(RAPSBaseModel):
     system_name: str
     """ Name of the system, defaults to the yaml file name """
@@ -194,6 +202,7 @@ class SystemConfig(RAPSBaseModel):
     uq: SystemUqConfig | None = None
     cooling: SystemCoolingConfig | None = None
     network: SystemNetworkConfig | None = None
+    ui: SystemUiConfig | None = None
 
     @model_validator(mode="before")
     def _load_base(cls, data, info: ValidationInfo):

@@ -113,7 +113,17 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     verbose: bool = False
     """ Enable verbose output """
     layout: Literal["layout1", "layout2"] = "layout1"
-    """ UI layout """
+    """ Layout for the classic UI (layout2 is selected automatically with --cooling) """
+    ui: Literal["textual", "classic", "none"] | None = None
+    """
+    Console UI: the multi-view Textual app, the original single-screen rich layout, or none.
+    Defaults to textual when stdout is a terminal and textual is installed, otherwise classic.
+    --noui and --debug mean none.
+    """
+    ui_hz: A[float, Field(gt=0)] = 4.0
+    """ Maximum Textual UI updates per real second """
+    ui_cycle: A[float, Field(gt=0)] | None = None
+    """ Auto-cycle the Textual UI through its views every this many seconds """
     plot: list[Literal["power", "loss", "pue", "temp", "util", "net"]] | None = None
     """ Plots to generate """
 
@@ -350,6 +360,9 @@ class SimConfig(RAPSBaseModel, abc.ABC):
 
         if self.cooling:
             self.layout = "layout2"
+
+        if self.ui == "none":
+            self.noui = True
 
         if 'weather' not in self.model_fields_set:
             self.weather = self.cooling and bool(self.replay)
