@@ -20,6 +20,7 @@ from textual.widgets import ContentSwitcher, Footer, Static
 
 from raps.ui.widgets.textpane import TextPane
 
+from raps.ui.job_detail import JobDetailScreen
 from raps.ui.views import VIEWS
 
 HELP_TEXT = """\
@@ -35,8 +36,9 @@ HELP_TEXT = """\
   tab / S-tab  next / previous view (only views with data are shown)
   a            auto-cycle views (period set with --ui-cycle SECONDS)
 
-[b]Jobs[/b]      / filter   s sort column   r reverse   esc clear filter
-[b]Node Map[/b]  c color mode (state, job, power)   arrows move   enter zoom into a rack   esc back
+[b]Jobs[/b]      / filter   s sort column   n sort by nodes   r reverse   esc clear filter
+           enter or click a job for details (m there highlights it in the node map)
+[b]Node Map[/b]  c color mode (state, job, power)   arrows move   enter zoom into a rack   esc back/unhighlight
 [b]Cooling[/b]   m next metric   M previous metric
 
   ?  this help      q  quit (the final report prints after the app exits)
@@ -172,6 +174,8 @@ class RapsApp(App):
             self._applied = None  # retry on the next poll once the views exist
             return
         view.update_snapshot(snap)
+        if isinstance(self.screen, JobDetailScreen):
+            self.screen.update_snapshot(snap)
         # Keep hidden views current so switching to one is instant and cheap
         for v in self.query("#views > View"):
             if v is not view:
@@ -286,6 +290,20 @@ class RapsApp(App):
             self.cycle = 5.0
         self._cycle_t = time.monotonic()
         self._render_topbar()
+
+    def open_job(self, job_id):
+        """Show the detail modal for a job; the snapshot builder starts attaching its detail."""
+        if self.builder is not None:
+            self.builder.selected_job = job_id
+        self.push_screen(JobDetailScreen(job_id))
+
+    def show_job_in_map(self, job_id, rack):
+        """Jump to the node map with the job's nodes highlighted and the cursor on one of its racks."""
+        for pos, v in enumerate(self._active):
+            if v.title == "Node Map":
+                self._show(pos)
+                self._current_view().show_job(job_id, rack)
+                return
 
     def action_help(self):
         self.push_screen(HelpScreen())

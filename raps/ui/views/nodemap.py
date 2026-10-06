@@ -19,6 +19,7 @@ LEGENDS = {
     "power": "node power, low [#440154]█[/][#2a788e]█[/][#22a884]█[/][#7ad151]█[/][#fde725]█[/] high; "
              "[#dc3c3c]█[/] down",
 }
+HIGHLIGHT = np.array([255, 170, 0], dtype=np.uint8)
 STATE_NAMES = {FREE: "free", BUSY: "busy", DOWN: "down"}
 
 
@@ -58,6 +59,8 @@ class NodeMap(View):
         self.mode = 0
         self.cursor = 0
         self.zoomed = False
+        self.focus_job = None   # node-array id of a job to highlight (everything else is dimmed)
+        self.focus_label = ""
         self._plan = None
         self._pix = None
         self._rack_px = None
@@ -105,6 +108,18 @@ class NodeMap(View):
         self.cursor = min(y * tx + x, n_racks - 1)
         self._redraw()
 
+    def show_job(self, job_id, rack: int):
+        """Highlight one job's nodes (everything else dimmed) and put the cursor on one of its racks."""
+        try:
+            self.focus_job = int(job_id)
+        except (TypeError, ValueError):  # mirrors SnapshotBuilder._node_job for non-integer ids
+            self.focus_job = hash(job_id) & 0x7FFFFFFF
+        self.focus_label = str(job_id)
+        self.cursor = rack
+        if self.zoomed:
+            self.action_back()
+        self._redraw()
+
     def action_zoom(self):
         if self._plan is not None and self._plan.rack_aligned and self.snapshot is not None:
             self.zoomed = True
@@ -117,6 +132,9 @@ class NodeMap(View):
             self.zoomed = False
             self.set_class(False, "zoomed")
             self.focus()
+            self._redraw()
+        elif self.focus_job is not None:
+            self.focus_job = None
             self._redraw()
 
     # -- rendering ---------------------------------------------------------------------------
@@ -138,10 +156,21 @@ class NodeMap(View):
         lo, hi = self._power_range(snap)
         bins = bin_nodes(snap.node_state, snap.node_power, snap.node_job, self._plan.per_bin)
         rgb = bin_colors(bins, MODES[self.mode], lo, hi)
+        if self.focus_job is not None:
+            frac = self._job_fraction(snap)
+            rgb = np.where(frac[:, None] > 0, HIGHLIGHT, (rgb * 0.3).astype(np.uint8))
         img = render_pixels(self._plan, self._pix, rgb)
         if self._plan.rack_aligned:
             self._outline_cursor(img)
         return img
+
+    def _job_fraction(self, snap):
+        """Fraction of each bin's nodes that belong to the highlighted job."""
+        per_bin = self._plan.per_bin
+        mine = (snap.node_job == self.focus_job).astype(np.float32)
+        n_bins = -(-len(mine) // per_bin)
+        mine = np.concatenate([mine, np.zeros(n_bins * per_bin - len(mine), dtype=np.float32)])
+        return mine.reshape(n_bins, per_bin).sum(axis=1)
 
     def _outline_cursor(self, img):
         """Draw a white frame in the gap around the selected rack tile."""
@@ -177,7 +206,11 @@ class NodeMap(View):
         if snap is None or self._plan is None:
             return
         m, p = snap.meta, self._plan
-        line1 = Text.from_markup(f"[b]{MODES[self.mode]}[/b] (c)  " + LEGENDS[MODES[self.mode]])
+        if self.focus_job is not None:
+            line1 = Text.from_markup(f"[b]job {self.focus_label}[/b]  [#ffaa00]█[/] its nodes, everything else dimmed  "
+                                     f"(esc clears, c cycles colors)")
+        else:
+            line1 = Text.from_markup(f"[b]{MODES[self.mode]}[/b] (c)  " + LEGENDS[MODES[self.mode]])
         n_racks = m.total_nodes // m.nodes_per_rack
         if p.rack_aligned:
             lo, hi = self.cursor * m.nodes_per_rack, (self.cursor + 1) * m.nodes_per_rack

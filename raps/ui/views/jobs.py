@@ -89,6 +89,10 @@ class Jobs(View):
     def action_sort_nodes(self):
         self._sort_by("NODES")
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected):
+        if event.row_key.value is not None:
+            self.app.open_job(event.row_key.value)
+
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
         self._sort_by(str(event.label))
 
@@ -144,4 +148,4 @@ class Jobs(View):
         trunc = " (list capped)" if snap.jobs_truncated else ""
         self.query_one("#jobs-info", TextPane).update(
             f"{snap.n_running} running, {snap.n_queued} queued | showing {shown}{trunc} | sort: {sort} | "
-            f"/ filter  s sort  n nodes  r reverse")
+            f"/ filter  s sort  n nodes  r reverse  enter details")

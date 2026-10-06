@@ -9,7 +9,7 @@ pytest.importorskip("textual")
 
 from raps.engine import SimulationState  # noqa: E402
 from raps.ui.app import RapsApp  # noqa: E402
-from raps.ui.snapshot import UIMeta, UISnapshot, CoolingSnapshot, NetworkSnapshot  # noqa: E402
+from raps.ui.snapshot import UIMeta, UISnapshot, CoolingSnapshot, NetworkSnapshot, JobDetail  # noqa: E402
 
 pytestmark = pytest.mark.nodata
 
@@ -48,6 +48,11 @@ def make_snapshot(meta, i=0):
                         "histogram": [5, 4, 3, 2, 1, 1, 0, 0, 0, 1], "num_links": 17},
             group_matrix=np.random.default_rng(1).random((4, 4)),
             jobs=[(j, 2 + j, 1.0 + 0.1 * j, j % 2 == 0) for j in range(5)])
+    detail = JobDetail(
+        id=2, name="job2", account="acct", state="R", nodes_required=4,
+        node_ranges=[(16, 17), (20, 21)], racks=[1], submit_s=-30.0, start_s=10.0, run_s=60.0 + i,
+        limit_s=3600.0, power_w=[1000.0 + 10 * k for k in range(30)], power_now_w=1290.0,
+        power_avg_w=1145.0, power_peak_w=1290.0, slowdown=1.1, dilated=True)
     jobs = [(j, f"job{j}", "acct", "R" if j < 4 else "PD", 2 + j, 3600, 60 * j, 1.1, j == 2) for j in range(8)]
     return UISnapshot(
         meta=meta, stale=False, timestep=i, time_str="00:00:%02d" % (i % 60), sim_elapsed=float(i),
@@ -58,6 +63,7 @@ def make_snapshot(meta, i=0):
         cdu_power=rack.sum(axis=1), cdu_loss=rack.sum(axis=1) * 0.07, total_power_mw=1.5, total_loss_mw=0.1,
         p_flops=10.0, g_flops_w=30.0, jobs=jobs, jobs_truncated=False, cooling=cooling, network=network,
         history={k: [1.0, 2.0, 3.0] for k in ("power", "util", "pue", "net_util", "slowdown", "congestion")},
+        job_detail=detail,
     )
 
 
@@ -248,3 +254,29 @@ def test_help_screen_and_cycle():
         await pilot.pause(1.2)  # --ui-cycle 0.5 advances the view on its own
         assert app._current != before or len(app._active) == 1
     run_app(make_meta(), check, cycle=0.5)
+
+
+def test_job_detail_modal_opens_updates_and_shows_in_map():
+    async def check(app, pilot):
+        await pilot.press("2")
+        await pilot.pause(0.3)
+        table = app.query_one("#jobs-table")
+        table.move_cursor(row=2, animate=False)  # job 2 is the one the fake snapshots carry detail for
+        await pilot.press("enter")
+        await pilot.pause(0.5)
+        assert app.screen.__class__.__name__ == "JobDetailScreen"
+        assert app.screen.job_id == "2"
+        first = str(app.screen.query_one("#jd-summary").render())
+        assert "running" in first and "acct" in first and "kW" in first
+        assert "Racks" in str(app.screen.query_one("#jd-place").render())
+        await pilot.pause(1.0)  # keeps updating and the app behind it keeps polling without errors
+        assert app.screen.__class__.__name__ == "JobDetailScreen"
+        await pilot.press("m")
+        await pilot.pause(0.3)
+        assert app.screen.__class__.__name__ != "JobDetailScreen"
+        nm = app.query_one("#view-3")
+        assert app.query_one("#views").current == "view-3"
+        assert nm.cursor == 1 and nm.focus_job == 2
+        await pilot.press("escape")
+        assert nm.focus_job is None
+    run_app(make_meta(), check, size=(120, 50))

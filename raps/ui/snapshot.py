@@ -19,6 +19,7 @@ from raps.ui.binning import FREE, BUSY, DOWN
 from raps.utils import convert_seconds_to_hhmmss
 
 HISTORY_LEN = 240        # samples kept for the sparklines
+DETAIL_POINTS = 240      # power samples shipped for the selected job
 MAX_JOB_ROWS = 5000      # running + queued jobs shipped per snapshot
 _FACILITY_KEY = re.compile(r"^simulator\[1\]\.(?P<path>.+)\.summary\.(?P<name>\w+)$")
 _CDU_PREFIX = "simulator[1].datacenter[1].computeBlock[{i}].cdu[1].summary."
@@ -82,6 +83,28 @@ class NetworkSnapshot:
 
 
 @dataclass
+class JobDetail:
+    """Everything the job detail modal shows about the one job the user selected."""
+    id: object
+    name: str
+    account: str
+    state: str                   # job state code, e.g. "R" or "PD"
+    nodes_required: int
+    node_ranges: list            # [(first, last)] of the allocated node ids, empty until scheduled
+    racks: list                  # sorted rack numbers the job touches
+    submit_s: Optional[float]    # sim seconds relative to the start of the run
+    start_s: Optional[float]
+    run_s: float                 # sim seconds the job has run
+    limit_s: float               # time limit in sim seconds, 0 if none
+    power_w: list                # job power (whole job, W), downsampled to at most DETAIL_POINTS samples
+    power_now_w: Optional[float]
+    power_avg_w: Optional[float]
+    power_peak_w: Optional[float]
+    slowdown: float
+    dilated: bool
+
+
+@dataclass
 class UISnapshot:
     meta: UIMeta
     stale: bool                  # reuses the previous tick's power/cooling results
@@ -115,6 +138,7 @@ class UISnapshot:
     cooling: Optional[CoolingSnapshot]
     network: Optional[NetworkSnapshot]
     history: dict                # name -> list[float] ring buffers for the sparklines
+    job_detail: Optional[JobDetail] = None   # the selected job, None if none selected or it is gone
 
 
 class SnapshotBuilder:
@@ -133,6 +157,7 @@ class SnapshotBuilder:
         self._rate_text = "..."
         self._history = {k: deque(maxlen=HISTORY_LEN)
                          for k in ("power", "util", "pue", "net_util", "slowdown", "congestion")}
+        self.selected_job = None  # id of the job shown in the detail modal; set from the UI thread
         self._fmu_keys = None   # (key, [full output keys per CDU]) cached on first cooling snapshot
         self._facility_keys = None
         self._facility_nkeys = -1
@@ -249,6 +274,7 @@ class SnapshotBuilder:
             cooling=cooling,
             network=network,
             history={k: list(v) for k, v in self._history.items()},
+            job_detail=self._job_detail(tick),
         )
 
     def _node_state(self):
@@ -331,6 +357,50 @@ class SnapshotBuilder:
             job.current_run_time // ds,
             float(getattr(job, "slowdown_factor", 0.0)) if net else 0.0,
             bool(getattr(job, "dilated", False)),
+        )
+
+    def _job_detail(self, tick):
+        want = self.selected_job
+        if want is None:
+            return None
+        job = next((j for j in list(tick.running) + list(tick.queue) if str(j.id) == str(want)), None)
+        if job is None:
+            return None
+        meta, ds = self.meta, self.meta.downscale
+        nodes = np.unique(np.asarray(job.scheduled_nodes if job.scheduled_nodes is not None else [],
+                                     dtype=np.int64))
+        nodes = nodes[(nodes >= 0) & (nodes < self.total_nodes)]
+        ranges = []
+        if len(nodes):
+            cuts = np.flatnonzero(np.diff(nodes) > 1)
+            starts = np.concatenate(([0], cuts + 1))
+            ends = np.concatenate((cuts, [len(nodes) - 1]))
+            ranges = [(int(nodes[a]), int(nodes[b])) for a, b in zip(starts, ends)]
+        racks = sorted({int(r) for r in np.unique(nodes // meta.nodes_per_rack)}) if len(nodes) else []
+
+        def rel(t):
+            return None if t is None else (t - meta.timestep_start) / ds
+
+        full = to_float_array(list(job.power_history)) if len(job.power_history) else np.zeros(0)
+        power = [float(x) for x in (full[::-(-len(full) // DETAIL_POINTS)] if len(full) > DETAIL_POINTS else full)]
+        return JobDetail(
+            id=job.id,
+            name="hidden" if self.encrypt else str(job.name),
+            account=str(job.account),
+            state=job.current_state.value,
+            nodes_required=int(job.nodes_required),
+            node_ranges=ranges,
+            racks=racks,
+            submit_s=rel(job.submit_time),
+            start_s=rel(job.start_time) if job.current_state.value == "R" else None,
+            run_s=job.current_run_time / ds,
+            limit_s=(job.time_limit or 0) / ds,
+            power_w=power,
+            power_now_w=float(full[-1]) if len(full) else None,
+            power_avg_w=float(full.mean()) if len(full) else None,
+            power_peak_w=float(full.max()) if len(full) else None,
+            slowdown=float(getattr(job, "slowdown_factor", 0.0)) if meta.has_network else 0.0,
+            dilated=bool(getattr(job, "dilated", False)),
         )
 
     def _cooling(self, tick):

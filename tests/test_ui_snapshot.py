@@ -180,3 +180,23 @@ def test_system_ui_block():
     cfg = SystemConfig.model_validate({**base, "ui": {"node_map_group": 8}})
     assert cfg.ui.node_map_group == 8
     assert cfg.get_legacy()["TOTAL_NODES"] == 9600
+
+
+def test_job_detail_for_selected_job(run):
+    engine, builder, tick = run
+    assert builder.build(tick).job_detail is None  # nothing selected
+    job = tick.running[0]
+    builder.selected_job = job.id
+    try:
+        d = builder.build(tick).job_detail
+        assert str(d.id) == str(job.id) and d.state == "R"
+        assert d.nodes_required == len(job.scheduled_nodes)
+        covered = sum(b - a + 1 for a, b in d.node_ranges)
+        assert covered == len(set(job.scheduled_nodes))
+        npr = builder.meta.nodes_per_rack
+        assert d.racks == sorted({n // npr for n in job.scheduled_nodes})
+        assert len(d.power_w) <= 240
+        builder.selected_job = "no-such-job"
+        assert builder.build(tick).job_detail is None
+    finally:
+        builder.selected_job = None
