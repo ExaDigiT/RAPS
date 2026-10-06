@@ -172,6 +172,20 @@ def test_pause_and_speed_keys_call_simulation_state():
     run_app(make_meta(), check, engine=engine)
 
 
+@pytest.mark.parametrize("width", [60, 80, 120])
+def test_speed_banner_fits_status_bar(width):
+    state = SimulationState(time_delta=1)
+    engine = SimpleNamespace(sim_state=state)
+
+    async def check(app, pilot):
+        await pilot.press("l")
+        await pilot.pause(0.3)
+        text = app.query_one("#statusbar")._text
+        assert "SPEED UP: Δt = 2x" in text.plain
+        assert text.cell_len <= app.query_one("#statusbar").content_size.width
+    run_app(make_meta(), check, size=(width, 30), engine=engine)
+
+
 def test_quit_before_completion_marks_aborted():
     app = run_app(make_meta(), lambda app, pilot: asyncio.sleep(0))
     assert app.aborted and not app.finished

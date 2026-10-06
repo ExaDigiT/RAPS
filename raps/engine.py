@@ -131,13 +131,13 @@ class SimulationState:
                     self._set_notice(f"\u23e9  THROTTLE: target {self._fmt_rate(new)} real time", "bold cyan")
                 return
             self.time_delta *= 2
-            self._set_notice(f"\u23e9  SPEED UP: time_delta = {self.time_delta}x", "bold cyan")
+            self._set_notice(f"\u23e9  SPEED UP: \u0394t = {self.time_delta}x", "bold cyan")
 
     def slow_down(self):
         with self.lock:
             if self.time_delta > 1:
                 self.time_delta //= 2
-                self._set_notice(f"\u23ea  SLOWED DOWN: time_delta = {self.time_delta}x", "bold yellow")
+                self._set_notice(f"\u23ea  SLOWED DOWN: \u0394t = {self.time_delta}x", "bold yellow")
                 return
             # At 1x tick resolution: throttle against the wall clock instead
             if self.target_rate is None:

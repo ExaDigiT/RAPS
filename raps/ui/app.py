@@ -10,6 +10,7 @@ import threading
 import time
 import traceback
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -207,22 +208,33 @@ class RapsApp(App):
     def _render_status(self):
         snap = self._applied
         bar = Text()
-        width = self.size.width
+        pane = self.query_one("#statusbar", TextPane)
+        width = pane.content_size.width or max(self.size.width - 2, 1)  # minus CSS padding
         banner = self._banner()
+        banner_text = f"  {banner[0]} " if banner else ""
+        # The banner is never clipped: the progress bar shrinks (or disappears) to make room.
+        # Measure in terminal cells, since the banner's emoji are double width.
+        avail = width - cell_len(banner_text)
         if snap is None:
             bar.append(" waiting for the first snapshot...", style="dim")
         else:
             left = f" {snap.time_str}  {snap.rate_text}x  "
-            bar.append(left, style="bold")
             right = f" {snap.progress * 100:5.1f}%"
-            bw = max(width - len(left) - len(right) - (len(banner[0]) + 4 if banner else 0), 4)
-            filled = int(bw * snap.progress)
-            bar.append("█" * filled, style="green")
-            bar.append("░" * (bw - filled), style="dim")
+            bw = avail - cell_len(left) - cell_len(right)
+            if bw < 4:  # no room for a bar; keep the percentage if it fits
+                bw = 0
+                if cell_len(left) + cell_len(right) > avail:
+                    right = ""
+            if cell_len(left) <= avail:
+                bar.append(left, style="bold")
+            if bw:
+                filled = int(bw * snap.progress)
+                bar.append("█" * filled, style="green")
+                bar.append("░" * (bw - filled), style="dim")
             bar.append(right)
         if banner:
-            bar.append(f"  {banner[0]} ", style=banner[1])
-        self.query_one("#statusbar", TextPane).update(bar)
+            bar.append(banner_text, style=banner[1])
+        pane.update(bar)
 
     # -- actions -----------------------------------------------------------------------------
     @property
