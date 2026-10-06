@@ -200,3 +200,16 @@ def test_job_detail_for_selected_job(run):
         assert builder.build(tick).job_detail is None
     finally:
         builder.selected_job = None
+
+
+def test_size_histogram_buckets():
+    from raps.ui.widgets.histogram import bucket_counts, size_buckets, render_hist, fmt_bound
+    bounds = size_buckets(9408)
+    assert bounds[0] == 1 and bounds[-1] >= 9408
+    counts = bucket_counts([1, 2, 3, 4, 5, 8, 9, 9408], len(bounds))
+    # buckets are (2^(i-1), 2^i]: 1 | 2 | 3-4 | 5-8 | 9-16 ... 
+    assert counts[:5].tolist() == [1, 1, 2, 2, 1]
+    assert counts.sum() == 8 and counts[bounds.index(16384)] == 1
+    text = render_hist(counts, counts, [fmt_bound(b) for b in bounds], 80, 8)
+    assert len(text.plain.splitlines()) == 8
+    assert bucket_counts([], 4).tolist() == [0, 0, 0, 0]

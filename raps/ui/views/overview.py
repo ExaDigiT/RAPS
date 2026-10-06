@@ -8,6 +8,7 @@ from raps.ui.widgets.textpane import TextPane
 
 from raps.ui.binning import plan_nodemap, pixel_bin_index, bin_nodes, bin_colors, render_pixels
 from raps.ui.views.base import View, clip, fmt_dur, fmt_num, kv_lines, sync_table
+from raps.ui.widgets.histogram import RUN_STYLE, QUEUE_STYLE, SizeHistogram
 from raps.ui.widgets.pixelgrid import PixelGrid
 from raps.ui.widgets.spark import LabeledSpark
 
@@ -24,14 +25,18 @@ class Overview(View):
     Overview #ov-sparks { height: auto; }
     Overview #ov-bottom { height: 1fr; }
     Overview #ov-map { width: 1fr; border: round $primary-darken-2; }
-    Overview #ov-jobs { width: 2fr; border: round $primary-darken-2; }
+    Overview #ov-right { width: 2fr; }
+    Overview #ov-hist { height: 1fr; min-height: 8; max-height: 14; border: round $primary-darken-2; }
+    Overview #ov-jobs { height: 2fr; border: round $primary-darken-2; }
     Overview.narrow #ov-map { display: none; }
-    Overview.narrow #ov-jobs { width: 1fr; }
+    Overview.narrow #ov-right { width: 1fr; }
+    Overview.short #ov-hist { display: none; }
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._cols = None
+        self._ready = False   # nested children (the right column) may mount after this view's own mount
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="ov-tiles"):
@@ -46,16 +51,27 @@ class Overview(View):
             yield LabeledSpark("Net util %", id="sp-net")
         with Horizontal(id="ov-bottom"):
             yield PixelGrid(id="ov-map")
-            yield DataTable(id="ov-jobs", cursor_type="none", zebra_stripes=True)
+            with Vertical(id="ov-right"):
+                yield SizeHistogram(id="ov-hist")
+                yield DataTable(id="ov-jobs", cursor_type="none", zebra_stripes=True)
 
     def on_mount(self):
+        self.call_after_refresh(self._init_widgets)
+
+    def _init_widgets(self):
         self.query_one("#ov-map").border_title = "Node map"
+        self.query_one("#ov-hist").border_title = Text.assemble(
+            "Jobs by size (nodes, upper bound): ", ("running", RUN_STYLE), " ", ("queued", QUEUE_STYLE))
         t = self.query_one("#ov-jobs", DataTable)
         t.border_title = "Top jobs"
         self.query_one("#ov-map", PixelGrid).set_source(self._map_image)
+        self._ready = True
+        if self.snapshot is not None:
+            self.update_snapshot(self.snapshot)
 
     def on_resize(self, event):
         self.set_class(event.size.width < 100, "narrow")
+        self.set_class(event.size.height < 32, "short")
 
     def _setup(self, snap):
         meta = snap.meta
@@ -86,6 +102,8 @@ class Overview(View):
 
     def update_snapshot(self, snap):
         super().update_snapshot(snap)
+        if not self._ready:
+            return
         if self._cols is None:
             self._setup(snap)
         m = snap.meta
@@ -133,6 +151,9 @@ class Overview(View):
             self.query_one("#sp-net", LabeledSpark).set_data(h["net_util"], f"{snap.network.avg_util * 100:.1f}")
 
         self.query_one("#ov-map", PixelGrid).refresh_image()
+        self.query_one("#ov-hist", SizeHistogram).set_data(
+            [j[4] for j in snap.jobs if j[3] == "R"], [j[4] for j in snap.jobs if j[3] == "PD"],
+            m.total_nodes)
         self._fill_jobs(snap)
 
     def _fill_jobs(self, snap):
