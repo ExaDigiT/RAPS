@@ -22,6 +22,16 @@ LEGENDS = {
 STATE_NAMES = {FREE: "free", BUSY: "busy", DOWN: "down"}
 
 
+class RackTable(DataTable):
+    """Rack node table; left/right step to the previous/next rack instead of moving a column cursor."""
+
+    def action_cursor_left(self):
+        self.screen.query_one(NodeMap).action_step_rack(-1)
+
+    def action_cursor_right(self):
+        self.screen.query_one(NodeMap).action_step_rack(1)
+
+
 class NodeMap(View):
     view_key = "3"
     title = "Node Map"
@@ -56,7 +66,7 @@ class NodeMap(View):
     def compose(self) -> ComposeResult:
         yield TextPane(id="nm-info")
         yield PixelGrid(id="nm-grid")
-        yield DataTable(id="nm-rack", cursor_type="row", zebra_stripes=True)
+        yield RackTable(id="nm-rack", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self):
         self.query_one("#nm-grid", PixelGrid).set_source(self._image)
@@ -71,8 +81,21 @@ class NodeMap(View):
         self.mode = (self.mode + 1) % len(MODES)
         self._redraw()
 
+    def action_step_rack(self, d: int):
+        """In the zoomed rack view, switch to the previous/next rack."""
+        if self.snapshot is None:
+            return
+        m = self.snapshot.meta
+        n_racks = m.total_nodes // m.nodes_per_rack
+        self.cursor = min(max(self.cursor + d, 0), n_racks - 1)
+        self._redraw()
+        self._fill_rack(self.snapshot)
+
     def action_move(self, dx: int, dy: int):
-        if self.zoomed or self._plan is None or not self._plan.rack_aligned or self.snapshot is None:
+        if self.zoomed:
+            self.action_step_rack(dx)
+            return
+        if self._plan is None or not self._plan.rack_aligned or self.snapshot is None:
             return
         m = self.snapshot.meta
         n_racks = m.total_nodes // m.nodes_per_rack
@@ -170,6 +193,7 @@ class NodeMap(View):
 
     def _fill_rack(self, snap):
         m = snap.meta
+        self.query_one("#nm-rack", DataTable).border_title = f"Rack {self.cursor} (left/right: prev/next, esc: back)"
         lo, hi = self.cursor * m.nodes_per_rack, (self.cursor + 1) * m.nodes_per_rack
         jobs = {j[0]: j[1] for j in snap.jobs}
         t = self.query_one("#nm-rack", DataTable)

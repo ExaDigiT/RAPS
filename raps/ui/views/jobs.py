@@ -18,6 +18,7 @@ class Jobs(View):
     BINDINGS = [
         Binding("slash", "filter", "Filter", show=False),
         Binding("s", "sort", "Sort column", show=False),
+        Binding("n", "sort_nodes", "Sort by nodes", show=False),
         Binding("r", "reverse", "Reverse sort", show=False),
         Binding("escape", "clear_filter", "Clear filter", show=False),
     ]
@@ -74,6 +75,23 @@ class Jobs(View):
         self.sort_col = 0 if self.sort_col is None else (self.sort_col + 1) % n
         self._refresh()
 
+    def _sort_by(self, col_name: str):
+        """Sort by a column; selecting the active column again flips direction, a new one starts descending."""
+        i = next((k for k, c in enumerate(self._cols or []) if c[0] == col_name), None)
+        if i is None:
+            return
+        if self.sort_col == i:
+            self.sort_desc = not self.sort_desc
+        else:
+            self.sort_col, self.sort_desc = i, True
+        self._refresh()
+
+    def action_sort_nodes(self):
+        self._sort_by("NODES")
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
+        self._sort_by(str(event.label))
+
     def action_reverse(self):
         self.sort_desc = not self.sort_desc
         self._refresh()
@@ -126,4 +144,4 @@ class Jobs(View):
         trunc = " (list capped)" if snap.jobs_truncated else ""
         self.query_one("#jobs-info", TextPane).update(
             f"{snap.n_running} running, {snap.n_queued} queued | showing {shown}{trunc} | sort: {sort} | "
-            f"/ filter  s sort  r reverse")
+            f"/ filter  s sort  n nodes  r reverse")
