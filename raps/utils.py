@@ -864,8 +864,16 @@ def read_yaml_parsed(cls: type[T], config_file=None) -> dict:
             base_path = Path(config_file).parent if config_file and config_file != "-" else None
             model = cls.model_validate(yaml_data, context={"base_path": base_path})
             yaml_data = model.model_dump(mode='json', exclude_unset=True)
+    except OSError as err:
+        print(f'Cannot read config file "{config_file}": {err.strerror or err}')
+        if config_file and Path(config_file).suffix.lower() == ".npz":
+            print(f'Hint: .npz files are replay snapshots, not configs. Use --replay "{config_file}"')
+        sys.exit(1)
     except (ValidationError, ValueError, YAMLError) as err:
         print(f'Failed to parse yaml "{config_file}"')
+        if config_file and Path(config_file).suffix.lower() == ".npz":
+            print(f'Hint: .npz files are replay snapshots, not configs. Use --replay "{config_file}"')
+            sys.exit(1)
         hint = _wrong_run_command_hint(cls, err)
         if hint:
             print(hint)
