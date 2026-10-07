@@ -1,0 +1,34 @@
+# Frontier-like job-size mix on Lux using synthetic jobs.
+# raps run experiments/lux.yaml
+#
+# Lux has 504 nodes (Frontier ~9,400), so sizes are scaled by ~0.054.
+# Frontier's job-size PDF is heavy-tailed: mostly small jobs plus a thin tail
+# of large ones. RAPS cannot sample an empirical PDF, so it is approximated by
+# a two-component mixture (weights in `multimodal`):
+#   component 1 (90%): Weibull, shape < 1 -> many small jobs (median ~4 nodes)
+#   component 2 (10%): Normal around 128 nodes -> capability-class jobs
+# All per-job lists below must have one entry per component, or the generator
+# silently drops components (it zips them).
+system: lux
+workload: synthetic
+numjobs: 2000
+arrival: poisson
+time: 24h
+time_delta: 15s   # = trace quanta; 15x faster than the 1 s default
+policy: fcfs      # default is replay, which is wrong for synthetic jobs
+backfill: firstfit
+
+multimodal: [0.9, 0.1]
+
+jobsize_distribution: [weibull, normal]
+jobsize_weibull_scale: 8
+jobsize_weibull_shape: 0.8
+jobsize_normal_mean: 128
+jobsize_normal_stddev: 64
+
+walltime_distribution: [weibull, weibull]
+walltime_weibull_scale: 3600
+walltime_weibull_shape: 1.0
+
+cpuutil_distribution: [uniform, uniform]
+gpuutil_distribution: [uniform, uniform]
