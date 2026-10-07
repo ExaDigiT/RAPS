@@ -179,39 +179,48 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
               "telemetry_end_timestamp", telemetry_end_timestamp)
         print("first_start_timestamp:", first_start_timestamp, "last start timestamp:", jobs_df['time_start'].max())
 
+    # Group the profile rows by allocation once, instead of scanning the whole
+    # profile table for every job. Rows stay in timestamp order within a group.
+    alloc_rows = jobprofile_df.groupby('allocation_id', sort=False).indices
+    if validate:
+        power_cols = {'mean': jobprofile_df['mean_node_power'].to_numpy()}
+    else:
+        power_cols = {'cpu': jobprofile_df['sum_cpu0_power'].to_numpy(),
+                      'gpu': jobprofile_df['sum_gpu_power'].to_numpy()}
+    no_rows = np.empty(0, dtype=np.intp)
+
+    # Pull job columns out once; scalar .loc lookups per job are slow.
+    col = {c: jobs_df[c].tolist() for c in (
+        'account', 'job_id', 'allocation_id', 'node_count', 'state_current', 'name',
+        'time_submission', 'time_limit', 'time_start', 'time_end', 'xnames')}
+
     jobs = []
     # Map dataframe to job state. Add results to jobs list
     for jidx in tqdm(range(num_jobs - 1), total=num_jobs, desc="Processing Jobs"):
 
-        # user = jobs_df.loc[jidx, 'user']
-        account = jobs_df.loc[jidx, 'account']
-        job_id = jobs_df.loc[jidx, 'job_id']
-        allocation_id = jobs_df.loc[jidx, 'allocation_id']
-        nodes_required = jobs_df.loc[jidx, 'node_count']
-        end_state = jobs_df.loc[jidx, 'state_current']
-        name = jobs_df.loc[jidx, 'name']
+        account = col['account'][jidx]
+        job_id = col['job_id'][jidx]
+        allocation_id = col['allocation_id'][jidx]
+        nodes_required = col['node_count'][jidx]
+        end_state = col['state_current'][jidx]
+        name = col['name'][jidx]
         if encrypt_bool:
             name = encrypt(name)
 
+        rows = alloc_rows.get(allocation_id, no_rows)
         if validate:
-            cpu_power = jobprofile_df[jobprofile_df['allocation_id']
-                                      == allocation_id]['mean_node_power']
-            cpu_trace = cpu_power.values
+            cpu_trace = power_cols['mean'][rows]
             gpu_trace = cpu_trace
 
         else:
-            cpu_power = jobprofile_df[jobprofile_df['allocation_id']
-                                      == allocation_id]['sum_cpu0_power']
-            cpu_power_array = cpu_power.values
+            cpu_power_array = power_cols['cpu'][rows]
             cpu_min_power = nodes_required * config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
             cpu_max_power = nodes_required * config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
             # Will be negative! as cpu_power_array[i] can be smaller than cpu_min_power
             cpu_util = power_to_utilization(cpu_power_array, cpu_min_power, cpu_max_power)
             cpu_trace = cpu_util * config['CPUS_PER_NODE']
 
-            gpu_power = jobprofile_df[jobprofile_df['allocation_id']
-                                      == allocation_id]['sum_gpu_power']
-            gpu_power_array = gpu_power.values
+            gpu_power_array = power_cols['gpu'][rows]
 
             gpu_min_power = nodes_required * config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
             gpu_max_power = nodes_required * config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
@@ -223,18 +232,18 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         gpu_trace[np.isnan(gpu_trace)] = 0
 
         # Times:
-        submit_timestamp = jobs_df.loc[jidx, 'time_submission']
+        submit_timestamp = col['time_submission'][jidx]
         diff = submit_timestamp - telemetry_start_timestamp
         submit_time = diff.total_seconds()
 
         # Slurm records time_limit in minutes (max 10080 = 7 days); RAPS uses seconds.
-        time_limit = jobs_df.loc[jidx, 'time_limit'] * 60
+        time_limit = col['time_limit'][jidx] * 60
 
-        start_timestamp = jobs_df.loc[jidx, 'time_start']
+        start_timestamp = col['time_start'][jidx]
         diff = start_timestamp - telemetry_start_timestamp
         start_time = diff.total_seconds()
 
-        end_time_timestamp = jobs_df.loc[jidx, 'time_end']
+        end_time_timestamp = col['time_end'][jidx]
         diff = end_time_timestamp - telemetry_start_timestamp
         end_time = diff.total_seconds()
         if not start_time <= end_time or np.isnan(end_time):
@@ -265,7 +274,7 @@ def load_data_from_df(jobs_df: pd.DataFrame, jobprofile_df: pd.DataFrame, **kwar
         else:
             trace_missing_values = False
 
-        xnames = jobs_df.loc[jidx, 'xnames']
+        xnames = col['xnames'][jidx]
         # Don't replay any job with an empty set of xnames
         if '' in xnames:
             continue
