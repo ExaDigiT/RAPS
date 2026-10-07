@@ -40,7 +40,7 @@ Fugaku or the 40frontiers config are readable without any config changes.
 | `5` | Cooling (with `--cooling`): plant schematic and a per-CDU heat grid (`m` changes the metric) |
 | `6` | Network (with `--simulate-network`): link utilization, hottest links, per-job slowdown |
 
-Other keys: `space`/`k` pause, `l`/`+` faster, `j`/`-` slower, `tab`/`shift+tab` next/previous
+Other keys: `space`/`k` pause, `l`/`+` faster, `j`/`-` slower, `0` reset speed to the start value, `tab`/`shift+tab` next/previous
 view, `a` auto-cycle, `?` help, `q` quit (the final report prints after the app exits).
 
     raps run --ui classic        # the original single-screen layout (--layout, keyboard controls unchanged)

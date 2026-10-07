@@ -30,6 +30,7 @@ HELP_TEXT = """\
   space / k    pause or resume
   l / +        faster (coarser time step, then unthrottled)
   j / -        slower (finer time step, then wall-clock throttle)
+  0            reset speed to where the run started
 
 [b]Views[/b]
   1-6          Overview, Jobs, Node Map, Power, Cooling, Network
@@ -70,6 +71,7 @@ class RapsApp(App):
         Binding("space,k", "pause", "Pause"),
         Binding("l,plus", "faster", "Faster"),
         Binding("j,minus,underscore", "slower", "Slower"),
+        Binding("0", "reset_speed", "Reset speed"),
         Binding("tab", "next_view", "Next view", show=False, priority=True),
         Binding("shift+tab", "prev_view", "Prev view", show=False, priority=True),
         Binding("a", "toggle_cycle", "Auto-cycle"),
@@ -256,6 +258,10 @@ class RapsApp(App):
     def action_slower(self):
         if self.sim_state is not None:
             self.sim_state.slow_down()
+
+    def action_reset_speed(self):
+        if self.sim_state is not None:
+            self.sim_state.reset_speed()
 
     def _show(self, index):
         if not self._active:

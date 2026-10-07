@@ -93,6 +93,7 @@ class SimulationState:
     def __init__(self, time_delta):
         self.paused = False
         self.time_delta = time_delta
+        self.initial_time_delta = time_delta  # speed the run started at, restored by reset_speed()
         self.lock = threading.Lock()
         self._notice = None
         self._notice_until = 0.0
@@ -154,6 +155,17 @@ class SimulationState:
                 return
             self.target_rate = new
             self._set_notice(f"\U0001f422  THROTTLE: target {self._fmt_rate(new)} real time", "bold yellow")
+
+    def reset_speed(self):
+        """Back to the speed the run started at: original time step, no wall-clock throttle."""
+        with self.lock:
+            if self.time_delta == self.initial_time_delta and self.target_rate is None:
+                self._set_notice(f"\u21ba  Already at start speed: \u0394t = {self.time_delta}x", "bold cyan")
+                return
+            self.time_delta = self.initial_time_delta
+            self.target_rate = None
+            self.free_rate = None
+            self._set_notice(f"\u21ba  RESET SPEED: \u0394t = {self.time_delta}x", "bold cyan")
 
     @staticmethod
     def _fmt_rate(r):

@@ -178,6 +178,29 @@ def test_pause_and_speed_keys_call_simulation_state():
     run_app(make_meta(), check, engine=engine)
 
 
+def test_zero_resets_speed_to_start_value():
+    state = SimulationState(time_delta=5)
+    engine = SimpleNamespace(sim_state=state)
+
+    async def check(app, pilot):
+        await pilot.press("l", "l")
+        assert state.get_time_delta() == 20
+        await pilot.press("0")
+        assert state.get_time_delta() == 5
+        assert "RESET SPEED" in state.banner()[0]
+        # slower, down past 1x into the wall-clock throttle, then reset clears both
+        await pilot.press("j", "j", "j")
+        assert state.get_time_delta() == 1
+        state.measured_rate = 100.0
+        await pilot.press("j")
+        assert state.get_target_rate() is not None
+        await pilot.press("0")
+        assert state.get_time_delta() == 5 and state.get_target_rate() is None
+        await pilot.press("0")
+        assert "Already at start speed" in state.banner()[0]
+    run_app(make_meta(), check, engine=engine)
+
+
 @pytest.mark.parametrize("width", [60, 80, 120])
 def test_speed_banner_fits_status_bar(width):
     state = SimulationState(time_delta=1)
