@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 
 # Node state codes used in UISnapshot.node_state
-FREE, BUSY, DOWN = 0, 1, 2
+FREE, BUSY, DOWN, MISSING = 0, 1, 2, 3  # MISSING: rack not installed; drawn black, not counted
 
 
 @dataclass(frozen=True)
@@ -120,7 +120,8 @@ def bin_nodes(node_state, node_power, node_job, per_bin):
             a = np.concatenate([a, np.full(pad, fill, dtype=a.dtype)])
         return a.reshape(n_bins, per_bin)
 
-    st = fold(node_state, 255)
+    # Missing nodes are treated like padding: they do not count as nodes of the bin
+    st = fold(np.where(node_state == MISSING, 255, node_state).astype(np.uint8), 255)
     count = (st != 255).sum(axis=1)
     denom = np.maximum(count, 1).astype(np.float32)
     out = {
@@ -189,10 +190,12 @@ def bin_colors(bins, mode, power_lo=0.0, power_hi=1.0):
     if mode == "job":
         rgb = job_colors(bins["job"])
         rgb[bins["down"] > 0] = COLOR_DOWN
+        rgb[bins["count"] == 0] = COLOR_EMPTY
         return rgb
     if mode == "power":
         rgb = heat_colors(bins["power"], power_lo, power_hi)
         rgb[bins["down"] >= 0.5] = COLOR_DOWN
+        rgb[bins["count"] == 0] = COLOR_EMPTY
         return rgb
     # state: free grey blended towards green by busy fraction, red by down fraction
     busy = bins["busy"][:, None]

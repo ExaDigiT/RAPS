@@ -33,7 +33,10 @@ def test_node_arrays_line_up(run):
     free = np.flatnonzero(snap.node_state == binning.FREE)
     down = np.flatnonzero(snap.node_state == binning.DOWN)
     assert sorted(free.tolist()) == sorted(rm.available_nodes)
-    assert set(down.tolist()) == set(rm.down_nodes)
+    # Nodes of missing racks are in rm.down_nodes but shown as MISSING, not DOWN
+    missing = np.flatnonzero(snap.node_state == binning.MISSING)
+    assert set(down.tolist()) | set(missing.tolist()) == set(rm.down_nodes)
+    assert not set(down.tolist()) & set(missing.tolist())
     assert (snap.node_state == binning.BUSY).sum() == tick.num_active_nodes
     assert len(free) == tick.num_free_nodes
 

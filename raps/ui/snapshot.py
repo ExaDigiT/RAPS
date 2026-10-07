@@ -15,7 +15,7 @@ from typing import Optional
 
 import numpy as np
 
-from raps.ui.binning import FREE, BUSY, DOWN
+from raps.ui.binning import FREE, BUSY, DOWN, MISSING
 from raps.utils import convert_seconds_to_hhmmss
 
 HISTORY_LEN = 240        # samples kept for the sparklines
@@ -289,12 +289,19 @@ class SnapshotBuilder:
                 elif (node["available_cpu_cores"] == node["total_cpu_cores"]
                       and node["available_gpu_units"] == node["total_gpu_units"]):
                     state[i] = FREE
-            return state
+            return self._mark_missing(state)
         free = np.fromiter(rm.available_nodes, dtype=np.int64, count=len(rm.available_nodes))
         state[free[free < n]] = FREE
         if rm.down_nodes:
             down = np.fromiter(rm.down_nodes, dtype=np.int64, count=len(rm.down_nodes))
             state[down[down < n]] = DOWN
+        return self._mark_missing(state)
+
+    def _mark_missing(self, state):
+        """Nodes of racks that are not installed (MISSING_RACKS) are not 'down'; mark them separately."""
+        per_rack = int(self.config["NODES_PER_RACK"])
+        for rack in self.config.get("MISSING_RACKS", []) or []:
+            state[rack * per_rack:(rack + 1) * per_rack] = MISSING
         return state
 
     def _node_job(self, running):

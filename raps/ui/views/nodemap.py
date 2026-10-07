@@ -7,7 +7,7 @@ from textual.widgets import DataTable
 from raps.ui.widgets.textpane import TextPane
 
 from raps.ui.binning import (
-    FREE, BUSY, DOWN, plan_nodemap, pixel_bin_index, rack_of_pixels, bin_nodes, bin_colors, render_pixels,
+    FREE, BUSY, DOWN, MISSING, plan_nodemap, pixel_bin_index, rack_of_pixels, bin_nodes, bin_colors, render_pixels,
 )
 from raps.ui.views.base import View, sync_table
 from raps.ui.widgets.pixelgrid import PixelGrid
@@ -20,7 +20,7 @@ LEGENDS = {
              "[#dc3c3c]█[/] down",
 }
 HIGHLIGHT = np.array([255, 170, 0], dtype=np.uint8)
-STATE_NAMES = {FREE: "free", BUSY: "busy", DOWN: "down"}
+STATE_NAMES = {FREE: "free", BUSY: "busy", DOWN: "down", MISSING: "missing"}
 
 
 class RackTable(DataTable):
@@ -139,7 +139,7 @@ class NodeMap(View):
 
     # -- rendering ---------------------------------------------------------------------------
     def _power_range(self, snap):
-        up = snap.node_state != DOWN
+        up = (snap.node_state != DOWN) & (snap.node_state != MISSING)
         p = snap.node_power[up] if up.any() else snap.node_power
         return float(p.min()), max(float(p.max()), float(p.min()) + 1.0)
 
@@ -230,7 +230,7 @@ class NodeMap(View):
         lo, hi = self.cursor * m.nodes_per_rack, (self.cursor + 1) * m.nodes_per_rack
         jobs = {j[0]: j[1] for j in snap.jobs}
         t = self.query_one("#nm-rack", DataTable)
-        colors = {FREE: "dim", BUSY: "green", DOWN: "red"}
+        colors = {FREE: "dim", BUSY: "green", DOWN: "red", MISSING: "grey30"}
         nodes = range(lo, min(hi, m.total_nodes))
         rows = []
         for n in nodes:
