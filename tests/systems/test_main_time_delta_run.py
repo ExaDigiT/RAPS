@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -27,7 +28,7 @@ def test_main_time_delta_run(system, system_config, time_arg, tdelta_arg, sim_ou
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "-t", time_arg,
         "--time-delta", tdelta_arg,
         "--system", system,

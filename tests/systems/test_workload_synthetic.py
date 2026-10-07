@@ -1,3 +1,4 @@
+import sys
 import subprocess
 import gc
 import pytest
@@ -72,7 +73,7 @@ def test_workload_synthetic_run(
     # Build the command line.  Each distribution tuple expands into:
     #   dist_name, <flag1>, <value1>, ...
     cmd = [
-        "python", "main.py", "workload",
+        sys.executable, "main.py", "workload",
         "--system", system,
         "-w", "synthetic",
         "--jobsize-distribution", *flatten(jobdist),
@@ -86,7 +87,7 @@ def test_workload_synthetic_run(
         # If the flag contains a space we keep it as a single string.
         cmd.extend(additional_params)
 
-    cmd1 = ["python", "-c \"exit()\""]
+    cmd1 = [sys.executable, "-c \"exit()\""]
     result = subprocess.run(cmd1, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     try:
         result = subprocess.run(

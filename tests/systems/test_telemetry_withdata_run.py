@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -18,7 +19,7 @@ def test_telemetry_main_withdata_run(system, system_config, system_files, sim_ou
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "telemetry",
+        sys.executable, "main.py", "telemetry",
         "--system", system,
         "-f", ','.join(system_files),
         "-o", sim_output,

@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -23,7 +24,7 @@ def test_main_network_run(system, system_config, sim_output, pytestconfig):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "--time", "1m",
         "--system", system,
         "--net",

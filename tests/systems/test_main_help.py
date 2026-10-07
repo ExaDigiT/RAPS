@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -16,7 +17,7 @@ def test_main_help(system, system_config):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "-h"
     ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
 
