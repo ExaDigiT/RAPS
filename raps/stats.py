@@ -398,7 +398,13 @@ _JOB_DIST_ROWS = [
     ("NIC RX util", "", "min_nrx_util", "avg_nrx_util", "max_nrx_util", "util"),
 ]
 _JOB_SIZE_BUCKETS = ["jobs <= 5 nodes", "jobs <= 50 nodes", "jobs <= 250 nodes", "jobs <= 4500 nodes",
-                     " jobs > 4500 nodes"]
+                     "jobs > 4500 nodes"]
+
+
+def _size_label(key):
+    """'jobs <= 5 nodes' -> '<= 5 nodes'; a leading space lines '>' up under '<='."""
+    label = key.replace("jobs ", "")
+    return " " + label if label.startswith(">") else label
 
 
 def _fmt_dist(value, kind):
@@ -444,8 +450,7 @@ def format_job_report(job_stats):
     ])]
     if all(k in job_stats for k in _JOB_SIZE_BUCKETS):
         lines += ["", "Completed jobs by size:", _table(
-            ["Size", "Jobs"], [[k.replace("jobs ", ""), job_stats[k]]
-                               for k in _JOB_SIZE_BUCKETS], "lr")]
+            ["Size", "Jobs"], [[_size_label(k), job_stats[k]] for k in _JOB_SIZE_BUCKETS], "lr")]
     rows, missing = [], []
     for label, unit, kmin, kavg, kmax, kind in _JOB_DIST_ROWS:
         if kmin not in job_stats:
