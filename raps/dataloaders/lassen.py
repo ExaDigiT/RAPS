@@ -30,6 +30,7 @@ Usage Instructions:
 """
 import math
 import os
+import time
 import uuid
 import numpy as np
 import pandas as pd
@@ -48,14 +49,21 @@ def load_data(path, **kwargs):
     Loads data from the given file paths and returns job info.
     """
     nrows = None
-    alloc_df = pd.read_csv(os.path.join(
-        path[0], 'final_csm_allocation_history_hashed.csv'), nrows=nrows, low_memory=False)
-    node_df = pd.read_csv(os.path.join(path[0], 'final_csm_allocation_node_history.csv'), nrows=nrows, low_memory=False)
-    step_df = pd.read_csv(os.path.join(path[0], 'final_csm_step_history.csv'), nrows=nrows, low_memory=False)
-    return load_data_from_df(alloc_df, node_df, step_df, **kwargs)
+
+    def read(name):
+        t = time.time()
+        print(f"Lassen: reading {name} ...", flush=True)
+        df = pd.read_csv(os.path.join(path[0], name), nrows=nrows, low_memory=False)
+        print(f"Lassen: read {len(df):,} rows from {name} in {time.time() - t:.1f}s", flush=True)
+        return df
+
+    alloc_df = read('final_csm_allocation_history_hashed.csv')
+    node_df = read('final_csm_allocation_node_history.csv')
+    # final_csm_step_history.csv (2 GB, 19M rows) is not used by the loader, so it is not read.
+    return load_data_from_df(alloc_df, node_df, None, **kwargs)
 
 
-def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
+def load_data_from_df(allocation_df, node_df, step_df=None, **kwargs):
     """
     Loads data from pandas DataFrames and returns the extracted job info.
     """
@@ -65,6 +73,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     verbose = kwargs.get('verbose')
     start = datetime.fromisoformat(kwargs['start']) if kwargs.get('start') else None
 
+    print("Lassen: parsing timestamps ...", flush=True)
     allocation_df['job_submit_timestamp'] = pd.to_datetime(
         allocation_df['job_submit_time'], format='mixed', errors='coerce')
     allocation_df['begin_timestamp'] = pd.to_datetime(allocation_df['begin_time'], format='mixed', errors='coerce')
@@ -92,9 +101,16 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     # Job has to have been submited before or during the simulaion time
     allocation_df = allocation_df[allocation_df['job_submit_timestamp'] < simulation_end_timestamp]
 
+    print(f"Lassen: {len(allocation_df):,} jobs in the simulated window; indexing node history ...", flush=True)
     job_list = []
+    n_over_limit = 0
 
-    for _, row in tqdm(allocation_df.iterrows(), total=len(allocation_df), desc="Processing Jobs"):
+    # Index node_df rows by allocation once; filtering the (huge) node table per job is quadratic.
+    node_rows = node_df.groupby('allocation_id', sort=False).indices
+    no_rows = np.empty(0, dtype=np.intp)
+
+    # to_dict('records') is much faster than iterrows() and keeps native per-column values
+    for row in tqdm(allocation_df.to_dict('records'), total=len(allocation_df), desc="Processing Jobs"):
 
         account = row['hashed_user_id']
         job_id = int(row['primary_job_id'])
@@ -109,7 +125,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             else:
                 continue
 
-        node_data = node_df[node_df['allocation_id'] == row['allocation_id']]
+        node_data = node_df.iloc[node_rows.get(row['allocation_id'], no_rows)]
 
         wall_time = compute_wall_time(row['begin_timestamp'], row['end_timestamp'])
 
@@ -128,14 +144,15 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # The current simulator uses the same time series for every node of the job
             # Therefore we sum over all nodes and form the average node power.
             # TODO: Jobs could have a time-series per node!
-            gpu_node_energy = node_data['gpu_energy'].copy()
-            gpu_node_energy[gpu_node_energy < 0] = 0.0
-            gpu_node_energy[gpu_node_energy == np.nan] = 0.0
+            # (NaN entries are skipped by the sum, as pandas would; negatives are clamped to 0)
+            gpu_node_energy = node_data['gpu_energy'].to_numpy(dtype=float)
+            gpu_node_energy = np.where(gpu_node_energy < 0, 0.0, gpu_node_energy)
+            gpu_energy_sum = np.nansum(gpu_node_energy)
             if len(gpu_node_energy) < 1:
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
             else:
                 if wall_time > 0:
-                    gpu_power = (gpu_node_energy.sum() / nodes_required) / wall_time  # This is a single value
+                    gpu_power = (gpu_energy_sum / nodes_required) / wall_time  # This is a single value
                 else:
                     gpu_power = gpu_node_idle_power
             if gpu_power < gpu_node_idle_power:
@@ -143,7 +160,7 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
                 # Issue: RAPS assumes power is between idle and max, but C-states are not considered!
                 gpu_power = gpu_node_idle_power  # Setting to idle as other parts of the sim make this assumption
             assert gpu_power >= gpu_node_idle_power, f"{gpu_power} >= {gpu_node_idle_power}" + \
-                f" gpu_power = ({gpu_node_energy.sum()} / {nodes_required}) / {wall_time}"
+                f" gpu_power = ({gpu_energy_sum} / {nodes_required}) / {wall_time}"
             gpu_min_power = gpu_node_idle_power
             gpu_max_power = config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
             # power_to_utilization has issues! As it is unclear if gpu_power is for a single gpu or all gpus of a node.
@@ -155,15 +172,15 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             # Compute CPU power from CPU usage time
             # CPU usage is reported per core, while we need it in the range [0 to CPUS_PER_NODE]
             # Same
-            cpu_node_usage = node_data['cpu_usage'].copy()
-            cpu_node_usage[cpu_node_usage < 0] = 0.0
-            cpu_node_usage[cpu_node_usage == np.nan] = 0.0
+            cpu_node_usage = node_data['cpu_usage'].to_numpy(dtype=float)
+            cpu_node_usage = np.where(cpu_node_usage < 0, 0.0, cpu_node_usage)
+            cpu_usage_sum = np.nansum(cpu_node_usage)
             if wall_time > 0:
                 threads_per_core = config['THREADS_PER_CORE']
-                cpu_util = cpu_node_usage.sum() / 10e9 / nodes_required / wall_time / threads_per_core
+                cpu_util = cpu_usage_sum / 10e9 / nodes_required / wall_time / threads_per_core
             else:
                 cpu_util = 0.0
-            assert cpu_util >= 0, f"{cpu_util} = {cpu_node_usage.sum()} / 10e9 " \
+            assert cpu_util >= 0, f"{cpu_util} = {cpu_usage_sum} / 10e9 " \
                 f"/ {nodes_required} / {wall_time} / {threads_per_core}"
 
             # cpu_util should be between 0 an 2 (2 CPUs)
@@ -193,12 +210,17 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
         priority = row.get('priority', 0)
         partition = row.get('partition', "0")
 
-        scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df)
+        scheduled_nodes = get_scheduled_nodes(row['allocation_id'], node_df, node_data)
         submit_time = compute_time_offset(row['job_submit_timestamp'], telemetry_start_timestamp)
         start_time = compute_time_offset(row['begin_timestamp'], telemetry_start_timestamp)
         end_time = compute_time_offset(row['end_timestamp'], telemetry_start_timestamp)
 
         time_limit = row['time_limit']
+        if wall_time > time_limit:
+            # Slurm lets jobs run a grace period past their limit before the kill lands (1-29 s here).
+            # Keep the job and widen its limit so the engine's time-limit check does not abort the run.
+            time_limit = wall_time
+            n_over_limit += 1
 
         trace_quanta = config['TRACE_QUANTA']
         trace_time = wall_time
@@ -238,6 +260,9 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
             job = Job(job_info)
             job_list.append(job)
 
+    if n_over_limit:
+        print(f"Lassen: {n_over_limit} jobs ran past their time limit; limit raised to the recorded runtime.")
+
     return WorkloadData(
         jobs=job_list,
         telemetry_start=telemetry_start_time, telemetry_end=telemetry_end_time,
@@ -246,11 +271,13 @@ def load_data_from_df(allocation_df, node_df, step_df, **kwargs):
     )
 
 
-def get_scheduled_nodes(allocation_id, node_df):
+def get_scheduled_nodes(allocation_id, node_df, node_data=None):
     """
     Gets the list of scheduled nodes for a given allocation.
+    Pass `node_data` (the allocation's rows of node_df) to avoid rescanning node_df.
     """
-    node_data = node_df[node_df['allocation_id'] == allocation_id]
+    if node_data is None:
+        node_data = node_df[node_df['allocation_id'] == allocation_id]
     if 'node_name' in node_data.columns:
         node_list = [int(node.split('lassen')[-1]) for node in node_data['node_name'].tolist()]
         return node_list

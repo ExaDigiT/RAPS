@@ -394,6 +394,11 @@ def load_data(local_dataset_path, **kwargs):
     untraced_jobs = job_ids - traced_jobs
     skip_counts['no_trace_file'] += len(untraced_jobs)
 
+    # Row position of the first slurm-log entry per job id (avoids a full scan of sl per trace file)
+    sl_first_pos = {}
+    for pos, v in enumerate(sl['id_job'].tolist()):
+        sl_first_pos.setdefault(v, pos)
+
     # CPU first
     for fp in tqdm(cpu_files, desc="Loading CPU traces"):
         df = pd.read_csv(fp, dtype={0: str})
@@ -401,14 +406,14 @@ def load_data(local_dataset_path, **kwargs):
         rec = data.setdefault(jid, {})
 
         # Find job info in slurm log and print details
-        job_info = sl[sl.id_job == jid]
-        if job_info.empty:
+        job_pos = sl_first_pos.get(jid)
+        if job_pos is None:
             skip_counts['job_not_in_slurm_log'] += 1
             if debug:
                 tqdm.write(f"Reading CPU {os.path.basename(fp)} for Job ID: {jid} (No slurm info found)")
             continue
 
-        job_row = job_info.iloc[0]
+        job_row = sl.iloc[job_pos]
         if debug:
             start_time = job_row.get('time_start', 'N/A')
             wall_time = job_row.get('time_limit', 'N/A')

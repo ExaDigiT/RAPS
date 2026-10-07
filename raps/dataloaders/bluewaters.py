@@ -291,6 +291,9 @@ def load_data(local_dataset_path, **kwargs):
     bin_s = config.get("TRACE_QUANTA")
     jobs = []
 
+    # Per-node totals once, instead of filtering the whole sampler table for every job
+    per_nid = sampler_df.groupby("nid")[["tx", "rx"]].sum()
+
     for r in jobs_raw:  # Is this intended? We go throught the 'raw' jobs_dicts that were creeated above?
         st_abs = int(r["start_time"])
         et_abs = int(r["end_time"])
@@ -298,12 +301,11 @@ def load_data(local_dataset_path, **kwargs):
         jid = r["id"]
 
         # Filter by nodes, sum positive deltas
-        dfj = sampler_df[sampler_df["nid"].isin(nodes)]
-
         # Print first 10 rows (node, tx, rx)
         if debug:
-            print(dfj[["nid", "tx", "rx"]].head(10))
+            print(sampler_df[sampler_df["nid"].isin(nodes)][["nid", "tx", "rx"]].head(10))
 
+        dfj = per_nid.loc[per_nid.index.intersection(nodes)]
         total_tx = int(dfj["tx"].sum()) if not dfj.empty else 0
         total_rx = int(dfj["rx"].sum()) if not dfj.empty else 0
 
