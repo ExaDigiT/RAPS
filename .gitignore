@@ -13,3 +13,4 @@ ppo_raps_logs
 models/POWER9CSM/
 models/surrogates
 runs/
+scratch/
