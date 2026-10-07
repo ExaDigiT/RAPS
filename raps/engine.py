@@ -635,7 +635,7 @@ class Engine:
             else:  # if job.state == JobState.RUNNING:
                 # Error checks
                 if not replay and job.current_run_time > job.time_limit and job.end_time is not None:
-                    raise Exception(f"Job exceded time limit! "
+                    raise Exception(f"Job exceeded time limit! "
                                     f"{job.current_run_time} > {job.time_limit}"
                                     f"\n{job}"
                                     f"\nCurrent timestep:{self.current_timestep - self.timestep_start} (rel)"

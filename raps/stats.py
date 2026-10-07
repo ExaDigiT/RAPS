@@ -398,7 +398,7 @@ _JOB_DIST_ROWS = [
     ("NIC RX util", "", "min_nrx_util", "avg_nrx_util", "max_nrx_util", "util"),
 ]
 _JOB_SIZE_BUCKETS = ["jobs <= 5 nodes", "jobs <= 50 nodes", "jobs <= 250 nodes", "jobs <= 4500 nodes",
-                     "jobs > 4500 nodes"]
+                     " jobs > 4500 nodes"]
 
 
 def _fmt_dist(value, kind):
