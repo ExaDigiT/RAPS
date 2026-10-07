@@ -54,4 +54,7 @@ def train_rl(rl_config: SingleSimConfig):
     print(stats)
 
     # Save trained model
-    model.save("ppo_raps")
+    model_path = runs_dir() / "models" / "ppo_raps"
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    model.save(str(model_path))
+    print(f"Saved model to {model_path}.zip")
