@@ -128,7 +128,8 @@ class BasicWorkload:
                 cpu_util_distribution_to_draw_from=cpu_util_distribution_to_draw_from,
                 gpu_util_distribution_to_draw_from=gpu_util_distribution_to_draw_from,
                 wall_time_distribution_to_draw_from=wall_time_distribution_to_draw_from,
-                args=args)
+                args=args,
+                id_offset=len(jobs))  # keep job ids unique across multimodal components
             next_arrival(0, reset=True)
             jobs.extend(new_jobs)
         args.numjobs = total_jobs

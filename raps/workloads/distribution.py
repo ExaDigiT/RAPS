@@ -137,7 +137,8 @@ class DistributionWorkload:
                                         cpu_util_distribution_to_draw_from,
                                         gpu_util_distribution_to_draw_from,
                                         wall_time_distribution_to_draw_from,
-                                        args
+                                        args,
+                                        id_offset=0
                                         ) -> list[list[any]]:
         jobs = []
         partition = random.choice(self.partitions)
@@ -171,7 +172,7 @@ class DistributionWorkload:
                                 account=account, cpu_trace=cpu_trace,
                                 gpu_trace=gpu_trace, ntx_trace=net_tx,
                                 nrx_trace=net_rx, end_state=end_state,
-                                id=job_index, priority=priority,
+                                id=id_offset + job_index, priority=priority,
                                 partition=partition,
                                 submit_time=submit_time,
                                 time_limit=time_limit,
