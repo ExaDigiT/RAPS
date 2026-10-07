@@ -429,19 +429,18 @@ def _ids_summary(ids, limit=5):
 
 
 def _kv_block(pairs):
-    """'Key:  value' lines with the values lined up."""
-    w = max(len(k) for k, _ in pairs)
-    return "\n".join(f"{(k + ':').ljust(w + 1)}  {v}" for k, v in pairs)
+    """'Key: value' lines. The exact "Key: value" form is kept because scripts and tests grep for it."""
+    return "\n".join(f"{k}: {v}" for k, v in pairs)
 
 
 def format_job_report(job_stats):
     """Job stats as counts, a size-bucket table and a min/avg/max table; uncollected metrics are omitted."""
     lines = [_kv_block([
-        ("Jobs total", job_stats['jobs_total']),
-        ("Jobs completed", job_stats['jobs_completed']),
+        ("Jobs Total", job_stats['jobs_total']),
+        ("Jobs Completed", job_stats['jobs_completed']),
         ("Throughput", f"{job_stats['throughput']:.2f} jobs/hour"),
-        ("Still running", _ids_summary(job_stats['jobs_still_running'])),
-        ("Still queued", _ids_summary(job_stats['jobs_still_in_queue'])),
+        ("Jobs Still Running", _ids_summary(job_stats['jobs_still_running'])),
+        ("Jobs Still In Queue", _ids_summary(job_stats['jobs_still_in_queue'])),
     ])]
     if all(k in job_stats for k in _JOB_SIZE_BUCKETS):
         lines += ["", "Completed jobs by size:", _table(

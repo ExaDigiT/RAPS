@@ -184,6 +184,11 @@ def test_system_ui_block():
 
 def test_job_detail_for_selected_job(run):
     engine, builder, tick = run
+    # Advance until something is running, so the test does not depend on what the shared fixture reached
+    for _, tick in zip(range(600), engine.run_simulation()):
+        if tick.running:
+            break
+    assert tick.running, "no job started within the simulated window"
     assert builder.build(tick).job_detail is None  # nothing selected
     job = tick.running[0]
     builder.selected_job = job.id
