@@ -13,11 +13,13 @@ from datetime import datetime
 from typing import Optional
 from types import ModuleType
 import importlib
+import os
 import numpy as np
 import pandas as pd
 from pydantic import model_validator
 # from rich.progress import track
 
+from raps.cache import snapshot_cache_path
 from raps.sim_config import SimConfig
 from raps.system_config import get_system_config, list_systems
 from raps.job import Job, job_dict
@@ -96,7 +98,7 @@ class Telemetry:
             print(f"WARNING: Failed to load dataloader: {e}")
             self.dataloader = None
 
-    def save_snapshot(self, *, dest: str, result: WorkloadData, args: SimConfig | TelemetryArgs):
+    def save_snapshot(self, *, dest: str, result: WorkloadData, args: SimConfig | TelemetryArgs | None):
         """Saves a snapshot of the jobs to a compressed file. """
         np.savez_compressed(dest,
                             jobs=[vars(j) for j in result.jobs],
@@ -130,6 +132,39 @@ class Telemetry:
         )
 
         return result, args
+
+    def load_data_cached(self, files) -> WorkloadData:
+        """
+        Like load_data(), but reuses a parsed snapshot from the cache (see raps/cache.py) when the
+        inputs and loader options are unchanged. Falls back to the dataloader on any cache problem.
+        """
+        mode = self.kwargs.get("cache", "use")
+        if mode == "off" or self.kwargs.get("live") or not self.dataloader:
+            return self.load_data(files)
+        try:
+            path = snapshot_cache_path(files, self.dataloader, self.kwargs)
+        except OSError as e:
+            print(f"WARNING: Not using snapshot cache: {e}")
+            return self.load_data(files)
+
+        if mode == "use" and path.exists():
+            try:
+                data, _ = self.load_snapshot(path)
+                print(f"Loaded cached snapshot {path}")
+                return data
+            except Exception as e:  # stale or corrupt entry: re-parse and overwrite it
+                print(f"WARNING: Ignoring unreadable cache entry {path}: {e}")
+
+        data = self.load_data(files)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f".{os.getpid()}-{path.name}")  # keep .npz suffix; rename is atomic
+            self.save_snapshot(dest=str(tmp), result=data, args=None)
+            os.replace(tmp, path)
+            print(f"Cached parsed snapshot as {path}")
+        except Exception as e:
+            print(f"WARNING: Could not write snapshot cache: {e}")
+        return data
 
     def load_csv_results(self, file):
         jobs = []
@@ -233,7 +268,7 @@ class Telemetry:
                     data.telemetry_end = min(data.telemetry_end, new_data.telemetry_end)
                     data.start_date = min(data.start_date, new_data.start_date)
         else:  # custom data loader
-            data = self.load_data(files)
+            data = self.load_data_cached(files)
         self.update_jobs(data.jobs)
         return data
 
