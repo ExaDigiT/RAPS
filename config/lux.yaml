@@ -79,7 +79,7 @@ scheduler:
   min_wall_time: 60  # RAPS default, seconds
   max_wall_time: 86400  # detected: scontrol show partition MaxTime
   ui_update_freq: 900  # RAPS default, seconds
-  max_nodes_per_job: 1  # detected: scontrol show partition MaxNodes
+  max_nodes_per_job: 504  # whole system; scontrol MaxNodes reported 1 (unlimited), which hangs the synthetic samplers
   job_end_probs:  # detected: sacct, 884 jobs over 7d
     COMPLETED: 0.6652
     FAILED: 0.1731

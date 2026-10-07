@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -18,7 +19,7 @@ def test_main_cooling_uncertainty_run(request, system, system_config, sim_output
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "--time", "3m",
         "--system", system,
         "-c",

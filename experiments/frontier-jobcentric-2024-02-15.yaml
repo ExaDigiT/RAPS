@@ -1,0 +1,18 @@
+# Replay of the public Frontier Job-Centric Telemetry Dataset, one day (2024-02-15).
+# raps run experiments/frontier-jobcentric-2024-02-15.yaml
+#
+# Needs raps/dataloaders/frontier_jobcentric.py (not the private slurm/jobprofile loader).
+# Replay args are the job-info table and one job-telemetry/<date_dir> partition.
+#
+# date_dir is the job END date in US Eastern time, so the partition holds only jobs that
+# ended between 2024-02-15 05:00 UTC and 2024-02-16 05:00 UTC. Jobs that started and ended
+# before 05:00 UTC are absent, so the window starts at 05:00 UTC.
+# This day: 1503 jobs, node-time utilization 0.72 over the window, 96% of nodes
+# already busy at 05:00 UTC, largest job 9273 nodes.
+system: frontier
+dataloader: raps.dataloaders.frontier_jobcentric
+replay:
+  - /store/datasets/hpc/frontier/telemetry/frontier-completed-job-info.parquet
+  - /store/datasets/hpc/frontier/telemetry/job-telemetry/2024-02-15
+start: "2024-02-15T05:00:00Z"
+end: "2024-02-16T05:00:00Z"

@@ -132,8 +132,6 @@ class NetworkModel:
             host_list = [self.real_to_fat_idx[real_n] for real_n in job.scheduled_nodes]
             if debug:
                 print("  dragonfly hosts:", host_list)
-            print("Example nodes in graph:", list(self.net_graph.nodes)[:10])
-            print("Contains h_0_9_0?", "h_0_9_0" in self.net_graph)
             loads = link_loads_for_job(self.net_graph, host_list, net_tx)
             net_cong = worst_link_util(loads, max_throughput)
 

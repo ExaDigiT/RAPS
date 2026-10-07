@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -16,7 +17,7 @@ def test_main_noui_run(system, system_config, sim_output):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "--time", "1m",
         "--system", system,
         "--noui",

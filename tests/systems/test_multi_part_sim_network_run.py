@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -19,7 +20,7 @@ def test_multi_part_sim_network_run(system, system_config, sim_output):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run-parts",
+        sys.executable, "main.py", "run-parts",
         "--time", "1h",
         "-x", f"{system}/*",
         "--net",

@@ -1,3 +1,4 @@
+from raps.cache import runs_dir
 from raps.sim_config import SingleSimConfig, SIM_SHORTCUTS
 from raps.utils import SubParsers, pydantic_add_args, read_yaml_parsed
 
@@ -43,7 +44,7 @@ def train_rl(rl_config: SingleSimConfig):
         learning_rate=3e-4,  # default Adam lr, can try 1e-4 if unstable
         ent_coef=0.01,       # encourage exploration
         verbose=1,
-        tensorboard_log="./ppo_raps_logs/"
+        tensorboard_log=str(runs_dir() / "tensorboard")
     )
 
     model.learn(total_timesteps=10000, tb_log_name="ppo_raps")
@@ -53,4 +54,7 @@ def train_rl(rl_config: SingleSimConfig):
     print(stats)
 
     # Save trained model
-    model.save("ppo_raps")
+    model_path = runs_dir() / "models" / "ppo_raps"
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    model.save(str(model_path))
+    print(f"Saved model to {model_path}.zip")

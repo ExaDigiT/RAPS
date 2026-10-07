@@ -74,7 +74,7 @@ Once the dataloader has been run at least once, it will dump npz files into a di
 so they can be replayed again without having to go through the expensive extractoin process,
 using e.g.:
 
-    python main.py run-parts -x philly -f raps-output-5efefa3
+    python main.py run-parts -x philly -f runs/<run-dir>
 
 Note: it is possible to run simulations for an user-defined length of time between
 10/3/2017 to 12/15/2017.

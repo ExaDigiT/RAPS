@@ -12,3 +12,7 @@ ppo_raps_logs
 /data
 models/POWER9CSM/
 models/surrogates
+runs/
+scratch/
+notes/
+test-output/

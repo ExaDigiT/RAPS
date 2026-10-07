@@ -112,6 +112,7 @@ class SurrogateCoolingModel(ThermoFluidsModel):
 
         self.inputs, self.outputs = [], []        # no FMU variables
         self._warned_range = False
+        self.extrapolating = False  # inputs outside the training range on the latest call
 
     def _is_runtime_key(self, col):
         return (col.endswith('_sources_Q_flow_total')
@@ -228,7 +229,8 @@ class SurrogateCoolingModel(ThermoFluidsModel):
         runtime_values = self.generate_runtime_values(cdu_power, engine)
         u = np.asarray([float(unumpy.nominal_values(runtime_values[c])) for c in self.input_cols],
                        np.float32)
-        if not self._warned_range and ((u < self.u_lo).any() or (u > self.u_hi).any()):
+        self.extrapolating = bool(((u < self.u_lo) | (u > self.u_hi)).any())  # read by the UI
+        if not self._warned_range and self.extrapolating:
             bad = [c for c, x, lo, hi in zip(self.input_cols, u, self.u_lo, self.u_hi)
                    if x < lo or x > hi]
             warnings.warn(f"cooling surrogate: {len(bad)} inputs outside the training range "

@@ -1,3 +1,4 @@
+from collections import Counter
 import networkx as nx
 import numpy as np
 from raps.utils import get_current_utilization
@@ -88,6 +89,16 @@ def network_slowdown(current_throughput, max_throughput):
         return current_throughput / max_throughput
 
 
+def _cached_shortest_path(G, src, dst):
+    """Shortest path src->dst, memoized on the graph object (the topology is static during a run)."""
+    cache = G.graph.setdefault("_sp_cache", {})
+    key = (src, dst)
+    p = cache.get(key)
+    if p is None:
+        p = cache[key] = nx.shortest_path(G, src, dst)
+    return p
+
+
 def all_to_all_paths(G, hosts):
     """
     Given a list of host names, return shortest‐paths for every unordered pair.
@@ -96,7 +107,7 @@ def all_to_all_paths(G, hosts):
     for i in range(len(hosts)):
         for j in range(i + 1, len(hosts)):
             src, dst = hosts[i], hosts[j]
-            p = nx.shortest_path(G, src, dst)
+            p = _cached_shortest_path(G, src, dst)
             paths.append((src, dst, p))
     return paths
 
@@ -105,24 +116,20 @@ def link_loads_for_job(G, job_hosts, tx_volume_bytes):
     """
     Distribute tx_volume_bytes from each host equally to all its peers;
     accumulate per-link loads and return a dict {(u,v):bytes, …}.
+
+    Only links that carry traffic appear in the result (links with zero load are omitted).
     """
     paths = all_to_all_paths(G, job_hosts)
-    loads = {edge: 0.0 for edge in G.edges()}
-    # each host sends tx_volume_bytes to each of the (N-1) peers
-    for src in job_hosts:
-        if len(job_hosts) >= 2:
-            per_peer = tx_volume_bytes / (len(job_hosts) - 1)
-        else:
-            per_peer = 0
-        # find paths where src is the sender
-        for s, d, p in paths:
-            if s != src:
-                continue
-            # add per_peer to every link on p
-            for u, v in zip(p, p[1:]):
-                # ensure ordering matches loads keys
-                edge = (u, v) if (u, v) in loads else (v, u)
-                loads[edge] += per_peer
+    loads = {}
+    n = len(job_hosts)
+    per_peer = tx_volume_bytes / (n - 1) if n >= 2 else 0
+    # a host listed k times as sender contributes k times (as when looping over each src)
+    sender_count = Counter(job_hosts)
+    for s, d, p in paths:
+        add = per_peer * sender_count[s]
+        for u, v in zip(p, p[1:]):
+            edge = (u, v) if u <= v else (v, u)
+            loads[edge] = loads.get(edge, 0.0) + add
     return loads
 
 
@@ -146,7 +153,7 @@ def get_link_util_stats(loads, throughput, top_n=10):
     Returns a dictionary with min, mean, max, std_dev, and top N congested links.
     """
     if not loads:
-        return {'max': 0, 'mean': 0, 'min': 0, 'std_dev': 0, 'top_links': []}
+        return {'max': 0, 'mean': 0, 'min': 0, 'std_dev': 0, 'top_links': [], 'histogram': [], 'num_links': 0}
 
     # Calculate utilization for every link
     utilizations = {(edge): (byte_load * 8) / throughput for edge, byte_load in loads.items()}
@@ -163,6 +170,10 @@ def get_link_util_stats(loads, throughput, top_n=10):
     # Get top N congested links
     sorted_links = sorted(utilizations.items(), key=lambda item: item[1], reverse=True)
     stats['top_links'] = sorted_links[:top_n]
+
+    # Distribution over [0, max(1, max util)] for the UI's link-utilization histogram
+    stats['histogram'] = np.histogram(util_values, bins=10, range=(0, max(1.0, float(stats['max']))))[0].tolist()
+    stats['num_links'] = len(util_values)
 
     return stats
 

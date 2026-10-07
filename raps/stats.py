@@ -379,32 +379,124 @@ def get_stats(engine: Engine):
     }
 
 
+# (label, unit, min key, avg key, max key, kind) for the job distribution table
+_JOB_DIST_ROWS = [
+    ("Job size", "nodes", "min_job_size", "average_job_size", "max_job_size", "num"),
+    ("Runtime", "", "min_runtime", "average_runtime", "max_runtime", "dur"),
+    ("Wait time", "", "min_wait_time", "average_wait_time", "max_wait_time", "dur"),
+    ("Turnaround time", "", "min_turnaround_time", "average_turnaround_time", "max_turnaround_time", "dur"),
+    ("Aggregate node-time", "node-s", "min_aggregate_node_hours", "avg_aggregate_node_hours",
+     "max_aggregate_node_hours", "num"),
+    ("Energy", "J", "min_energy", "avg_energy", "max_energy", "sci"),
+    ("EDP", "J*s", "min_edp", "avg_edp", "max_edp", "sci"),
+    ("EDP^2", "J*s^2", "min_edp^2", "avg_edp^2", "max_edp^2", "sci"),
+    ("Area-weighted response", "", "min_area_weighted_response_time", "area_weighted_avg_response_time",
+     "max_area_weighted_response_time", "sci"),
+    ("CPU util", "", "min_cpu_util", "avg_cpu_util", "max_cpu_util", "util"),
+    ("GPU util", "", "min_gpu_util", "avg_gpu_util", "max_gpu_util", "util"),
+    ("NIC TX util", "", "min_ntx_util", "avg_ntx_util", "max_ntx_util", "util"),
+    ("NIC RX util", "", "min_nrx_util", "avg_nrx_util", "max_nrx_util", "util"),
+]
+_JOB_SIZE_BUCKETS = ["jobs <= 5 nodes", "jobs <= 50 nodes", "jobs <= 250 nodes", "jobs <= 4500 nodes",
+                     "jobs > 4500 nodes"]
+
+
+def _size_label(key):
+    """'jobs <= 5 nodes' -> '<= 5 nodes'; a leading space lines '>' up under '<='."""
+    label = key.replace("jobs ", "")
+    return " " + label if label.startswith(">") else label
+
+
+def _fmt_dist(value, kind):
+    if kind == "dur":
+        return convert_seconds_to_hhmmss(int(value))
+    if kind == "sci":
+        return f"{value:.3e}" if value else "0"
+    if kind == "util":
+        return f"{value:.2f}"
+    return f"{value:,.2f}" if value != int(value) else f"{int(value):,}"
+
+
+def _table(headers, rows, align):
+    """Plain-text table; align is a string of 'l'/'r' per column."""
+    widths = [max(len(str(c)) for c in col) for col in zip(headers, *rows)]
+
+    def line(cells):
+        return "  ".join(str(c).ljust(w) if a == "l" else str(c).rjust(w)
+                         for c, w, a in zip(cells, widths, align)).rstrip()
+    out = [line(headers), "  ".join("-" * w for w in widths)]
+    out += [line(r) for r in rows]
+    return "\n".join(out)
+
+
+def _ids_summary(ids, limit=5):
+    shown = ", ".join(str(i) for i in ids[:limit])
+    return f"{len(ids)}" + (f" ({shown}{', ...' if len(ids) > limit else ''})" if ids else "")
+
+
+def _kv_block(pairs):
+    """'Key: value' lines. The exact "Key: value" form is kept because scripts and tests grep for it."""
+    return "\n".join(f"{k}: {v}" for k, v in pairs)
+
+
+def format_job_report(job_stats):
+    """Job stats as counts, a size-bucket table and a min/avg/max table; uncollected metrics are omitted."""
+    lines = [_kv_block([
+        ("Jobs Total", job_stats['jobs_total']),
+        ("Jobs Completed", job_stats['jobs_completed']),
+        ("Throughput", f"{job_stats['throughput']:.2f} jobs/hour"),
+        ("Jobs Still Running", _ids_summary(job_stats['jobs_still_running'])),
+        ("Jobs Still In Queue", _ids_summary(job_stats['jobs_still_in_queue'])),
+    ])]
+    if all(k in job_stats for k in _JOB_SIZE_BUCKETS):
+        lines += ["", "Completed jobs by size:", _table(
+            ["Size", "Jobs"], [[_size_label(k), job_stats[k]] for k in _JOB_SIZE_BUCKETS], "lr")]
+    rows, missing = [], []
+    for label, unit, kmin, kavg, kmax, kind in _JOB_DIST_ROWS:
+        if kmin not in job_stats:
+            continue
+        vals = [job_stats[kmin], job_stats[kavg], job_stats[kmax]]
+        if all(v == -1 or v is None for v in vals):
+            missing.append(label)  # -1 means "not collected" (e.g. no network simulation)
+            continue
+        rows.append([label, unit] + [_fmt_dist(v, kind) for v in vals])
+    if rows:
+        lines += ["", "Per-job distribution:", _table(["Metric", "Unit", "Min", "Avg", "Max"], rows, "llrrr")]
+    if missing:
+        lines.append(f"(not collected: {', '.join(missing)})")
+    if "priority_weighted_specific_response_time" in job_stats:
+        lines += ["", "Priority-weighted specific response time: "
+                  f"{job_stats['priority_weighted_specific_response_time']:,.2f}"]
+    return "\n".join(lines)
+
+
 def print_formatted_report(engine_stats=None,
                            job_stats=None,
                            scheduler_stats=None,
                            network_stats=None
                            ):
-    def print_report_section(name, data, templates):
-        if data:
-            rep_str = f"--- {name} ---"
-            print(rep_str)
-            for key, value in data.items():
-                pretty_key = key.replace('_', ' ').title()
-                if key in templates:
-                    pretty_value = templates[key].format(value)
-                elif isinstance(value, float):
-                    pretty_value = f"{value:.2f}"
-                elif value is None:
-                    pretty_value = "N/A"
-                else:
-                    pretty_value = str(value)
-                print(f"{pretty_key}: {pretty_value}")
-            print(f"{'-' * len(rep_str)}\n")
-            print()
+    sections = []  # (name, body text)
+
+    def add_report_section(name, data, templates):
+        if not data:
+            return
+        pairs = []
+        for key, value in data.items():
+            pretty_key = key.replace('_', ' ').title()
+            if key in templates:
+                pretty_value = templates[key].format(value)
+            elif isinstance(value, float):
+                pretty_value = f"{value:.2f}"
+            elif value is None:
+                pretty_value = "N/A"
+            else:
+                pretty_value = str(value)
+            pairs.append((pretty_key, pretty_value))
+        sections.append((name, _kv_block(pairs)))
 
     # Print a formatted report
     print()
-    print_report_section("Simulation Report", engine_stats, {
+    add_report_section("Simulation Report", engine_stats, {
         'average_power': '{:.4f} MW',
         'min_loss': '{:.4f} MW',
         'average_loss': '{:.2f} MW',
@@ -414,13 +506,11 @@ def print_formatted_report(engine_stats=None,
         'carbon_emissions': '{:.4f} metric tons CO2',
         'total_cost': '${:.2f}',
     })
-    print_report_section("Job Stat Report", job_stats, {
-        'throughput': '{:.2f} jobs/hour',
-        'jobs_completed_percentage': "{:.2f}%",
+    if job_stats:
+        sections.append(("Job Stat Report", format_job_report(job_stats)))
+    add_report_section("Scheduler Report", scheduler_stats, {
     })
-    print_report_section("Scheduler Report", scheduler_stats, {
-    })
-    print_report_section("Network Report", network_stats, {
+    add_report_section("Network Report", network_stats, {
         "avg_network_util": "{:.2f}%",
         "avg_per_job_slowdown": "{:.2f}x",
         "max_per_job_slowdown": "{:.2f}x",
@@ -428,6 +518,19 @@ def print_formatted_report(engine_stats=None,
         "max_inter_job_congestion": "{:.2f}",
         "min_inter_job_congestion": "{:.2f}",
     })
+    # Bodies are indented; every section shares the width of the widest line (usually the distribution table)
+    indent = "  "
+    width = max([len(n) + 8 for n, _ in sections]
+                + [len(indent + line) + len(indent) for _, body in sections for line in body.splitlines()],
+                default=0)
+    for name, body in sections:
+        print(f" {name} ".center(width, "="))
+        print()
+        for line in body.splitlines():
+            print(indent + line if line else "")
+        print()
+    print("=" * width)
+    print()
 
 
 def get_gauge_limits(engine: Engine):

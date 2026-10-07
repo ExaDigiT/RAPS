@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import pytest
@@ -26,7 +27,7 @@ def test_main_time_run(system, system_config, time_args, sim_output):
 
     os.chdir(PROJECT_ROOT)
     result = subprocess.run([
-        "python", "main.py", "run",
+        sys.executable, "main.py", "run",
         "--time", time_args,
         "--system", system,
         "--noui",
