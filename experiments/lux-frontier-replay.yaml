@@ -1,0 +1,44 @@
+# Frontier jobs from the public job-centric telemetry dataset, rescheduled on Lux.
+# raps run experiments/lux-frontier-replay.yaml
+#
+# Lux has 504 nodes (Frontier 9,472 available), so raps.dataloaders.frontier_jobcentric drops
+# every job larger than 504 nodes and clears Frontier's node placement; the scheduler places
+# the rest (policy fcfs + firstfit, not replay). Submit times, runtimes and wall-time limits
+# come from the dataset. Power traces are converted to utilization with Frontier's CPU/GPU
+# idle/max power, then applied to Lux's 2 CPUs and 8 GPUs per node.
+#
+# Filtering does not shrink the load enough on most days: the jobs that remain still ask for
+# more than 504 nodes on average, so the queue backs up. Average demand from the kept jobs,
+# as a multiple of Lux's capacity (05:00 to 05:00 UTC window):
+#   2024-04-13 0.26x   2024-04-10 0.27x   2024-04-15 0.33x   2024-04-12 0.38x  (light, almost no queue)
+#   2024-05-31 1.45x   2024-06-01 1.67x   2024-03-15 1.80x (used here)   2024-02-26 1.83x
+#   most other days 2x to 5x, 2024-01-17 about 10x
+# date_dir is the job END date in US Eastern time, so the partition holds jobs that ended between
+# 05:00 UTC on that date and 05:00 UTC the next day.
+# 2024-03-15: 1,416 jobs, 1,357 kept (59 larger than 504 nodes dropped). On this day only about
+# 380 of the 1,281 jobs that arrive finish within the 24 h window and the average wait is about
+# 9 h, as expected from the 1.8x overload; use a lighter day for a run that drains.
+# Only days whose telemetry is fully on disk work (2024-01-17 through 2024-03-24 at the time of
+# writing); the April and later days were still being copied, so the light April days above
+# fail with "No telemetry files found" until their files arrive.
+system: lux
+dataloader: raps.dataloaders.frontier_jobcentric
+replay:
+  - /store/datasets/hpc/frontier/telemetry/frontier-completed-job-info.parquet
+  - /store/datasets/hpc/frontier/telemetry/job-telemetry/2024-03-15
+start: "2024-03-15T05:00:00Z"
+end: "2024-03-16T05:00:00Z"
+time_delta: 1s    # tick size (15 s = trace quanta is fastest; 1 s is the finest)
+policy: fcfs      # default is replay, which would reuse Frontier's recorded start times
+backfill: firstfit
+
+# Job filter, applied on top of dropping jobs larger than 504 nodes. power_per_node is the job's
+# mean power / node_count in W (a GPU-intensity proxy: idle nodes ~600 W); rand is a reproducible
+# uniform [0, 1) per job. There is no AI/ML label in the public table (gpu_enabled is null before
+# 2024-10 and project prefixes are anonymized), so power_per_node is the closest stand-in.
+# Load on Lux for 2024-03-15 (1.8x with no filter):
+#   "power_per_node > 1000"  425 jobs, 1.03x
+#   "power_per_node > 1100"  331 jobs, 0.91x (used here: GPU-leaning jobs, fills Lux without a big backlog)
+#   "power_per_node > 1500"  198 jobs, 0.52x (GPU-heavy only; Lux sits half idle)
+#   "rand < 0.5"             about 660 jobs, 0.79x (random thinning, keeps the size mix)
+filter: "power_per_node > 1100"

@@ -31,6 +31,14 @@ CPU_COL = 'cpu_agg_total_power'
 GPU_COL = 'gpu_agg_total_power'
 SOURCE_BIN_SECONDS = 1
 
+# The telemetry was measured on Frontier, so power is converted to utilization with Frontier's
+# per-node ranges (config/frontier.yaml), independent of the system being simulated. The
+# utilization is then scaled by the target system's CPUs/GPUs per node.
+SRC_CPUS_PER_NODE, SRC_GPUS_PER_NODE = 1, 4
+SRC_POWER_CPU_IDLE, SRC_POWER_CPU_MAX = 90, 280
+SRC_POWER_GPU_IDLE, SRC_POWER_GPU_MAX = 88, 560
+SRC_AVAILABLE_NODES = 9472
+
 
 def load_data(files, **kwargs):
     """
@@ -85,17 +93,51 @@ def load_data_from_df(jobs_df: pd.DataFrame, telemetry_dir: Path, **kwargs):
     jobs_df = jobs_df[jobs_df['date_dir'] == date_dir]
     if jobs_df.empty:
         raise ValueError(f"No jobs with date_dir={date_dir} in the job-info table")
+
+    # Optional row filter from the sim config's `filter`, a pandas query over the job table's
+    # columns plus two derived ones:
+    #   power_per_node  mean_power / node_count [W], a proxy for GPU intensity (idle nodes are
+    #                   about 600 W, GPU-heavy jobs 1500 W and up)
+    #   rand            reproducible uniform [0, 1) per job (seeded by `seed`), for random thinning
+    # e.g. filter: "power_per_node > 1500"  or  filter: "rand < 0.5 and node_count >= 2"
+    # The table has no AI/ML label (gpu_enabled is null before 2024-10 and project prefixes are
+    # anonymized), so power_per_node is the closest proxy for GPU-heavy work.
+    filter_str = kwargs.get('filter')
+    if filter_str:
+        rng = np.random.default_rng(kwargs.get('seed') or 0)
+        n_before = len(jobs_df)
+        jobs_df = jobs_df.assign(power_per_node=jobs_df['mean_power'] / jobs_df['node_count'],
+                                 rand=rng.random(n_before))
+        jobs_df = jobs_df.query(filter_str)
+        print(f"Frontier job-centric: filter '{filter_str}' kept {len(jobs_df)} of {n_before} jobs")
+        if jobs_df.empty:
+            raise ValueError(f"filter '{filter_str}' removed every job in {date_dir}")
+
+    # On a smaller target system (e.g. Lux, 504 nodes) drop jobs that cannot fit, and let the
+    # scheduler place the rest instead of replaying Frontier's node ids.
+    smaller_target = config['AVAILABLE_NODES'] < SRC_AVAILABLE_NODES
+    if smaller_target:
+        too_big = jobs_df['node_count'] > config['AVAILABLE_NODES']
+        print(f"Frontier job-centric: dropping {int(too_big.sum())} of {len(jobs_df)} jobs larger than "
+              f"{config['AVAILABLE_NODES']} nodes")
+        jobs_df = jobs_df[~too_big]
     jobs_df = jobs_df.sort_values('start_time').reset_index(drop=True)
 
-    # Only some date directories are populated in partial copies of the dataset, so skip jobs
-    # without telemetry rather than failing, and use the rest to define the time window.
-    have = {p.name for p in telemetry_dir.iterdir() if p.is_dir()}
-    n_missing = int((~jobs_df['job_idx'].isin(have)).sum())
+    # Partial copies of the dataset can have job folders without their files (or no folders at
+    # all), so skip jobs with no power file rather than failing, and report how many.
+    has_power = np.array([(telemetry_dir / j / f'{j}-cleaned-power.parquet').exists() for j in jobs_df['job_idx']])
+    n_missing = int((~has_power).sum())
     if n_missing:
-        print(f"Frontier job-centric: {n_missing} of {len(jobs_df)} jobs in {date_dir} have no telemetry; skipping")
-        jobs_df = jobs_df[jobs_df['job_idx'].isin(have)].reset_index(drop=True)
+        print(f"Frontier job-centric: {n_missing} of {len(jobs_df)} jobs in {date_dir} have no "
+              f"cleaned-power file; skipping")
+        jobs_df = jobs_df[has_power].reset_index(drop=True)
+    if jobs_df.empty:
+        raise ValueError(f"No telemetry files found for {date_dir} under {telemetry_dir}")
 
-    telemetry_start_timestamp = jobs_df['start_time'].min()
+    # Time zero is floored to a multiple of the trace quanta (on the epoch grid): the engine only
+    # ticks at timesteps divisible by time_delta, so with time_delta == quanta a start offset that
+    # is not a multiple of it would never tick.
+    telemetry_start_timestamp = jobs_df['start_time'].min().floor(f'{quanta}s')
     telemetry_end_timestamp = jobs_df['end_time'].max()
     telemetry_start = 0
     telemetry_end = int((telemetry_end_timestamp - telemetry_start_timestamp).total_seconds())
@@ -119,12 +161,17 @@ def load_data_from_df(jobs_df: pd.DataFrame, telemetry_dir: Path, **kwargs):
             continue
 
         nodes_required = int(row.node_count)
-        cpu_min = nodes_required * config['POWER_CPU_IDLE'] * config['CPUS_PER_NODE']
-        cpu_max = nodes_required * config['POWER_CPU_MAX'] * config['CPUS_PER_NODE']
+        cpu_min = nodes_required * SRC_POWER_CPU_IDLE * SRC_CPUS_PER_NODE
+        cpu_max = nodes_required * SRC_POWER_CPU_MAX * SRC_CPUS_PER_NODE
         cpu_trace = power_to_utilization(cpu_power, cpu_min, cpu_max) * config['CPUS_PER_NODE']
-        gpu_min = nodes_required * config['POWER_GPU_IDLE'] * config['GPUS_PER_NODE']
-        gpu_max = nodes_required * config['POWER_GPU_MAX'] * config['GPUS_PER_NODE']
+        gpu_min = nodes_required * SRC_POWER_GPU_IDLE * SRC_GPUS_PER_NODE
+        gpu_max = nodes_required * SRC_POWER_GPU_MAX * SRC_GPUS_PER_NODE
         gpu_trace = power_to_utilization(gpu_power, gpu_min, gpu_max) * config['GPUS_PER_NODE']
+        if smaller_target:
+            # Below Frontier's configured idle (negative utilization) reproduces Frontier's own
+            # measured power, but means nothing relative to another system's idle and max.
+            cpu_trace = np.clip(cpu_trace, 0, config['CPUS_PER_NODE'])
+            gpu_trace = np.clip(gpu_trace, 0, config['GPUS_PER_NODE'])
         cpu_trace[np.isnan(cpu_trace)] = 0
         gpu_trace[np.isnan(gpu_trace)] = 0
 
@@ -134,7 +181,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, telemetry_dir: Path, **kwargs):
         expected_run_time = end_time - start_time
         trace_time = gpu_trace.size * quanta
 
-        scheduled_nodes = [xname_to_index(x, config) for x in row.node_list]
+        # Frontier xnames only mean something on a Frontier-sized layout; on a smaller system
+        # leave placement to the scheduler.
+        scheduled_nodes = None if smaller_target else [xname_to_index(x, config) for x in row.node_list]
 
         jobs.append(Job(job_dict(
             nodes_required=nodes_required,
@@ -149,7 +198,9 @@ def load_data_from_df(jobs_df: pd.DataFrame, telemetry_dir: Path, **kwargs):
             id=int(job_idx),
             priority=aging_boost(nodes_required),
             submit_time=submit_time,
-            time_limit=int(row.wall_time) * 60,
+            # Slurm lets TIMEOUT jobs run a little past their limit; RAPS raises if a rescheduled
+            # job does, so make the limit cover the recorded runtime.
+            time_limit=max(int(row.wall_time) * 60, int(np.ceil(expected_run_time / quanta)) * quanta),
             start_time=start_time,
             end_time=end_time,
             expected_run_time=expected_run_time,
