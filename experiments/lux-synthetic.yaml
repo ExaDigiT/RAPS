@@ -1,5 +1,5 @@
 # Frontier-like job-size mix on Lux using synthetic jobs.
-# raps run experiments/lux.yaml
+# raps run experiments/lux-synthetic.yaml
 #
 # Lux has 504 nodes (Frontier ~9,400), so sizes are scaled by ~0.054.
 # Frontier's job-size PDF is heavy-tailed: mostly small jobs plus a thin tail
