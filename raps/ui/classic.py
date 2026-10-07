@@ -2,6 +2,7 @@ import sys
 import os
 import time as time_module
 import pandas as pd
+from tqdm import tqdm
 import numpy as np
 from datetime import datetime
 from rich.align import Align
@@ -66,6 +67,7 @@ class LayoutManager:
             self.encrypt = False
         self.engine = engine
         self.config = config
+        self.total_timesteps = total_timesteps
         self.topology = self.engine.config.get("TOPOLOGY", "none")
         self.hascooling = layout_type == "layout2"
         self.power_df_header = self.config['POWER_DF_HEADER']
@@ -626,10 +628,15 @@ class LayoutManager:
             context = Live(self.layout, auto_refresh=True, refresh_per_second=3)
         else:
             context = nullcontext()
+        # With no UI, show a plain progress bar so a long simulation does not look hung
+        heartbeat = tqdm(total=self.total_timesteps, desc="Simulating", unit="step", mininterval=1.0) \
+            if self.noui and not self.debug else nullcontext()
         try:
-            with context:
+            with context, heartbeat:
                 # last_i = 0
                 for i, data in enumerate(self.engine.run_simulation(autoshutdown=True)):
+                    if self.noui and not self.debug:
+                        heartbeat.update(1)
                     if data and (not self.debug and not self.noui):
                         self.update_full_layout(data,
                                                 self.engine.time_delta,
