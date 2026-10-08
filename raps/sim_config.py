@@ -1,5 +1,6 @@
 import argparse
 import abc
+import re
 from pathlib import Path
 import pandas as pd
 from functools import cached_property
@@ -10,7 +11,7 @@ import importlib
 from raps.cache import runs_dir
 from raps.schedulers.default import PolicyType, BackfillType
 from raps.utils import (
-    parse_time_unit, convert_to_time_unit, infer_time_unit, ResolvedPath, create_casename,
+    parse_time_unit, convert_to_time_unit, infer_time_unit, ResolvedPath,
     RAPSBaseModel, AutoAwareDatetime, SmartTimedelta, yaml_dump,
 )
 from raps.system_config import (
@@ -88,11 +89,19 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     seed: int | None = None
     """ Set RNG seed for deterministic simulation """
 
+    name: str | None = None
+    """
+    Experiment name, used in the default output directory name. Defaults to the name of the YAML
+    config file (without extension) when one is given.
+    """
+
     output: ResolvedPath | Literal['none'] | None = None
     """
     Where to output power, cooling, and loss models for later analysis.
-    If omitted it will output to runs/<timestamp>-<system>-<id> by default (the parent can be
-    changed with the RAPS_RUNS_DIR environment variable).
+    If omitted it will output to runs/<timestamp>-<system>-<name> by default, where name is the
+    experiment name (see `name`); the system is left out if the name already starts with it, and
+    a -2, -3, ... suffix is added if the directory exists (the parent can be changed with the
+    RAPS_RUNS_DIR environment variable).
     Set to "none" to disable file output entirely.
     """
 
@@ -102,8 +111,17 @@ class SimConfig(RAPSBaseModel, abc.ABC):
         if self.output is None:  # by default, output to a random directory
             if not self._random_output:
                 system = str(self.system_name).replace("/", "_")
-                name = f"{datetime.now():%Y%m%d-%H%M%S}-{system}-{create_casename()}"
-                self._random_output = (runs_dir() / name).resolve()
+                label = re.sub(r"[^A-Za-z0-9._-]+", "-", self.name or "").strip("-")
+                if not label:
+                    label = system
+                elif not label.startswith(system):
+                    label = f"{system}-{label}"
+                base = runs_dir() / f"{datetime.now():%Y%m%d-%H%M%S}-{label}"
+                path, n = base, 1
+                while path.exists():  # two runs started in the same second with the same name
+                    n += 1
+                    path = base.with_name(f"{base.name}-{n}")
+                self._random_output = path.resolve()
             return self._random_output
         elif self.output == "none":  # allow explicitly disabling output with "none"
             return None

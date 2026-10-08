@@ -864,6 +864,9 @@ def read_yaml_parsed(cls: type[T], config_file=None) -> dict:
             base_path = Path(config_file).parent if config_file and config_file != "-" else None
             model = cls.model_validate(yaml_data, context={"base_path": base_path})
             yaml_data = model.model_dump(mode='json', exclude_unset=True)
+        if config_file and config_file != "-" and "name" in getattr(cls, "model_fields", {}):
+            # Name the experiment after its config file unless the yaml sets `name` itself
+            yaml_data = {"name": Path(config_file).stem, **yaml_data}
     except OSError as err:
         print(f'Cannot read config file "{config_file}": {err.strerror or err}')
         if config_file and Path(config_file).suffix.lower() == ".npz":
