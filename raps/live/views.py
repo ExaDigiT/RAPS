@@ -347,7 +347,7 @@ def up_next(state, width, n=6):
     return t
 
 
-NODES_HINT = "hover a node, or arrow keys · click / enter for its job · esc clears"
+NODES_HINT = "hover a node, or arrows · [ ] cabinet · shift+↑↓ cabinet row · home/end · enter: its job · esc clears"
 
 
 def map_footer(nm, nodes, hint):

@@ -22,8 +22,9 @@ HELP = """\
 [b]My Jobs[/b]   enter details   c cancel   h hold   u release   (all ask first)
 [b]Queue[/b]     / filter   esc clear   f running/pending/all   m only mine   s sort   enter details
 [b]Maps[/b]      c color mode (state, job, account, mine, power) on Overview and Nodes
-          hover a node, or on Nodes use the arrow keys (shift+arrow / PgUp/PgDn: a
-          cabinet); click or enter opens the node's job. In tmux, hover and click need
+          hover a node, or on Nodes use the arrow keys: [ ] (or shift+←/→, PgUp/PgDn)
+          jump a cabinet, shift+↑/↓ a row of cabinets, home/end the first/last node;
+          click or enter opens the node's job. In tmux, hover and click need
           `set -g mouse on`.   hover a node · click for its job
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)

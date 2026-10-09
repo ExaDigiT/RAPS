@@ -256,8 +256,13 @@ class NodeMap(PixelGrid):
     BINDINGS = [
         Binding("left", "move(-1, 0)", "Node", show=False), Binding("right", "move(1, 0)", "Node", show=False),
         Binding("up", "move(0, -1)", "Node", show=False), Binding("down", "move(0, 1)", "Node", show=False),
-        Binding("shift+left,pageup", "move(-128, 0)", "Cabinet", show=False),
-        Binding("shift+right,pagedown", "move(128, 0)", "Cabinet", show=False),
+        # whole cabinets (same position inside the cabinet); [ ] work where shift+arrows do not
+        Binding("shift+left,pageup,left_square_bracket", "cabinet(-1, 0)", "Prev cabinet", show=False),
+        Binding("shift+right,pagedown,right_square_bracket", "cabinet(1, 0)", "Next cabinet", show=False),
+        Binding("shift+up", "cabinet(0, -1)", "Cabinet above", show=False),
+        Binding("shift+down", "cabinet(0, 1)", "Cabinet below", show=False),
+        Binding("home", "jump(0)", "First node", show=False),
+        Binding("end", "jump(-1)", "Last node", show=False),
         Binding("enter", "open", "Open job", show=False),
         Binding("escape", "clear_cursor", "Clear", show=False),
     ]
@@ -401,6 +406,30 @@ class NodeMap(PixelGrid):
             self.cursor = min(self._names, key=lambda n: abs((node_index(n) or 0) - target))
         self.refresh_image()
         self.post_message(self.Hover([self.cursor]))
+
+    def _set_cursor(self, name):
+        self.cursor = name
+        self.refresh_image()
+        self.post_message(self.Hover([name]))
+
+    def _nearest(self, index):
+        return min(self._names, key=lambda n: abs((node_index(n) or 0) - index))
+
+    def action_cabinet(self, dcab, drow):
+        """Jump dcab cabinets along, or drow rows of cabinets as drawn, keeping the slot in the cabinet."""
+        if not self._names:
+            return
+        if self.cursor not in self.node_states:
+            return self._set_cursor(self._names[0])
+        idx = (node_index(self.cursor) or 1) - 1
+        cols = self._layout[3] if self._layout else 1
+        ci = self._cabs.index(idx >> 7) if (idx >> 7) in self._cabs else 0
+        ci = min(max(ci + dcab + drow * cols, 0), len(self._cabs) - 1)
+        self._set_cursor(self._nearest(self._cabs[ci] * NODES_PER_CAB + (idx & 127) + 1))
+
+    def action_jump(self, i):
+        if self._names:
+            self._set_cursor(self._names[i])
 
     def action_clear_cursor(self):
         if self.cursor is not None:

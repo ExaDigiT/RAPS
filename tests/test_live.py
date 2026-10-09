@@ -287,6 +287,13 @@ def test_app_pilot():
             app.poller.refresh("jobs")
             await pilot.pause(0.5)
             assert "frontier00001" in str(info.render())
+            await pilot.press("right_square_bracket")  # next cabinet, same slot -> nearest node there
+            assert nm.cursor == "frontier00130"
+            await pilot.press("left_square_bracket")  # 00130 is slot 1 of its cabinet -> slot 1 here
+            assert nm.cursor == "frontier00002"
+            await pilot.press("end")
+            assert nm.cursor == "frontier00132"
+            await pilot.press("home")
             await pilot.press("enter")
             await pilot.pause(0.3)
             assert type(app.screen).__name__ == "JobDetailScreen"
