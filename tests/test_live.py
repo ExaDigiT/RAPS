@@ -279,6 +279,19 @@ def test_app_pilot():
                 await pilot.press("c")
             nm = app.query_one(Nodes).query_one("#nd-map")
             assert nm.mode == "power" and "MW" in nm.legend().plain
+            # without a mouse: arrows pick a node, its info survives refreshes, enter opens its job
+            await pilot.press("right")
+            await pilot.pause(0.1)
+            info = app.query_one(Nodes).query_one("#nd-info")
+            assert nm.cursor == "frontier00001" and "frontier00001" in str(info.render())
+            app.poller.refresh("jobs")
+            await pilot.pause(0.5)
+            assert "frontier00001" in str(info.render())
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            assert type(app.screen).__name__ == "JobDetailScreen"
+            await pilot.press("escape")
+            await pilot.pause(0.2)
             # tab always switches views (even with the map focused); c works on the Overview map too
             await pilot.press("1")
             await pilot.pause(0.2)

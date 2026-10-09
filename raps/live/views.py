@@ -162,7 +162,7 @@ class Overview(LiveView):
             yield Tile("running jobs", id="t-run", classes="good")
             yield Tile("pending jobs", id="t-pend", classes="warn")
             yield Tile("backlog node-h", id="t-backlog")
-            yield Tile("node power MW", id="t-power", classes="accent")
+            yield Tile("system power MW", id="t-power", classes="accent")
             yield Tile("my jobs", id="t-mine", classes="accent")
             yield Tile("nodes out", id="t-out", classes="bad")
         with Horizontal(id="ov-body"):
@@ -185,41 +185,55 @@ class Overview(LiveView):
 
         fs = forecast_summary(state) if state.forecast is not None else None
         util = s.utilization
-        self.query_one("#t-util", Tile).set(f"{util * 100:.1f}%", bar(util, 20, GREEN, CYAN)
-                                            + Text(f" {s.busy_nodes:,}/{s.usable_nodes:,}", style=MUTED))
-        sub = Text(f"{s.run_nodes:,} nodes", style=MUTED)
+        # each caption comes in several lengths; a tile shows the longest that fits its width
+        nodes = Text(f" {s.busy_nodes:,}/{s.usable_nodes:,}", style=MUTED)
+        self.query_one("#t-util", Tile).set(f"{util * 100:.1f}%", [bar(util, 20, GREEN, CYAN) + nodes,
+                                                                    bar(util, 10, GREEN, CYAN) + nodes, nodes])
+        run = [Text(f"{s.run_nodes:,} nodes", style=MUTED)]
         if fs is not None:
-            sub.append(f" · {human_num(fs.free_1h_fcst)} free <1h", style=f"bold {GREEN}")
-        self.query_one("#t-run", Tile).set(f"{s.run_jobs:,}", sub)
-        self.query_one("#t-pend", Tile).set(
-            f"{s.pend_jobs:,}", Text.assemble((f"{s.eligible_jobs:,} eligible", AMBER),
-                                              (f" · {s.blocked_jobs:,} blocked", MUTED)))
+            free = (f"{human_num(fs.free_1h_fcst)} free <1h", f"bold {GREEN}")
+            run = [Text.assemble((f"{s.run_nodes:,} nodes · ", MUTED), free), Text.assemble(free)] + run
+        self.query_one("#t-run", Tile).set(f"{s.run_jobs:,}", run)
+        self.query_one("#t-pend", Tile).set(f"{s.pend_jobs:,}", [
+            Text.assemble((f"{s.eligible_jobs:,} eligible", AMBER), (f" · {s.blocked_jobs:,} blocked", MUTED)),
+            Text.assemble((f"{s.eligible_jobs:,} elig", AMBER), (f" · {s.blocked_jobs:,} blkd", MUTED))])
+        backlog = [Text(f"≈ {s.drain_hours:.1f} h of full machine", style=MUTED),
+                   Text(f"≈ {s.drain_hours:.1f} h of machine", style=MUTED)]
         if fs is not None and s.usable_nodes:
             # hours of the full machine: at the requested limits, and at the forecast runtimes
-            sub = Text.assemble((f"{s.drain_hours:.1f} h limit", MUTED),
-                                (f" · {fs.backlog_nh / s.usable_nodes:.1f} h fcst", f"bold {GREEN}"))
-        else:
-            sub = Text(f"≈ {s.drain_hours:.1f} h of full machine", style=MUTED)
-        self.query_one("#t-backlog", Tile).set(human_num(s.backlog_nh), sub)
-        self.query_one("#t-mine", Tile).set(
-            f"{s.my_run}", Text.assemble(("running", PINK), (f" · {s.my_pend} pending · {s.my_nodes:,} nodes", MUTED)))
+            fh = fs.backlog_nh / s.usable_nodes
+            fc = (f" · {fh:.1f} h fcst", f"bold {GREEN}")
+            backlog = [Text.assemble((f"{s.drain_hours:.1f} h at limits", MUTED), fc),
+                       Text.assemble((f"{s.drain_hours:.1f} h limit", MUTED), fc),
+                       Text(f"{fh:.1f} h machine (fcst)", style=f"bold {GREEN}"),
+                       Text(f"{fh:.1f} h fcst", style=f"bold {GREEN}")]
+        self.query_one("#t-backlog", Tile).set(human_num(s.backlog_nh), backlog)
+        self.query_one("#t-mine", Tile).set(f"{s.my_run}", [
+            Text.assemble(("running", PINK), (f" · {s.my_pend} pending · {s.my_nodes:,} nodes", MUTED)),
+            Text.assemble(("run", PINK), (f" · {s.my_pend} pend · {s.my_nodes:,} n", MUTED))])
         if state.power is not None:
             share = state.power / max(state.machine_max_w, 1) * 100
-            sub = Text(f"{share:.0f}% of max {state.machine_max_w / 1e6:.1f} MW", style=MUTED)
+            mx = state.machine_max_w / 1e6
+            power = [Text(f"{share:.0f}% of max {mx:.1f} MW", style=MUTED), Text(f"{share:.0f}% of max", style=MUTED)]
             if state.twin is not None and state.twin.power_now is not None:
                 (pk, tpk), _ = peak_low(state.twin)
-                sub = Text.assemble((f"{share:.0f}% max · ", MUTED), (f"pk {pk / 1e6:.1f} ", f"bold {PINK}"),
-                                    ("now" if tpk == 0 else f"in {human_dur(tpk)}", MUTED))
-            self.query_one("#t-power", Tile).set(f"{state.power / 1e6:.2f}", sub)
+                when, short = ("now", "now") if tpk == 0 else (f"in {human_dur(tpk)}", f"+{human_dur(tpk)}")
+                power = [Text.assemble((f"{share:.0f}% of max · ", MUTED), (f"peak {pk / 1e6:.1f} MW {when}", PINK)),
+                         Text.assemble((f"{share:.0f}% max · ", MUTED), (f"peak {pk / 1e6:.1f} {when}", PINK)),
+                         Text(f"peak {pk / 1e6:.1f} MW {when}", style=PINK),
+                         Text(f"pk {pk / 1e6:.1f} {short}", style=PINK)]
+            self.query_one("#t-power", Tile).set(f"{state.power / 1e6:.2f}", power)
         out_frac = s.out_nodes / s.total_nodes if s.total_nodes else 0
-        self.query_one("#t-out", Tile).set(
-            f"{s.out_nodes}", Text(f"{out_frac * 100:.1f}% · {s.planned_nodes} planned", style=MUTED))
+        self.query_one("#t-out", Tile).set(f"{s.out_nodes}", [
+            Text(f"{out_frac * 100:.1f}% · {s.planned_nodes} planned", style=MUTED),
+            Text(f"{s.planned_nodes} planned", style=MUTED)])
 
         nm = self.query_one("#ov-map", NodeMap)
         if state.node_states:
             nm.set_data(state.node_states, node_job_map(jobs), state.user, node_power=state.node_power,
                         max_w=state.node_max_w)
-            self.query_one("#ov-legend", TextPane).update(nm.legend())
+            hovered = getattr(self, "hovered", None)
+            self.query_one("#ov-legend", TextPane).update(node_hover_text(hovered, nm) if hovered else nm.legend())
 
         if state.partitions:
             t = Text()
@@ -270,7 +284,7 @@ class Overview(LiveView):
             span = human_dur(tr.span_seconds()) if tr.span_seconds() else "now"
             t = Text(f"last {span} · {len(tr.samples)} samples\n", style=MUTED)
             for label, key, color in (("running nodes", "run_nodes", GREEN), ("pending jobs", "pend_jobs", AMBER),
-                                      ("backlog node-h", "backlog_nh", VIOLET), ("node power MW", "power_mw", PINK),
+                                      ("backlog node-h", "backlog_nh", VIOLET), ("system MW", "power_mw", PINK),
                                       ("my jobs (run)", "my_run", PINK)):
                 vals = tr.series(key)
                 if not vals:
@@ -290,6 +304,7 @@ class Overview(LiveView):
 
     @on(NodeMap.Hover)
     def _hover(self, event):
+        self.hovered = event.nodes  # kept so refreshes show the node instead of the legend
         legend = self.query_one("#ov-legend", TextPane)
         nm = self.query_one("#ov-map", NodeMap)
         legend.update(node_hover_text(event.nodes, nm) if event.nodes else nm.legend())
@@ -366,7 +381,7 @@ def twin_panel(state, width):
     t.append(f" {human_num(wait[-1]):>6}\n", style=f"bold {AMBER}")
     if tw.power_now is not None:
         power = [tw.power_at(t) / 1e6 for t in ts]
-        t.append(f"{'node power MW':<15}", style=MUTED)
+        t.append(f"{'system power':<15}", style=MUTED)
         t.append_text(spark(power, sw, PINK, lo=0, hi=max(power)))
         t.append(f" {power[-1]:6.2f}\n", style=f"bold {PINK}")
     t.append(f"{'':<15}{'now':<{sw // 2}}{'+12 h':<{sw - sw // 2}}+24 h\n", style="#475569")
@@ -740,13 +755,14 @@ class Nodes(LiveView):
         if state.node_states:
             nm.set_data(state.node_states, node_job_map(state.jobs or []), state.user, node_power=state.node_power,
                         max_w=state.node_max_w)
-            self.query_one("#nd-info", TextPane).update(nm.legend())
+            hovered = getattr(self, "hovered", None)
+            self.query_one("#nd-info", TextPane).update(node_hover_text(hovered, nm) if hovered else nm.legend())
         head = Text()
         for m in NodeMap.MODES:
             sel = m == nm.mode
             head.append(f" {m} ", style=f"bold #0b0f17 on {CYAN}" if sel else f"{MUTED} on #1e293b")
             head.append(" ")
-        head.append("  c to cycle · hover for node · click for its job", style=MUTED)
+        head.append("  c colors · hover or arrow keys for a node · click or enter for its job", style=MUTED)
         upd = state.updated.get("nodes")
         if upd:
             head.append(f"   node states {rel_time(upd)}", style="dim")
@@ -760,6 +776,7 @@ class Nodes(LiveView):
 
     @on(NodeMap.Hover)
     def _hover(self, event):
+        self.hovered = event.nodes
         nm = self.query_one("#nd-map", NodeMap)
         self.query_one("#nd-info", TextPane).update(node_hover_text(event.nodes, nm) if event.nodes else nm.legend())
 

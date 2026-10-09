@@ -21,7 +21,10 @@ HELP = """\
 
 [b]My Jobs[/b]   enter details   c cancel   h hold   u release   (all ask first)
 [b]Queue[/b]     / filter   esc clear   f running/pending/all   m only mine   s sort   enter details
-[b]Maps[/b]      c color mode (state, job, account, mine, power) on Overview and Nodes   hover a node · click for its job
+[b]Maps[/b]      c color mode (state, job, account, mine, power) on Overview and Nodes
+          hover a node, or on Nodes use the arrow keys (shift+arrow / PgUp/PgDn: a
+          cabinet); click or enter opens the node's job. In tmux, hover and click need
+          `set -g mouse on`.   hover a node · click for its job
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)
 
@@ -30,8 +33,8 @@ HELP = """\
           the forecast runtime, running jobs the forecast time left. Built from 30 days of
           sacct -a, kept in memory only (--forecast-days, 0 turns it off).
 
-[b]Power[/b]     measured: Slurm's CurrentWatts per node (compute nodes only; no cooling,
-          network or storage), every minute; readings above 5 kW are glitches and are
+[b]Power[/b]     system power = the sum of Slurm's CurrentWatts over all compute nodes (no
+          cooling, network or storage), every minute; readings above 5 kW are glitches and are
           dropped. "W now" is a running job's measured W/node, "W/node" its forecast.
           The twin's power forecast keeps running jobs at their measured power, gives
           starting jobs their forecast (else the running median) and free nodes the idle mean.

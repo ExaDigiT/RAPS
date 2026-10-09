@@ -7,6 +7,7 @@ from functools import lru_cache
 import numpy as np
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Digits, Label
@@ -169,10 +170,23 @@ class Tile(Vertical):
         yield TextPane("", classes="tile-sub")
 
     def set(self, value, sub=""):
+        """``sub`` is a caption, or a list of captions from longest to shortest: the longest that fits is shown."""
         d = self.query_one(Digits)
         if d.value != str(value):
             d.update(str(value))
-        self.query_one(".tile-sub", TextPane).update(sub)
+        self._subs = sub if isinstance(sub, (list, tuple)) else [sub]
+        self._fit()
+
+    def _fit(self):
+        subs = getattr(self, "_subs", None)
+        if not subs:
+            return
+        width = self.content_size.width
+        cell = lambda s: s.cell_len if isinstance(s, Text) else len(s)  # noqa: E731
+        self.query_one(".tile-sub", TextPane).update(next((s for s in subs if cell(s) <= width), subs[-1]))
+
+    def on_resize(self, event):
+        self._fit()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -235,8 +249,17 @@ def plan_cabinets(ncab, wpx, hpx):
 class NodeMap(PixelGrid):
     """
     Every node drawn as a pixel inside its cabinet (128 consecutive node numbers per cabinet).
-    Hovering reports the node under the mouse; clicking posts ``NodeMap.Clicked``.
+    Hovering reports the node under the mouse; clicking posts ``NodeMap.Clicked``. Without a mouse
+    (e.g. tmux with mouse off), the arrow keys move a highlighted node and enter opens its job.
     """
+
+    BINDINGS = [
+        Binding("left", "move(-1, 0)", "Node", show=False), Binding("right", "move(1, 0)", "Node", show=False),
+        Binding("up", "move(0, -1)", "Node", show=False), Binding("down", "move(0, 1)", "Node", show=False),
+        Binding("shift+left,pageup", "move(-128, 0)", "Cabinet", show=False),
+        Binding("shift+right,pagedown", "move(128, 0)", "Cabinet", show=False),
+        Binding("enter", "open", "Open job", show=False),
+    ]
 
     can_focus = True  # so the Nodes tab's keys (c: color mode) reach it
     MODES = ("state", "job", "account", "mine", "power")
@@ -265,7 +288,9 @@ class NodeMap(PixelGrid):
         self._names = []         # sorted node names
         self._cabs = []          # cabinet numbers present, in draw order
         self._pix_nodes = None   # (H, W) object array of node-name lists, for hover lookup
+        self._pos = {}           # node -> (x, y, size) of its pixel block
         self._layout = None
+        self.cursor = None       # node highlighted with the keyboard
 
     def set_data(self, node_states, node_job, user, mode=None, node_power=None, max_w=None):
         self.node_states = node_states or {}
@@ -342,6 +367,7 @@ class NodeMap(PixelGrid):
             if x + sc > wpx or y + sc > hpx:
                 continue
             rgb = self._node_rgb(name)
+            self._pos[name] = (x, y, sc)
             acc[y:y + sc, x:x + sc] += rgb
             cnt[y:y + sc, x:x + sc] += 1
             for yy in range(y, y + sc):
@@ -356,7 +382,34 @@ class NodeMap(PixelGrid):
             empty = ~has[y0:y0 + ph, x0:x0 + pw]
             img[y0:y0 + ph, x0:x0 + pw][empty] = (20, 26, 38)
         self._pix_nodes = pix_nodes
+        if self.cursor in self._pos and self.has_focus:
+            x, y, s = self._pos[self.cursor]
+            img[y:y + s, x:x + s] = (255, 255, 255)
         return img
+
+    def action_move(self, dnode, drow):
+        """Arrow keys: dnode steps along node numbers, drow steps a row of slots in the cabinet."""
+        if not self._names:
+            return
+        if self.cursor not in self.node_states:
+            self.cursor = self._names[0]
+        else:
+            k = self._layout[2] if self._layout else 1
+            tw = self._layout[0] if self._layout else 1
+            target = (node_index(self.cursor) or 0) + dnode * (k if abs(dnode) == 1 else 1) + drow * tw * k
+            self.cursor = min(self._names, key=lambda n: abs((node_index(n) or 0) - target))
+        self.refresh_image()
+        self.post_message(self.Hover([self.cursor]))
+
+    def action_open(self):
+        if self.cursor:
+            self.post_message(self.Clicked([self.cursor]))
+
+    def on_focus(self, event):
+        self.refresh_image()
+
+    def on_blur(self, event):
+        self.refresh_image()
 
     def nodes_at(self, x, y):
         if not self._pix_nodes:
