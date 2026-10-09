@@ -192,7 +192,12 @@ class Tile(Vertical):
 # ---------------------------------------------------------------------------------------------
 # node map
 # ---------------------------------------------------------------------------------------------
-NODES_PER_CAB = 128
+NODES_PER_CAB = 128  # nodes per rack/cabinet; set from the system config by ``set_nodes_per_cab``
+
+
+def set_nodes_per_cab(n):
+    global NODES_PER_CAB
+    NODES_PER_CAB = max(int(n), 1)
 
 NODE_STATE_RGB = {
     "allocated": (52, 211, 153), "mixed": (52, 211, 153), "completing": (56, 189, 248),
@@ -217,7 +222,7 @@ def base_state(state):
 
 def plan_cabinets(ncab, wpx, hpx):
     """
-    Choose how to draw `ncab` cabinets of 128 nodes in wpx x hpx pixels with 1px gaps between
+    Choose how to draw `ncab` cabinets of NODES_PER_CAB nodes in wpx x hpx pixels with 1px gaps between
     cabinets. Returns (tw, th, k, cols, scale): a tile is tw x th node slots, each slot is
     scale x scale pixels and holds k nodes. Prefers big nodes (scale), then fewer nodes per pixel,
     then tiles that are taller than wide (so cabinets read as racks), then filling the area.
@@ -226,7 +231,7 @@ def plan_cabinets(ncab, wpx, hpx):
     best = None
     for scale, k in [(s, 1) for s in (6, 5, 4, 3, 2)] + [(1, k) for k in (1, 2, 4, 8, 16, 32, 64, 128)]:
         per = NODES_PER_CAB // k
-        for tw in (1, 2, 4, 8, 16, 32, 64, 128):
+        for tw in range(1, per + 1):
             if per % tw:
                 continue
             th = per // tw
@@ -248,7 +253,7 @@ def plan_cabinets(ncab, wpx, hpx):
 
 class NodeMap(PixelGrid):
     """
-    Every node drawn as a pixel inside its cabinet (128 consecutive node numbers per cabinet).
+    Every node drawn as a pixel inside its cabinet (NODES_PER_CAB consecutive node numbers per cabinet).
     Hovering reports the node under the mouse; clicking posts ``NodeMap.Clicked``. Without a mouse
     (e.g. tmux with mouse off), the arrow keys move a highlighted node and enter opens its job.
     """
@@ -317,7 +322,7 @@ class NodeMap(PixelGrid):
         names = sorted(self.node_states, key=lambda n: (node_index(n) or 0, n))
         if names != self._names:
             self._names = names
-            self._cabs = sorted({(node_index(n) or 1) - 1 >> 7 for n in names})
+            self._cabs = sorted({((node_index(n) or 1) - 1) // NODES_PER_CAB for n in names})
         self.refresh_image()
 
     def _node_rgb(self, name):
@@ -372,8 +377,8 @@ class NodeMap(PixelGrid):
         pix_nodes = {}
         for name in self._names:
             idx = (node_index(name) or 1) - 1
-            ci = cab_pos[idx >> 7]
-            slot = (idx & 127) // k
+            ci = cab_pos[idx // NODES_PER_CAB]
+            slot = (idx % NODES_PER_CAB) // k
             cx, cy = ci % cols, ci // cols
             x = cx * (pw + 1) + (slot % tw) * sc
             y = cy * (ph + 1) + (slot // tw) * sc
@@ -430,9 +435,10 @@ class NodeMap(PixelGrid):
             return self._set_cursor(self._names[0])
         idx = (node_index(self.cursor) or 1) - 1
         cols = self._layout[3] if self._layout else 1
-        ci = self._cabs.index(idx >> 7) if (idx >> 7) in self._cabs else 0
+        cab = idx // NODES_PER_CAB
+        ci = self._cabs.index(cab) if cab in self._cabs else 0
         ci = min(max(ci + dcab + drow * cols, 0), len(self._cabs) - 1)
-        self._set_cursor(self._nearest(self._cabs[ci] * NODES_PER_CAB + (idx & 127) + 1))
+        self._set_cursor(self._nearest(self._cabs[ci] * NODES_PER_CAB + idx % NODES_PER_CAB + 1))
 
     def action_jump(self, i):
         if self._names:

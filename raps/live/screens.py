@@ -67,7 +67,7 @@ class HelpScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static(gradient("◆ FRONTIER LIVE · keys", CYAN, VIOLET))
+            yield Static(gradient("◆ LIVE · keys", CYAN, VIOLET))
             yield Static(HELP)
 
 

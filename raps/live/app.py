@@ -5,6 +5,7 @@ Run with ``python main.py live`` (or ``python -m raps.live``). Slurm is polled i
 thread (see ``poller.py``); the UI only renders the latest published ``ClusterState``.
 """
 import subprocess
+from pathlib import Path
 from datetime import datetime
 
 from rich.text import Text
@@ -105,7 +106,7 @@ class LiveApp(App):
         self._tick += 1
         state = self._applied
         width = self.size.width - 2
-        left = gradient("◆ FRONTIER", CYAN, VIOLET) + Text("  live", style=f"bold {PINK}")
+        left = gradient(f"◆ {(state.cluster if state and state.cluster else self.poller.system or 'frontier').upper()}", CYAN, VIOLET) + Text("  live", style=f"bold {PINK}")
         left.append("  ·  exadigit", style="#64748b")
         right = Text()
         if state is not None:
@@ -204,6 +205,19 @@ class LiveApp(App):
         self.push_screen(ConfirmScreen(message), done)
 
 
+CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
+
+
+def nodes_per_rack(system, default=128):
+    """nodes_per_rack from config/<system>.yaml (read directly: loading the full config takes ~5 s)."""
+    try:
+        import yaml
+        with open(CONFIG_DIR / f"{system}.yaml") as f:
+            return int(yaml.safe_load(f)["system"]["nodes_per_rack"])
+    except Exception:
+        return default
+
+
 def main(argv=None):
     import argparse
     from raps.live import live_add_parser
@@ -216,8 +230,14 @@ def main(argv=None):
 def run(args):
     from raps.live.forecast import Forecaster
     from raps.live.slurm import Slurm
+    from raps.live.widgets import set_nodes_per_cab
+    system = args.system
+    if system is None:  # the real machine's own config, e.g. lux -> config/lux.yaml
+        cluster = Slurm.cluster_name()
+        system = cluster if cluster and (CONFIG_DIR / f"{cluster}.yaml").exists() else "frontier"
+    set_nodes_per_cab(nodes_per_rack(system))
     forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
     poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster,
-                    twin=not args.no_twin, system=args.system or None, access=True)
+                    twin=not args.no_twin, system=system or None, access=True)
     LiveApp(poller, start_tab=args.tab).run()
 

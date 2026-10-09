@@ -8,6 +8,7 @@ a forecast from the live queue).
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -439,7 +440,12 @@ class Slurm:
         return parse_sinfo_partitions(run(["sinfo", "-h", "-o", "%P|%a|%D|%F|%l"]))
 
     def allocations(self):
-        return parse_showusage(run(["showusage"], timeout=60))
+        if shutil.which("showusage"):
+            return parse_showusage(run(["showusage"], timeout=60))
+        # No OLCF showusage (e.g. Lux): list my Slurm accounts, without allocation figures
+        out = run(["sacctmgr", "-n", "-P", "show", "assoc", f"user={self.user}", "format=account"], timeout=30)
+        accounts = dict.fromkeys(l.strip() for l in out.splitlines() if l.strip())
+        return [Allocation(project=a, allocation=None, usage=0.0, remaining=None, my_usage=0.0) for a in accounts]
 
     def fairshare(self):
         return parse_sshare(run(["sshare", "-U", "-P", "-n", "-u", self.user, "-o",

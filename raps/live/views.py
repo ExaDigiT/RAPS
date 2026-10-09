@@ -786,7 +786,9 @@ class Nodes(LiveView):
     def compose(self) -> ComposeResult:
         yield TextPane("", id="nd-head")
         with Vertical(id="nd-box") as box:
-            _panel(box, "frontier · one pixel per node · 128 nodes per cabinet")
+            from raps.live import widgets
+            _panel(box, f"{self.app.poller.system or 'cluster'} · one pixel per node · "
+                        f"{widgets.NODES_PER_CAB} nodes per cabinet")
             yield NodeMap(id="nd-map")
             yield TextPane(_waiting("sinfo -N"), id="nd-info")
 
@@ -939,7 +941,7 @@ class Shell(LiveView):
 
     def on_mount(self):
         log = self.query_one("#sh-log", RichLog)
-        log.write(gradient("◆ frontier shell"))
+        log.write(gradient(f"◆ {self.app.poller.system or 'cluster'} shell"))
         log.write(Text("commands run with bash in the directory shown on the prompt; output streams here.\n"
                        "try: " + " · ".join(QUICK[:6]), style=MUTED))
         self._prompt_title()
