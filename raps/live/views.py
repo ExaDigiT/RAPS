@@ -1,6 +1,15 @@
 """The console's tabs. Each view renders from the latest ``ClusterState`` when it is visible."""
+import codecs
+import fcntl
 import os
+import pty
+import re
+import shlex
+import signal
+import struct
 import subprocess
+import tempfile
+import termios
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -789,7 +798,7 @@ class Nodes(LiveView):
             from raps.live import widgets
             _panel(box, f"{self.app.poller.system or 'cluster'} · one pixel per node · "
                         f"{widgets.NODES_PER_CAB} nodes per cabinet")
-            yield NodeMap(id="nd-map")
+            yield NodeMap(mode="power", id="nd-map")  # the job states are on the Overview
             yield TextPane(_waiting("sinfo -N"), id="nd-info")
 
     def render_state(self, state):
@@ -838,7 +847,8 @@ class System(LiveView):
     System #sy-top > * { height: auto; }
     System #sy-bottom { height: 1fr; }
     System #sy-res { width: 3fr; background: $panel; }
-    System #sy-reasons, System #sy-users { width: 2fr; }
+    System #sy-reasons, System #sy-tops { width: 2fr; }
+    System #sy-users, System #sy-projects { height: 1fr; }
     System #sy-parts { width: 3fr; background: $panel; }
     """
 
@@ -848,7 +858,9 @@ class System(LiveView):
             yield _panel(TextPane(_waiting("squeue"), id="sy-reasons"), "why jobs are waiting")
         with Horizontal(id="sy-bottom"):
             yield _panel(DataTable(id="sy-res", zebra_stripes=True, cursor_type="row"), "reservations")
-            yield _panel(TextPane(_waiting("squeue"), id="sy-users"), "top users · running nodes")
+            with Vertical(id="sy-tops"):
+                yield _panel(TextPane(_waiting("squeue"), id="sy-users"), "top users · running nodes")
+                yield _panel(TextPane(_waiting("squeue"), id="sy-projects"), "top projects · running nodes")
 
     def on_mount(self):
         self.query_one("#sy-parts", DataTable).add_columns("partition", "state", "nodes", "alloc", "idle", "other",
@@ -888,18 +900,24 @@ class System(LiveView):
                 t.append(f" {n:>5,}", style=color)
             self.query_one("#sy-reasons", TextPane).update(t)
 
-            users = top_accounts(state.jobs, n=14, key="user")
-            peak = max((u[1] for u in users), default=1) or 1
-            w = max(self.query_one("#sy-users").size.width - 4, 30)
-            t = Text()
-            for i, (name, rn, rj, pnh) in enumerate(users):
-                if i:
-                    t.append("\n")
-                t.append(f"{name[:12]:<13}", style=f"bold {PINK}" if name == state.user else "bold")
-                t.append_text(bar(rn / peak, max(w - 34, 6), CYAN, VIOLET))
-                t.append(f" {rn:>5,}n {rj:>3}j", style=MUTED)
-                t.append(f" {human_num(pnh):>6}nh", style=AMBER)
-            self.query_one("#sy-users", TextPane).update(t)
+            self._top_list("#sy-users", state, "user")
+            self._top_list("#sy-projects", state, "account")
+
+    def _top_list(self, pane, state, key):
+        """Bars of running nodes per user or per project (Slurm account, e.g. cfd227), biggest first."""
+        rows = top_accounts(state.jobs, n=max(self.query_one(pane).size.height - 2, 3), key=key)
+        peak = max((r[1] for r in rows), default=1) or 1
+        w = max(self.query_one(pane).size.width - 4, 30)
+        t = Text()
+        for i, (name, rn, rj, pnh) in enumerate(rows):
+            if i:
+                t.append("\n")
+            mine = name == state.user if key == "user" else name in (state.my_accounts or ())
+            t.append(f"{name[:12]:<13}", style=f"bold {PINK}" if mine else "bold")
+            t.append_text(bar(rn / peak, max(w - 34, 6), CYAN, VIOLET))
+            t.append(f" {rn:>5,}n {rj:>3}j", style=MUTED)
+            t.append(f" {human_num(pnh):>6}nh", style=AMBER)
+        self.query_one(pane, TextPane).update(t)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -912,8 +930,34 @@ QUICK = [
 ]
 
 
+TAB_DIGITS = {"1", "2", "3", "4", "5", "7"}  # typed alone in the shell and Enter: go to that tab (6 is the shell)
+BASH_NOISE = ("bash: cannot set terminal process group", "bash: no job control in this shell",
+              "Shell cwd was reset to")
+EDITORS = {"vi", "vim", "nvim", "nano", "pico", "micro", "emacs", "edit", "e"}   # open in the built-in editor
+VIEWERS = {"view", "less", "more"}                                                   # same, read-only
+NEEDS_TERMINAL = {"top", "htop", "btop", "watch", "ssh", "tmux", "screen", "mc", "ncdu", "info"}
+ENV_SKIP = ("_", "SHLVL", "OLDPWD", "PWD", "COLUMNS", "LINES")
+
+
+class ShellInput(Input):
+    """The shell prompt. A digit typed into an empty prompt jumps to that tab (6 is the shell itself)."""
+
+    def on_key(self, event):
+        if not self.value and event.character in TAB_DIGITS:
+            event.stop()
+            event.prevent_default()  # keeps Input from inserting the digit
+            self.app.action_tab(int(event.character) - 1)
+
+
 class Shell(LiveView):
-    BINDINGS = [Binding("ctrl+k", "kill", "Kill command"), Binding("escape", "leave", "Leave prompt")]
+    """
+    A bash prompt: every command runs in an interactive bash (so ~/.bashrc aliases work) on a pty (so
+    ls prints columns and colors). The working directory and exported variables carry over from one
+    command to the next. Tab completes commands and paths; 1-5 or 7 on an empty prompt switches tab.
+    """
+
+    BINDINGS = [Binding("ctrl+k,ctrl+c", "kill", "Kill command", priority=True), Binding("escape", "leave", "Leave prompt"),
+                Binding("ctrl+l", "clear", "Clear")]
     DEFAULT_CSS = """
     Shell #sh-log { height: 1fr; background: $panel; border: round $primary-darken-2;
                     border-title-color: $secondary; border-title-style: bold; padding: 0 1; }
@@ -923,6 +967,9 @@ class Shell(LiveView):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.cwd = Path.cwd()
+        self.oldcwd = self.cwd
+        self.env = dict(os.environ)
+        self._path_cmds = None
         self.proc = None
         self.hist_path = cache_dir() / "shell_history"
         try:
@@ -935,15 +982,14 @@ class Shell(LiveView):
         log = RichLog(id="sh-log", wrap=True, markup=False, highlight=False, max_lines=5000)
         log.border_title = "shell"
         yield log
-        yield Input(placeholder="command (bash) · ↑ history · ctrl+k kill · esc leaves the prompt so digits switch tabs (F1-F7 always do)", id="sh-input",
+        yield ShellInput(placeholder="command", id="sh-input",
                     suggester=SuggestFromList(list(dict.fromkeys(reversed(self.history))) + QUICK,
                                               case_sensitive=True))
 
     def on_mount(self):
         log = self.query_one("#sh-log", RichLog)
         log.write(gradient(f"◆ {self.app.poller.system or 'cluster'} shell"))
-        log.write(Text("commands run with bash in the directory shown on the prompt; output streams here.\n"
-                       "try: " + " · ".join(QUICK[:6]), style=MUTED))
+        log.write(Text("try: " + " · ".join(QUICK[:6]), style=MUTED))
         self._prompt_title()
 
     def on_show(self):
@@ -962,6 +1008,11 @@ class Shell(LiveView):
         self.hpos = None
         if not cmd:
             return
+        if cmd in TAB_DIGITS:
+            self.app.action_tab(int(cmd) - 1)
+            return
+        if cmd == "!!" and self.history:
+            cmd = self.history[-1]
         if not self.history or self.history[-1] != cmd:
             self.history.append(cmd)
             try:
@@ -975,14 +1026,32 @@ class Shell(LiveView):
             log.clear()
             return
         log.write(Text.assemble(("\n❯ ", f"bold {PINK}"), (cmd, "bold")))
-        if cmd == "cd" or cmd.startswith("cd "):
-            target = os.path.expanduser(os.path.expandvars(cmd[3:].strip() or "~"))
+        if cmd == "cd" or (cmd.startswith("cd ") and not re.search(r"[;&|<>$`(]", cmd)):
+            arg = cmd[3:].strip() or "~"
+            target = str(self.oldcwd) if arg == "-" else os.path.expanduser(os.path.expandvars(arg))
             new = (self.cwd / target).resolve()
             if new.is_dir():
-                self.cwd = new
+                self.oldcwd, self.cwd = self.cwd, new
                 self._prompt_title()
             else:
                 log.write(Text(f"cd: no such directory: {target}", style=RED))
+            return
+        try:
+            words = shlex.split(cmd)
+        except ValueError:  # unbalanced quote: bash will complain
+            words = []
+        prog = os.path.basename(words[0]) if words else ""
+        if prog in EDITORS | VIEWERS:
+            files = [w for w in words[1:] if not w.startswith("-")]
+            if len(files) != 1:
+                log.write(Text(f"{prog}: give one file name (this opens the built-in editor)", style=AMBER))
+                return
+            from raps.live.screens import EditScreen
+            self.app.push_screen(EditScreen(self.cwd / os.path.expanduser(files[0]), read_only=prog in VIEWERS))
+            return
+        if prog in NEEDS_TERMINAL or (prog in ("python", "python3", "ipython", "R", "julia") and len(words) == 1):
+            log.write(Text(f"{prog} needs a full terminal and cannot run inside the console "
+                           f"(quit with ctrl+q, or use another terminal)", style=AMBER))
             return
         if self.proc is not None:
             log.write(Text("a command is still running (ctrl+k to kill it)", style=AMBER))
@@ -991,33 +1060,141 @@ class Shell(LiveView):
 
     def _exec(self, cmd):
         log = self.query_one("#sh-log", RichLog)
+        write = lambda t: self.app.call_from_thread(log.write, t)  # noqa: E731
         t0 = datetime.now()
+        fd, state = tempfile.mkstemp(prefix="raps-shell-")
+        os.close(fd)
+        rc = None
+        master = slave = None
         try:
-            self.proc = subprocess.Popen(["bash", "-c", cmd], cwd=self.cwd, stdout=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, bufsize=1,
-                                         env={**os.environ, "COLUMNS": str(max(log.size.width - 4, 80))})
-            for line in self.proc.stdout:
-                self.app.call_from_thread(log.write, Text.from_ansi(line.rstrip("\n")))
+            master, slave = pty.openpty()
+            cols = max(log.size.width - 4, 80)
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 50, cols, 0, 0))
+            env = {**self.env, "COLUMNS": str(cols), "TERM": "xterm-256color", "PAGER": "cat", "GIT_PAGER": "cat"}
+            # after the command, record where bash ended up and which variables are exported
+            script = (f"{cmd}\n__rc=$?\npwd -P > {shlex.quote(state)}.cwd\nenv -0 > {shlex.quote(state)}.env\n"
+                      f"exit $__rc")
+            self.proc = subprocess.Popen(["bash", "-i", "-c", script], cwd=self.cwd, env=env, stdin=subprocess.DEVNULL,
+                                         stdout=slave, stderr=slave, start_new_session=True)
+            os.close(slave)
+            slave = None
+            held = None  # the last line, held back: an interactive bash ends its output with "exit"
+            for line in self._lines(master):
+                if line.startswith(BASH_NOISE):
+                    continue
+                if held is not None:
+                    write(Text.from_ansi(held))
+                held = line
+            if held is not None and held.strip() != "exit":
+                write(Text.from_ansi(held))
             rc = self.proc.wait()
+            self._absorb(state)
         except Exception as exc:
-            rc = None
-            self.app.call_from_thread(log.write, Text(str(exc), style=RED))
+            write(Text(str(exc), style=RED))
         finally:
             self.proc = None
+            for fd in (master, slave):
+                if fd is not None:
+                    os.close(fd)
+            for ext in ("", ".cwd", ".env"):
+                try:
+                    os.unlink(state + ext)
+                except OSError:
+                    pass
         dt = (datetime.now() - t0).total_seconds()
         style = GREEN if rc == 0 else RED
-        self.app.call_from_thread(log.write, Text(f"└─ exit {rc} · {dt:.1f}s", style=f"dim {style}"))
+        write(Text(f"└─ exit {rc} · {dt:.1f}s", style=f"dim {style}"))
+        self.app.call_from_thread(self._prompt_title)
         # anything Slurm-shaped probably changed the queue
         if any(w in cmd for w in ("sbatch", "scancel", "scontrol", "salloc")):
             self.app.call_from_thread(self.app.poller.refresh, "jobs", "history")
+
+    @staticmethod
+    def _lines(master):
+        """Lines of what the pty produces. A carriage return redraws the line (progress bars), so keep its last part."""
+        dec = codecs.getincrementaldecoder("utf-8")("replace")
+        buf = ""
+        while True:
+            try:
+                data = os.read(master, 65536)
+            except OSError:  # EIO: the last process holding the pty has gone
+                break
+            if not data:
+                break
+            buf += dec.decode(data)
+            *done, buf = buf.split("\n")
+            for line in done:
+                yield line.rstrip("\r").rsplit("\r", 1)[-1]
+        if buf.strip():
+            yield buf.rsplit("\r", 1)[-1]
+
+    def _absorb(self, state):
+        """Pick up the working directory and exported variables the command ended with (absent after `exit`)."""
+        try:
+            new = Path(Path(state + ".cwd").read_text().strip())
+            if new.is_dir() and new != self.cwd:
+                self.oldcwd, self.cwd = self.cwd, new
+            for item in Path(state + ".env").read_bytes().decode(errors="replace").split("\0"):
+                k, eq, v = item.partition("=")
+                if eq and k not in ENV_SKIP and not k.startswith("BASH_FUNC_"):
+                    self.env[k] = v
+        except OSError:
+            pass
 
     def action_leave(self):
         self.app.set_focus(None)
 
     def action_kill(self):
-        if self.proc is not None:
-            self.proc.kill()
-            self.query_one("#sh-log", RichLog).write(Text("killed", style=RED))
+        log = self.query_one("#sh-log", RichLog)
+        proc = self.proc  # the worker thread clears self.proc when the command ends
+        if proc is None:
+            log.write(Text("nothing is running", style=MUTED))
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)  # bash and everything it started: same process group
+        except OSError:
+            proc.kill()
+        log.write(Text("killed", style=RED))
+
+    def action_clear(self):
+        self.query_one("#sh-log", RichLog).clear()
+
+    def _commands(self):
+        if self._path_cmds is None:
+            names = set()
+            for d in self.env.get("PATH", "").split(":"):
+                try:
+                    names.update(e for e in os.listdir(d) if os.access(os.path.join(d, e), os.X_OK))
+                except OSError:
+                    pass
+            self._path_cmds = sorted(names)
+        return self._path_cmds
+
+    def complete(self, inp):
+        """Tab: complete the word before the cursor as a command (first word) or a path; list ties."""
+        text = inp.value[:inp.cursor_position]
+        head, _, word = text.rpartition(" ")
+        dirpart, _, base = word.rpartition("/")
+        dirpart = dirpart + "/" if "/" in word else ""
+        folder = Path(os.path.expanduser(dirpart)) if dirpart else Path()
+        folder = folder if folder.is_absolute() else self.cwd / folder
+        try:
+            names = [n + ("/" if (folder / n).is_dir() else "") for n in sorted(os.listdir(folder))
+                     if n.startswith(base) and (base.startswith(".") or not n.startswith("."))]
+        except OSError:
+            names = []
+        found = [dirpart + n for n in names]
+        if not head.strip() and not dirpart:
+            found = sorted(set(found) | {c for c in self._commands() if c.startswith(word)})
+        if not found:
+            return
+        common = os.path.commonprefix(found)
+        if len(found) > 1:
+            self.query_one("#sh-log", RichLog).write(Text("  ".join(os.path.basename(f.rstrip("/")) + ("/" if f.endswith("/") else "") for f in found[:60]), style=MUTED))
+        if len(common) > len(word) or len(found) == 1:
+            done = common if len(found) > 1 or common.endswith("/") else common + " "
+            inp.value = head + (" " if head or text.startswith(" ") else "") + done + inp.value[inp.cursor_position:]
+            inp.cursor_position = len(head) + (1 if head or text.startswith(" ") else 0) + len(done)
 
     def on_key(self, event):
         inp = self.query_one("#sh-input", Input)

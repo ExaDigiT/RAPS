@@ -273,7 +273,7 @@ class NodeMap(PixelGrid):
     ]
 
     can_focus = True  # so the Nodes tab's keys (c: color mode) reach it
-    MODES = ("state", "job", "account", "mine", "power")
+    MODES = ("power", "state", "job", "account", "mine")  # as listed on the Nodes tab
     # colors at fractions of the node maximum (RAPS power model)
     POWER_STOPS = ((0.0, (30, 41, 59)), (0.18, (14, 116, 144)), (0.43, (34, 197, 94)), (0.72, (245, 158, 11)),
                    (1.0, (239, 68, 68)))
@@ -288,9 +288,9 @@ class NodeMap(PixelGrid):
             super().__init__()
             self.nodes = nodes
 
-    def __init__(self, **kwargs):
+    def __init__(self, mode="state", **kwargs):
         super().__init__(source=self._draw, **kwargs)
-        self.mode = "state"
+        self.mode = mode
         self.user = ""
         self.node_states = {}
         self.node_job = {}       # node -> Job

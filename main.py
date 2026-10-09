@@ -6,11 +6,75 @@ ExaDigiT Resource Allocator & Power Simulator (RAPS)
 import argparse
 from pathlib import Path
 import os
+import sys
 import textwrap
 import copy
 import gzip
-import dill
-import argcomplete
+import threading
+
+
+class Splash:
+    """
+    Something pretty to look at while `raps live` loads (standard library only, as it starts before the slow
+    imports): a braille spinner that cycles through the console's colors, the title shimmering beside it, and
+    the current step. Drawn on stderr from a thread; ``stop`` clears the line and brings the cursor back.
+    """
+
+    FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    COLORS = (45, 39, 75, 105, 141, 177, 213, 177, 141, 105, 75, 39)  # cyan -> violet -> pink and back (256-color)
+
+    def __init__(self, msg=""):
+        self.msg = msg
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="raps-splash")
+        self._lock = threading.Lock()
+        self.running = False
+
+    def start(self):
+        self.running = True
+        sys.stderr.write("\033[?25l")  # hide the cursor
+        self._thread.start()
+        return self
+
+    def set(self, msg):
+        self.msg = msg
+
+    def frame(self, i):
+        n = len(self.COLORS)
+        col = lambda k: f"\033[38;5;{self.COLORS[k % n]}m"  # noqa: E731
+        title = "".join(f"{col(i // 2 + k)}{c}" for k, c in enumerate("raps live"))
+        dots = "".join("●" if (i // 3) % 4 > k else "○" for k in range(3))
+        return (f"\r\033[K {col(i // 2)}\033[1m{self.FRAMES[i % len(self.FRAMES)]}\033[0m "
+                f"\033[1m{title}\033[0m  \033[38;5;245m{self.msg} \033[38;5;240m{dots}\033[0m")
+
+    def _run(self):
+        i = 0
+        while not self._stop.wait(0.08):
+            with self._lock:
+                if self._stop.is_set():
+                    break
+                sys.stderr.write(self.frame(i))
+                sys.stderr.flush()
+            i += 1
+
+    def stop(self):
+        if not self.running:
+            return
+        self.running = False
+        self._stop.set()
+        with self._lock:  # waits for a frame being drawn
+            sys.stderr.write("\r\033[K\033[?25h")  # clear the line, show the cursor
+            sys.stderr.flush()
+
+
+# `raps live` shows the splash before loading anything heavy (the console takes a while to start), but not while
+# tab-completing or printing --help
+_SPLASH = None
+if (sys.argv[1:2] == ["live"] and sys.stderr.isatty() and "_ARGCOMPLETE" not in os.environ
+        and not {"-h", "--help"} & set(sys.argv)):
+    import atexit
+    _SPLASH = Splash("starting").start()
+    atexit.register(_SPLASH.stop)
 
 # Implement shell completion using argcomplete
 # Importing all of raps' dependencies like pandas etc can be rather slow, often taking 1-2 seconds. So for snappy shell
@@ -35,6 +99,8 @@ def shell_completion_add_parser(subparsers):
 
 
 def shell_complete():
+    import argcomplete
+    import dill
     try:
         parser = dill.loads(gzip.decompress(PARSER_CACHE.read_bytes()))
     except Exception:
@@ -47,6 +113,7 @@ def shell_complete():
 
 
 def cache_parser(parser: argparse.ArgumentParser):
+    import dill
     parser = copy.deepcopy(parser)
     subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     # Don't need to pickle the impl functions
@@ -62,6 +129,23 @@ def cache_parser(parser: argparse.ArgumentParser):
 
 
 def main(cli_args: list[str] | None = None):
+    argv = sys.argv[1:] if cli_args is None else cli_args
+    if argv[:1] == ["live"] and "_ARGCOMPLETE" not in os.environ:
+        # Fast path: the console needs none of the simulator's parsers or imports (pandas, scipy, ...),
+        # which alone take seconds to load. Say so right away, as the rest of start-up is still slow.
+        if _SPLASH is not None:
+            _SPLASH.set("loading raps")  # `import raps` loads the whole simulator engine
+        try:
+            import raps.live
+            raps.live.splash = _SPLASH  # the steps in app.py report through raps.live.say
+            parser = argparse.ArgumentParser(prog="raps", allow_abbrev=False)
+            raps.live.live_add_parser(parser.add_subparsers(required=True))
+            args = parser.parse_args(argv)
+            return args.impl(args)
+        finally:
+            if _SPLASH is not None:
+                _SPLASH.stop()  # also when something fails, so the traceback is not drawn over
+
     shell_complete()  # will output shell completion and sys.exit during tab complete
 
     from raps.helpers import check_python_version

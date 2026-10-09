@@ -1,5 +1,6 @@
-"""Modal screens: help, confirmation, and the full job detail card."""
+"""Modal screens: help, confirmation, the full job detail card, and a small text editor."""
 import re
+from pathlib import Path
 
 from rich.table import Table
 from rich.text import Text
@@ -8,7 +9,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
+from textual.widgets import Button, Static, TextArea
 
 from raps.live.widgets import CYAN, VIOLET, gradient, state_text
 
@@ -122,6 +123,71 @@ DETAIL_GROUPS = [
     ("Time", ["SubmitTime", "EligibleTime", "StartTime", "EndTime", "RunTime", "TimeLimit"]),
     ("Where", ["NodeList", "BatchHost", "WorkDir", "Command", "StdOut", "StdErr"]),
 ]
+
+
+class EditScreen(ModalScreen):
+    """The shell's ``edit``/``vi FILE`` editor: ctrl+s saves, esc closes (twice to drop changes); read-only for less."""
+
+    BINDINGS = [Binding("ctrl+s", "save", "Save", priority=True), Binding("escape", "close", "Close", priority=True),
+                Binding("f10", "close", "Close", show=False, priority=True)]
+    DEFAULT_CSS = """
+    EditScreen { align: center middle; }
+    EditScreen > Vertical { width: 100%; height: 100%; background: $surface; }
+    EditScreen #ed-bar { height: 1; padding: 0 1; background: $panel; }
+    EditScreen TextArea { height: 1fr; }
+    """
+
+    def __init__(self, path, read_only=False, **kwargs):
+        super().__init__(**kwargs)
+        self.path = Path(path)
+        self.read_only = read_only
+        self.saved = ""
+        self.closing = False
+        self.note = ""
+
+    def compose(self) -> ComposeResult:
+        try:
+            self.saved = self.path.read_text() if self.path.exists() else ""
+        except (OSError, UnicodeDecodeError) as exc:
+            self.saved = ""
+            self.note = f"could not read: {exc}"
+        with Vertical():
+            yield Static("", id="ed-bar")
+            yield TextArea(self.saved, show_line_numbers=True, tab_behavior="indent", read_only=self.read_only, id="ed-text")
+
+    def on_mount(self):
+        self.query_one(TextArea).focus()
+        self._bar(self.note)
+
+    def on_text_area_changed(self, event):
+        self.closing = False
+        self._bar()
+
+    def _bar(self, note=""):
+        dirty = self.query_one(TextArea).text != self.saved
+        t = Text(f"{'view' if self.read_only else 'edit'} {self.path}", style="bold")
+        t.append("  [modified]" if dirty else "", style="bold #fbbf24")
+        keys = "esc close" if self.read_only else "ctrl+s save · esc close"
+        t.append(f"   {keys}{' · ' + note if note else ''}", style="#64748b")
+        self.query_one("#ed-bar", Static).update(t)
+
+    def action_save(self):
+        if self.read_only:
+            return
+        text = self.query_one(TextArea).text
+        try:
+            self.path.write_text(text)
+        except OSError as exc:
+            return self._bar(f"not saved: {exc}")
+        self.saved = text
+        self.closing = False
+        self._bar("saved")
+
+    def action_close(self):
+        if self.query_one(TextArea).text != self.saved and not self.closing:
+            self.closing = True
+            return self._bar("unsaved changes: esc again to discard")
+        self.dismiss()
 
 
 class JobDetailScreen(ModalScreen):

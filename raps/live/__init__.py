@@ -10,6 +10,19 @@ Live console for the real machine: Slurm queue, my jobs, node map, system state 
 """
 
 
+splash = None  # main.py's Splash while `raps live` starts up
+
+
+def say(msg):
+    """Start-up progress: the splash's current step; an empty message ends the splash (the console is next)."""
+    if splash is None:
+        return
+    if msg:
+        splash.set(msg)
+    else:
+        splash.stop()
+
+
 def live_add_parser(subparsers):
     """`raps live`: argument parsing only; Textual is imported when the command actually runs."""
     parser = subparsers.add_parser("live", description="""
@@ -33,6 +46,7 @@ def live_add_parser(subparsers):
                         help="Multiply every polling interval by X (e.g. 2 to poll half as often)")
 
     def impl(args):
+        say("loading Textual")
         from raps.live.app import run
         run(args)
     parser.set_defaults(impl=impl)

@@ -20,6 +20,8 @@ from raps.live.forecast import Forecaster
 from raps.live.slurm import ClusterState, Slurm
 from raps.live.twin import Twin
 
+RELAXED = 4.0  # intervals are this many times longer while the Shell tab is open
+
 # source -> (state field, Slurm method, interval seconds)
 SOURCES = {
     "jobs": ("jobs", "squeue", 15),
@@ -121,6 +123,7 @@ class Poller:
         self.forecaster = forecaster  # None: no runtime forecasts
         self.trend = trend if trend is not None else Trend(cache_dir() / "trend.jsonl")
         self.scale = scale  # multiply every interval (e.g. 2.0 = poll half as often)
+        self.relax = 1.0    # extra multiplier while the Shell tab is open (see ``relax_polling``)
         self.state = ClusterState(user=self.slurm.user)
         self.busy = set()           # sources being fetched right now
         self._latest = self.state
@@ -146,6 +149,12 @@ class Poller:
     def latest(self):
         with self._lock:
             return self._latest
+
+    def relax_polling(self, on):
+        """Poll RELAXED times less often while someone works in the shell; catch up when they leave it."""
+        was, self.relax = self.relax, RELAXED if on else 1.0
+        if was != self.relax and not on:
+            self.refresh()
 
     def refresh(self, *names):
         """Fetch the named sources (all if none) as soon as possible."""
@@ -197,7 +206,7 @@ class Poller:
                     self._publish(errors={**self.state.errors, name: msg})
                 finally:
                     self.busy.discard(name)
-                self._due[name] = time.monotonic() + interval * self.scale
+                self._due[name] = time.monotonic() + interval * self.scale * self.relax
             wait = max(min(self._due.values()) - time.monotonic(), 0.2)
             self._wake.wait(wait)
             self._wake.clear()

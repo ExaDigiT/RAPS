@@ -91,6 +91,7 @@ class LiveApp(App):
             self._render_bars()
 
     def on_tabbed_content_tab_activated(self, event):
+        self.poller.relax_polling(event.pane.id == "shell")
         if self._applied is not None:
             view = event.pane.query_children().first()
             view.apply(self._applied, self.poller.trend)
@@ -116,6 +117,9 @@ class LiveApp(App):
         pad = max(width - left.cell_len - right.cell_len, 1)
         self.query_one("#topbar", TextPane).update(left + Text(" " * pad) + right)
 
+        if self.query_one(TabbedContent).active == "shell":
+            self.query_one("#statusbar", TextPane).update(self._shell_stats(state))
+            return
         t = Text()
         busy = sorted(self.poller.busy)
         if busy:
@@ -142,6 +146,37 @@ class LiveApp(App):
             t.append("   RAPS twin off", style="#475569")
         self.query_one("#statusbar", TextPane).update(t)
 
+    def _shell_stats(self, state):
+        """Status line for the Shell tab: what the machine is doing, instead of when each source was fetched."""
+        from raps.live.analysis import summarize
+        t = Text()
+        if state is None:
+            return Text("waiting for Slurm …", style="#64748b")
+        if state.jobs is not None:
+            sm = summarize(state)
+            t.append(f"{sm.run_jobs:,} running", style=f"bold {GREEN}")
+            t.append(f" ({sm.run_nodes:,} nodes)  ", style="#94a3b8")
+            t.append(f"{sm.pend_jobs:,} pending", style=f"bold {AMBER}")
+            t.append(f" ({sm.eligible_jobs:,} eligible)  ", style="#94a3b8")
+            if sm.total_nodes:
+                t.append(f"nodes {sm.busy_nodes:,}/{sm.usable_nodes:,} busy ({sm.utilization:.0%})", style="#e2e8f0")
+                t.append(f" · {sm.idle_nodes:,} idle", style="#94a3b8")
+                if sm.out_nodes:
+                    t.append(f" · {sm.out_nodes:,} out", style=RED)
+                t.append("  ")
+            if state.power is not None:
+                t.append(f"power {state.power / 1e6:.2f} MW", style=f"bold {PINK}")
+                if state.machine_max_w:
+                    t.append(f" ({state.power / state.machine_max_w:.0%} of max)", style="#94a3b8")
+                t.append("  ")
+            t.append(f"you: {sm.my_run} running · {sm.my_pend} pending", style=PINK)
+        else:
+            t.append("waiting for squeue …", style="#64748b")
+        for name, err in state.errors.items():
+            t.append(f"   ✖ {name}: {err[:40]}", style=f"bold {RED}")
+        t.append(f"   (polling {self.poller.relax:g}× slower in the shell)", style="#475569")
+        return t
+
     # -- actions ------------------------------------------------------------------------------
     def action_tab(self, i):
         self.query_one(TabbedContent).active = VIEWS[i][0]
@@ -152,6 +187,10 @@ class LiveApp(App):
         tc.active = keys[(keys.index(tc.active) + d) % len(keys)]
 
     def action_next_tab(self):
+        focused = self.focused
+        if focused is not None and focused.id == "sh-input":  # in the shell, Tab completes (F-keys still switch tabs)
+            self.query_one("#view-shell").complete(focused)
+            return
         self._step_tab(1)
 
     def action_prev_tab(self):
@@ -228,16 +267,25 @@ def main(argv=None):
 
 
 def run(args):
-    from raps.live.forecast import Forecaster
+    import threading
+    from raps.live import say
     from raps.live.slurm import Slurm
+    cluster = []
+    if args.system is None:  # ask Slurm which machine this is while the rest loads (scontrol can take seconds)
+        threading.Thread(target=lambda: cluster.append(Slurm.cluster_name()), daemon=True).start()
+    from raps.live.forecast import Forecaster
     from raps.live.widgets import set_nodes_per_cab
     system = args.system
     if system is None:  # the real machine's own config, e.g. lux -> config/lux.yaml
-        cluster = Slurm.cluster_name()
-        system = cluster if cluster and (CONFIG_DIR / f"{cluster}.yaml").exists() else "frontier"
+        say("asking Slurm which cluster this is")
+        while not cluster:
+            threading.Event().wait(0.05)
+        system = cluster[0] if cluster[0] and (CONFIG_DIR / f"{cluster[0]}.yaml").exists() else "frontier"
     set_nodes_per_cab(nodes_per_rack(system))
+    say("opening the console")
     forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
     poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster,
                     twin=not args.no_twin, system=system or None, access=True)
+    say("")
     LiveApp(poller, start_tab=args.tab).run()
 

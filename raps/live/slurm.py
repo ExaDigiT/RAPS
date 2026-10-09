@@ -236,6 +236,11 @@ class ClusterState:
         return power_total(self.node_power, len(self.node_states or {}))
 
     @property
+    def my_accounts(self):
+        """Projects (Slurm accounts) I belong to: from the allocations table, plus any of my jobs' accounts."""
+        return {a.project for a in self.allocations or []} | {j.account for j in self.my_jobs}
+
+    @property
     def my_jobs(self):
         return [j for j in (self.jobs or []) if j.user == self.user]
 
