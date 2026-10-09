@@ -35,7 +35,8 @@ HELP = """\
           dropped. "W now" is a running job's measured W/node, "W/node" its forecast.
           The twin's power forecast keeps running jobs at their measured power, gives
           starting jobs their forecast (else the running median) and free nodes the idle mean.
-          Nodes view: c cycles to the power color mode.
+          Colors and "% of max" use the node maximum from RAPS's power model
+          (compute_node_power at 100% CPU/GPU/NIC: 2,773 W on Frontier; --system).
 
 [b]Twin start[/b]  every 2 min the queue is run forward through RAPS's scheduler (priority
           order with backfill, planning with time limits as Slurm does) while jobs end at

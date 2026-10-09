@@ -327,3 +327,12 @@ def test_backtest_snapshot_has_no_names():
     assert pend["4"]["twin"] is not None and pend["4"]["twin_limit"] is not None and pend["4"]["slurm"]
     power = [r for r in rows if r["kind"] == "power"]
     assert len(power) == 1 and power[0]["measured"] > 0 and set(power[0]["twin_power"]) >= {"0.5", "24"}
+
+
+def test_frontier_node_power_model():
+    from raps.live.power_model import load
+    m = load("frontier")
+    # 280 W CPU + 4 x 560 W GPU + memory, NICs, NVMe, plus SIVOC losses
+    assert 2700 < m.max_w < 2800 and 600 < m.idle_w < 700
+    st = ClusterState(user="me", node_states={"a": "idle", "b": "idle"}, power_model=m)
+    assert st.machine_max_w == 2 * m.max_w

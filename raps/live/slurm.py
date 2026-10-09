@@ -208,6 +208,7 @@ class ClusterState:
     history: list[HistJob] | None = None
     reservations: list[Reservation] | None = None
     node_power: dict[str, int] | None = None  # node -> current watts
+    power_model: object | None = None         # raps.live.power_model.NodePowerModel
     forecast: object | None = None    # raps.live.forecast.HistoryRule
     twin: object | None = None        # raps.live.twin.TwinResult
     updated: dict[str, datetime] = field(default_factory=dict)
@@ -215,6 +216,16 @@ class ClusterState:
 
     def predict(self, job):
         return self.forecast.predict(job) if self.forecast is not None else None
+
+    @property
+    def node_max_w(self):
+        """Most a node can draw (RAPS power model at 100% utilization), or a default until loaded."""
+        from raps.live.power_model import DEFAULT_MAX_W
+        return self.power_model.max_w if self.power_model is not None else DEFAULT_MAX_W
+
+    @property
+    def machine_max_w(self):
+        return self.node_max_w * len(self.node_states or {})
 
     @property
     def power(self):

@@ -208,6 +208,6 @@ def run(args):
     from raps.live.slurm import Slurm
     forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
     poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster,
-                    twin=not args.no_twin)
+                    twin=not args.no_twin, system=args.system or None)
     LiveApp(poller, start_tab=args.tab).run()
 

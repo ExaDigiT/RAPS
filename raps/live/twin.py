@@ -143,14 +143,15 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             if w:
                 job_w[j.id] = sum(w) / len(w)
     typical_w = sorted(job_w.values())[len(job_w) // 2] if job_w else 1100.0
+    cap_w = state.node_max_w  # a forecast never exceeds what a node can draw
     for i in range(len(pools)):
         for j, _ in running[i]:
             if j.id not in job_w:
                 p = state.predict(j)
-                job_w[j.id] = p.power if p is not None and p.power else typical_w
+                job_w[j.id] = min(p.power, cap_w) if p is not None and p.power else typical_w
         for j in queued[i]:
             p = state.predict(j)
-            job_w[j.id] = p.power if p is not None and p.power else typical_w
+            job_w[j.id] = min(p.power, cap_w) if p is not None and p.power else typical_w
     idle = [watts[n] for n, s in node_states.items() if watts.get(n) and base_state(s) in ("idle", "planned")]
     idle_w = sum(idle) / len(idle) if idle else 480.0
     fixed_w = sum(w for n, w in watts.items() if n not in pool_of_node)   # outside every pool

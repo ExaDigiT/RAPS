@@ -23,6 +23,8 @@ def live_add_parser(subparsers):
     parser.add_argument("--forecast-days", type=int, default=30, metavar="D",
                         help="Days of every user's finished jobs (sacct -a) behind the runtime forecasts; "
                              "0 turns them off")
+    parser.add_argument("--system", default="frontier",
+                        help="RAPS system config for the node power model (max/idle W per node); '' to skip")
     parser.add_argument("--no-twin", action="store_true",
                         help="Do not run the RAPS start-time forecast (a simulation of the queue every 2 min)")
     parser.add_argument("--slow", type=float, default=1.0, metavar="X",

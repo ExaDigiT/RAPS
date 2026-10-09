@@ -30,6 +30,7 @@ SOURCES = {
     "fairshare": ("fairshare", "fairshare", 600),
     "allocations": ("allocations", "allocations", 600),
     "reservations": ("reservations", "reservations", 300),
+    "model": ("power_model", None, 10 ** 9),  # once: RAPS node power limits (Poller.system)
     "forecast": ("forecast", None, 600),  # Poller.forecaster.refresh; late, as the first pull is slow
     "twin": ("twin", None, 120),          # Poller.twin.refresh: RAPS start-time forecast from the above
 }
@@ -113,7 +114,7 @@ class Trend:
 
 class Poller:
     def __init__(self, slurm: Slurm | None = None, trend: Trend | None = None, scale=1.0,
-                 forecaster: Forecaster | None = None, twin=False):
+                 forecaster: Forecaster | None = None, twin=False, system=None):
         self.slurm = slurm or Slurm()
         self.forecaster = forecaster  # None: no runtime forecasts
         self.trend = trend if trend is not None else Trend(cache_dir() / "trend.jsonl")
@@ -125,7 +126,8 @@ class Poller:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self.twin = Twin(self.slurm, lambda: self.state) if twin else None
-        off = {"forecast": forecaster is None, "twin": self.twin is None}
+        self.system = system  # RAPS system config for the node power model, e.g. "frontier"
+        off = {"forecast": forecaster is None, "twin": self.twin is None, "model": system is None}
         self.sources = {k: v for k, v in SOURCES.items() if not off.get(k)}
         self._due = {name: 0.0 for name in self.sources}
         self._thread = None
@@ -167,8 +169,12 @@ class Poller:
                     continue
                 self.busy.add(name)
                 try:
-                    fetch = {"forecast": self.forecaster, "twin": self.twin}.get(name)
-                    fetch = fetch.refresh if fetch is not None else getattr(self.slurm, method)
+                    if name == "model":
+                        from raps.live import power_model
+                        fetch = lambda: power_model.load(self.system)  # noqa: E731
+                    else:
+                        fetch = {"forecast": self.forecaster, "twin": self.twin}.get(name)
+                        fetch = fetch.refresh if fetch is not None else getattr(self.slurm, method)
                     value = fetch()
                     errors = {k: v for k, v in self.state.errors.items() if k != name}
                     self._publish(**{attr: value}, updated={**self.state.updated, name: datetime.now()},
