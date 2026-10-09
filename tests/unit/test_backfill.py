@@ -33,10 +33,10 @@ def test_shadow_time_uses_when_running_jobs_reach_their_limits(module):
     assert sched.find_backfill_job([head, late], running, 0) is None
 
 
-def setup(module, bfpolicy, total, running_specs):
+def setup(module, bfpolicy, total, running_specs, policy="priority"):
     """running_specs: (id, nodes, limit, started at) -> (scheduler, running jobs)."""
     rm = ExclusiveNodeResourceManager(total, [])
-    sched = module.Scheduler(config={}, policy="priority", bfpolicy=bfpolicy, resource_manager=rm)
+    sched = module.Scheduler(config={}, policy=policy, bfpolicy=bfpolicy, resource_manager=rm)
     running = []
     for id, nodes, limit, start in running_specs:
         j = make_job(id, nodes, limit)
@@ -81,3 +81,15 @@ def test_head_job_that_can_never_fit_does_not_block_backfill(module):
     sched, running = setup(module, "firstfit", 4, [("A", 2, 3600, 0)])
     queue = [make_job("huge", 50, 3600), make_job("long", 2, 10 * 3600)]
     assert sched.find_backfill_job(queue, running, 0).id == "long"
+
+
+@pytest.mark.parametrize("module", [default, experimental])
+@pytest.mark.parametrize("bfpolicy, called", [(None, False), ("firstfit", True)])
+def test_backfill_runs_only_with_a_backfill_policy(module, bfpolicy, called, monkeypatch):
+    # the experimental scheduler only schedules (and sorts) with its own account policies
+    policy = "acct_avg_power" if module is experimental else "priority"
+    sched, running = setup(module, bfpolicy, 4, [("A", 2, 3600, 0)], policy=policy)
+    calls = []
+    monkeypatch.setattr(sched, "backfill", lambda *a: calls.append(a))
+    sched.schedule([make_job("head", 4, 3600), make_job("small", 1, 60)], running, 0, sorted=True)
+    assert bool(calls) == called

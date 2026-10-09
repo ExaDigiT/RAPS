@@ -56,7 +56,7 @@ class Scheduler:
             if nodes_available is not None:
                 self.place_job_and_manage_queues(job, queue, running, current_time, nodes_available)
             else:  # In case the job was not placed, see how we should continue:
-                if self.bfpolicy is not None:
+                if self.bfpolicy != BackfillType.NONE:  # bfpolicy is always a BackfillType, never None
                     backfill_job, node_id = self.backfill(queue, running, current_time)
                     if backfill_job and node_id is not None:
                         self.place_job_and_manage_queues(backfill_job, queue, running, current_time, node_id)
