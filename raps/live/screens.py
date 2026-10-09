@@ -21,7 +21,7 @@ HELP = """\
 
 [b]My Jobs[/b]   enter details   c cancel   h hold   u release   (all ask first)
 [b]Queue[/b]     / filter   esc clear   f running/pending/all   m only mine   s sort   enter details
-[b]Nodes[/b]     c color mode (state, job, account, mine, power)   hover a node · click for its job
+[b]Maps[/b]      c color mode (state, job, account, mine, power) on Overview and Nodes   hover a node · click for its job
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)
 

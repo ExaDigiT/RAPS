@@ -280,6 +280,12 @@ class Overview(LiveView):
             t.rstrip()
             self.query_one("#ov-trend", TextPane).update(t)
 
+    def action_color_mode(self):
+        nm = self.query_one("#ov-map", NodeMap)
+        nm.mode = NodeMap.MODES[(NodeMap.MODES.index(nm.mode) + 1) % len(NodeMap.MODES)]
+        if self.state is not None:
+            self.render_state(self.state)
+
     @on(NodeMap.Hover)
     def _hover(self, event):
         legend = self.query_one("#ov-legend", TextPane)

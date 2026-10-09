@@ -46,8 +46,10 @@ class LiveApp(App):
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "help", "Help"),
         Binding("q", "quit", "Quit"),
-        Binding("tab", "next_tab", "Next", show=False),
-        Binding("shift+tab", "prev_tab", "Prev", show=False),
+        # priority: otherwise Tab moves focus between widgets once a view has something focusable
+        Binding("tab", "next_tab", "Next", show=False, priority=True),
+        Binding("shift+tab", "prev_tab", "Prev", show=False, priority=True),
+        Binding("c", "color_mode", "Map colors", show=False),
     ] + [Binding(str(i + 1), f"tab({i})", title, show=False) for i, (_, title, _) in enumerate(VIEWS)] \
       + [Binding(f"f{i + 1}", f"tab({i})", title, show=False, priority=True) for i, (_, title, _) in enumerate(VIEWS)]
 
@@ -153,6 +155,12 @@ class LiveApp(App):
 
     def action_prev_tab(self):
         self._step_tab(-1)
+
+    def action_color_mode(self):
+        """`c` on a tab with a node map (Overview, Nodes), whatever has focus; My Jobs keeps c = cancel."""
+        view = self.query_one(TabbedContent).active_pane.query_children().first()
+        if hasattr(view, "action_color_mode"):
+            view.action_color_mode()
 
     def action_refresh(self):
         self.poller.refresh()

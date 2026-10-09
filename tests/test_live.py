@@ -279,6 +279,14 @@ def test_app_pilot():
                 await pilot.press("c")
             nm = app.query_one(Nodes).query_one("#nd-map")
             assert nm.mode == "power" and "MW" in nm.legend().plain
+            # tab always switches views (even with the map focused); c works on the Overview map too
+            await pilot.press("1")
+            await pilot.pause(0.2)
+            await pilot.press("c")
+            assert app.query_one("#ov-map").mode == "job"
+            await pilot.press("tab")
+            await pilot.pause(0.2)
+            assert app.query_one("TabbedContent").active == "myjobs"
             for key in "123456":
                 await pilot.press(key)
                 await pilot.pause(0.1)
