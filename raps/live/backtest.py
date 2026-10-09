@@ -10,6 +10,9 @@ to ``<dir>/snapshots-YYYY-MM-DD.jsonl``:
   how much of the twin's skill comes from the runtime forecast)
 - ``slurm``: Slurm's own backfill estimate (squeue %S), when it has one
 
+``kind: probe`` rows (with ``--probe-account``) hold Slurm's ``--test-only`` and the twin's start
+estimate for a few fixed example jobs (``PROBES``); nothing is submitted.
+
 Rows hold job ids, sizes, limits, priorities, times and watts only, no user or job names. Running
 jobs get a row too (``kind: running``) with the forecast end and measured W/node, so runtime
 forecasts can be checked; pending rows carry the forecast W/node. One ``kind: power`` row per
@@ -38,6 +41,8 @@ from raps.live.twin import simulate
 
 TFMT = "%Y-%m-%dT%H:%M:%S"
 POWER_LEADS_H = (0.5, 1, 2, 4, 8, 12, 24)
+# example jobs whose start Slurm (--test-only; nothing submitted) and the twin estimate each snapshot
+PROBES = (("batch", 1, 3600), ("batch", 128, 7200))
 
 
 def _iso(dt):
@@ -49,7 +54,20 @@ class NoForecast:
         return None
 
 
-def snapshot(slurm, forecaster, partition_nodes):
+def probe_rows(slurm, state, partition_nodes, account, now):
+    """Launch-tab estimates for PROBES: Slurm's --test-only start and the twin's what-if start."""
+    from raps.live.launch import base_priority, what_if
+    rows = []
+    for partition, nodes, seconds in PROBES:
+        res = slurm.test_only(account, partition, nodes, seconds)
+        rows.append({"t": _iso(now), "kind": "probe", "partition": partition, "nodes": nodes, "limit": seconds,
+                     "slurm": _iso(res.start) if res.ok else None, "slurm_error": None if res.ok else res.message[:200],
+                     "twin": _iso(what_if(state, partition_nodes, partition, account, nodes, seconds, now=now)),
+                     "priority": base_priority(state.jobs, account, nodes, now)})
+    return rows
+
+
+def snapshot(slurm, forecaster, partition_nodes, probe_account=None):
     now = datetime.now()
     state = ClusterState(user=slurm.user, jobs=slurm.squeue(), node_states=slurm.node_states(),
                          node_power=slurm.node_power(), forecast=forecaster.refresh())
@@ -74,6 +92,11 @@ def snapshot(slurm, forecaster, partition_nodes):
     if state.power is not None:
         rows.append({"t": _iso(now), "kind": "power", "measured": round(state.power),
                      "twin_power": {str(h): round(twin.power_at(h * 3600)) for h in POWER_LEADS_H}})
+    if probe_account:
+        try:
+            rows += probe_rows(slurm, state, partition_nodes, probe_account, now)
+        except Exception as exc:  # probes are extras: never lose the snapshot over them
+            print(f"{now:%H:%M:%S} probes failed: {exc}", flush=True)
     return now, rows, twin
 
 
@@ -87,7 +110,7 @@ def record(args):
     while True:
         t0 = time.monotonic()
         try:
-            now, rows, twin = snapshot(slurm, forecaster, partition_nodes)
+            now, rows, twin = snapshot(slurm, forecaster, partition_nodes, args.probe_account)
             with open(out / f"snapshots-{now:%Y-%m-%d}.jsonl", "a") as f:
                 for r in rows:
                     f.write(json.dumps(r) + "\n")
@@ -236,6 +259,7 @@ def main(argv=None):
     r.add_argument("--every", type=float, default=10, help="Minutes between snapshots")
     r.add_argument("--forecast-days", type=int, default=30)
     r.add_argument("--once", action="store_true")
+    r.add_argument("--probe-account", help="Project for the --test-only probe jobs (none: no probes)")
     e = sub.add_parser("evaluate")
     e.add_argument("--dir", required=True)
     a = p.parse_args(argv)

@@ -416,7 +416,10 @@ def test_backtest_snapshot_has_no_names():
     from raps.live.backtest import snapshot
     slurm = FakeSlurm()
     now, rows, twin = snapshot(slurm, Forecaster(days=30, fetch=lambda since: parse_runs(RUNS)),
-                               slurm.partition_nodes())
+                               slurm.partition_nodes(), probe_account="abc123")
+    probes = [r for r in rows if r["kind"] == "probe"]
+    assert len(probes) == 2 and all(p["slurm"] for p in probes) and probes[0]["twin"] is not None
+    rows = [r for r in rows if r["kind"] != "probe"]
     kinds = sorted(r["kind"] for r in rows)
     assert kinds == ["pending", "pending", "power", "running", "running"]  # job 5 is blocked (dependency)
     assert all("user" not in r and "name" not in r and "account" not in r for r in rows)
