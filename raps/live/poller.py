@@ -16,6 +16,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
+from raps.live.forecast import Forecaster
 from raps.live.slurm import ClusterState, Slurm
 
 # source -> (state field, Slurm method, interval seconds)
@@ -27,6 +28,7 @@ SOURCES = {
     "fairshare": ("fairshare", "fairshare", 600),
     "allocations": ("allocations", "allocations", 600),
     "reservations": ("reservations", "reservations", 300),
+    "forecast": ("forecast", None, 600),  # Poller.forecaster.refresh; last, as the first pull is slow
 }
 
 
@@ -105,8 +107,10 @@ class Trend:
 
 
 class Poller:
-    def __init__(self, slurm: Slurm | None = None, trend: Trend | None = None, scale=1.0):
+    def __init__(self, slurm: Slurm | None = None, trend: Trend | None = None, scale=1.0,
+                 forecaster: Forecaster | None = None):
         self.slurm = slurm or Slurm()
+        self.forecaster = forecaster  # None: no runtime forecasts
         self.trend = trend if trend is not None else Trend(cache_dir() / "trend.jsonl")
         self.scale = scale  # multiply every interval (e.g. 2.0 = poll half as often)
         self.state = ClusterState(user=self.slurm.user)
@@ -115,7 +119,8 @@ class Poller:
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._stop = threading.Event()
-        self._due = {name: 0.0 for name in SOURCES}
+        self.sources = {k: v for k, v in SOURCES.items() if k != "forecast" or forecaster is not None}
+        self._due = {name: 0.0 for name in self.sources}
         self._thread = None
 
     def start(self):
@@ -132,8 +137,9 @@ class Poller:
 
     def refresh(self, *names):
         """Fetch the named sources (all if none) as soon as possible."""
-        for name in names or SOURCES:
-            self._due[name] = 0.0
+        for name in names or self.sources:
+            if name in self._due:
+                self._due[name] = 0.0
         self._wake.set()
 
     def _publish(self, **changes):
@@ -147,14 +153,15 @@ class Poller:
         while not self._stop.is_set():
             now = time.monotonic()
             # fetch in a stable order with the fast, important sources first
-            for name, (attr, method, interval) in SOURCES.items():
+            for name, (attr, method, interval) in self.sources.items():
                 if self._stop.is_set():
                     return
                 if self._due[name] > now:
                     continue
                 self.busy.add(name)
                 try:
-                    value = getattr(self.slurm, method)()
+                    fetch = self.forecaster.refresh if name == "forecast" else getattr(self.slurm, method)
+                    value = fetch()
                     errors = {k: v for k, v in self.state.errors.items() if k != name}
                     self._publish(**{attr: value}, updated={**self.state.updated, name: datetime.now()},
                                   errors=errors)

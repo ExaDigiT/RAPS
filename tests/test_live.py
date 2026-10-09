@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from raps.live import analysis
+from raps.live.forecast import Forecaster, HistoryRule, parse_runs
 from raps.live.slurm import (
     SEP, ClusterState, Slurm, expand_hostlist, parse_sacct, parse_showusage, parse_sinfo_nodes,
     parse_sinfo_partitions, parse_slurm_duration, parse_squeue,
@@ -95,6 +96,54 @@ def test_plan_cabinets_fits():
         assert tw * th * k == 128
 
 
+def run_line(id, user="me", name="job2", nodes=1, limit_min=120, elapsed=1800, end="2026-10-07T10:00:00",
+             energy=None, account="abc123"):
+    energy = energy if energy is not None else 1000 * elapsed * nodes  # 1 kW per node
+    return SEP.join([str(id), user, account, name, str(nodes), str(limit_min), str(elapsed), end, str(energy)])
+
+
+RUNS = "\n".join([
+    run_line(901, elapsed=1800, end="2026-10-07T09:00:00"),
+    run_line(902, elapsed=1800, end="2026-10-07T10:00:00"),
+    run_line(903, name="other", elapsed=7200, end="2026-10-07T11:00:00", energy=10 ** 12),  # bad energy
+    run_line(904, user="bob", account="xyz", elapsed=60),
+    "garbage",
+])
+
+
+def test_history_rule():
+    runs = parse_runs(RUNS)
+    assert len(runs) == 4 and runs[2].power is None and runs[0].power == 1000
+    rule = HistoryRule(runs, days=30)
+    jobs = {j.id: j for j in parse_squeue(QUEUE)}
+    p = rule.predict(jobs["2"])  # me/job2: two runs at 25% of a 2h limit
+    assert p.basis == "job" and p.n == 2 and p.runtime == 1800 and p.power == 1000
+    p = rule.predict(jobs["4"])  # me/job4: no runs of that name -> all of my runs
+    assert p.basis == "user" and p.n == 3 and p.runtime == 7200 * (0.25 + 0.25 + 1.0) / 3
+    p = rule.predict(jobs["1"])  # alice: unknown user, same project as my runs
+    assert p.basis == "project"
+    assert rule.predict(parse_squeue(squeue_line(9, account="nope"))[0]) is None
+    # only the last 5 runs count, and a forecast never exceeds the limit
+    many = parse_runs("\n".join(run_line(i, elapsed=60 if i < 5 else 9000, end=f"2026-10-07T{i:02d}:00:00")
+                                for i in range(10)))
+    assert HistoryRule(many).predict(jobs["2"]).runtime == 7200
+
+
+def test_forecaster_incremental():
+    calls = []
+
+    def fetch(since):
+        calls.append(since)
+        if len(calls) == 1:
+            return parse_runs(RUNS)
+        return parse_runs(run_line(905, end=datetime.now().isoformat(timespec="seconds")))
+    fc = Forecaster(days=100000, fetch=fetch)
+    assert fc.refresh().n_runs == 4
+    assert fc.refresh().n_runs == 5 and calls[1] > calls[0]
+    fc.days = 1  # runs that ended before the window are dropped
+    assert fc.refresh().n_runs == 1
+
+
 class FakeSlurm(Slurm):
     def __init__(self):
         super().__init__(user="me")
@@ -136,7 +185,9 @@ def test_app_pilot():
     from textual.widgets import DataTable
 
     async def run():
-        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None)))
+        from raps.live.forecast import Forecaster
+        fc = Forecaster(days=30, fetch=lambda since: parse_runs(RUNS))
+        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None), forecaster=fc))
         async with app.run_test(size=(160, 48)) as pilot:
             for _ in range(40):
                 await pilot.pause(0.1)
@@ -151,7 +202,13 @@ def test_app_pilot():
             assert app.query_one("TabbedContent").active == "shell"
             await pilot.press("f2")
             await pilot.pause(0.2)
-            assert app.query_one(MyJobs).query_one("#mj-table", DataTable).row_count == 3
+            mj = app.query_one(MyJobs).query_one("#mj-table", DataTable)
+            assert mj.row_count == 3
+            assert app.poller.latest().forecast is not None
+            # job 2 is "me"/"job2" with a 2h limit and history at 25% of the limit -> 30 min, 0 left
+            fcst = {mj.get_row_at(i)[0].plain: mj.get_row_at(i)[7].plain for i in range(mj.row_count)}
+            assert "past forecast" in fcst["2"] and "job ×2" in fcst["2"]
+            assert "user ×3" in fcst["4"]
             await pilot.press("3")
             await pilot.pause(0.2)
             await pilot.press("m")

@@ -25,8 +25,13 @@ HELP = """\
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)
 
+[b]Forecast[/b]  runtime and W/node from the last 5 finished runs of the same job (●, same user
+          and job name), else the same user (◐), else the same project (○). Pending jobs show
+          the forecast runtime, running jobs the forecast time left. Built from 30 days of
+          sacct -a, kept in memory only (--forecast-days, 0 turns it off).
+
 Data refreshes in the background: squeue every 15 s, node states every 60 s,
-history every 2 min, allocations and fair share every 10 min.
+history every 2 min, allocations and fair share every 10 min, forecasts every 10 min.
 """
 
 

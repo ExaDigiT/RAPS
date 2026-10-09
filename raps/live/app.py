@@ -15,7 +15,7 @@ from textual.widgets import Footer, TabbedContent, TabPane
 
 from raps.live.poller import Poller
 from raps.live.screens import ConfirmScreen, HelpScreen, JobDetailScreen
-from raps.live.widgets import AMBER, CYAN, GREEN, PINK, RED, VIOLET, gradient, rel_time
+from raps.live.widgets import AMBER, CYAN, GREEN, PINK, RED, VIOLET, gradient, human_num, rel_time
 from raps.live.views import VIEWS
 from raps.ui.widgets.textpane import TextPane
 
@@ -116,7 +116,7 @@ class LiveApp(App):
         if busy:
             t.append(f"{SPINNER[self._tick % len(SPINNER)]} fetching {', '.join(busy)}  ", style=CYAN)
         if state is not None:
-            for name in ("jobs", "nodes", "history", "allocations"):
+            for name in ("jobs", "nodes", "history", "allocations", "forecast"):
                 upd = state.updated.get(name)
                 if name in state.errors:
                     t.append(f"✖ {name}: {state.errors[name][:50]}  ", style=f"bold {RED}")
@@ -125,7 +125,12 @@ class LiveApp(App):
                     t.append(f"{rel_time(upd)}  ", style="#64748b")
                 else:
                     t.append(f"○ {name}  ", style="#475569")
-        t.append("   twin forecast: ", style="#475569")
+        rule = state.forecast if state is not None else None
+        if rule is not None:
+            t.append(f" history rule: {human_num(rule.n_runs)} runs / {rule.days} d", style="#64748b")
+        elif self.poller.forecaster is None:
+            t.append(" forecasts off", style="#475569")
+        t.append("   twin: ", style="#475569")
         t.append("not connected", style="italic #475569")
         self.query_one("#statusbar", TextPane).update(t)
 
@@ -186,7 +191,9 @@ def main(argv=None):
 
 
 def run(args):
+    from raps.live.forecast import Forecaster
     from raps.live.slurm import Slurm
-    poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow)
+    forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
+    poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster)
     LiveApp(poller, start_tab=args.tab).run()
 

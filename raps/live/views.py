@@ -2,7 +2,7 @@
 import os
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from rich.text import Text
@@ -14,8 +14,10 @@ from textual.suggester import SuggestFromList
 from textual.widgets import DataTable, Input, RichLog
 
 from raps.live.analysis import (
-    eligible, node_job_map, queue_position, reason_counts, size_histogram, summarize, top_accounts,
+    eligible, forecast_summary, node_job_map, queue_position, reason_counts, size_histogram, summarize,
+    top_accounts,
 )
+from raps.live.forecast import remaining
 from raps.live.poller import cache_dir
 from raps.live.widgets import (
     AMBER, CYAN, GREEN, PINK, RED, SLATE, VIOLET, NodeMap, Tile, bar, gradient, heat, human_dur,
@@ -73,6 +75,42 @@ def _waiting(what):
 # ---------------------------------------------------------------------------------------------
 
 
+BASIS_STYLE = {"job": (f"bold {GREEN}", "●"), "user": (CYAN, "◐"), "project": (VIOLET, "○")}
+
+
+def forecast_text(state, job, long=False):
+    """Forecast runtime (pending) or time left (running) from the history rule, marked by its basis."""
+    if state.forecast is None:
+        return Text("…", style=SLATE)
+    p = state.predict(job)
+    if p is None:
+        return Text("no history", style=SLATE) if long else Text("—", style=SLATE)
+    style, mark = BASIS_STYLE[p.basis]
+    if job.running:
+        left = remaining(job, p)
+        if left is None:
+            t = Text(f"{mark} past forecast", style=AMBER)
+        else:
+            t = Text(f"{mark} {human_dur(left)} left", style=style)
+            if long:
+                t.append(f" · ends ~{(datetime.now() + timedelta(seconds=left)):%H:%M}",
+                         style=MUTED)
+    else:
+        t = Text(f"{mark} {human_dur(p.runtime)}", style=style)
+        if long:
+            t.append(f" · {p.runtime / job.limit * 100:.0f}% of limit", style=MUTED)
+    if long:
+        t.append(f" · {p.basis} ×{p.n}", style=MUTED)
+    return t
+
+
+def power_text(state, job):
+    p = state.predict(job)
+    if p is None or p.power is None:
+        return Text("—", justify="right", style=SLATE)
+    return Text(f"{p.power:,.0f}", justify="right", style=heat(min(p.power / 2500, 1)))
+
+
 class Overview(LiveView):
     DEFAULT_CSS = """
     Overview #ov-tiles { height: 7; }
@@ -109,15 +147,24 @@ class Overview(LiveView):
         jobs = state.jobs or []
         w = max(self.query_one("#ov-right").size.width - 4, 30)
 
+        fs = forecast_summary(state) if state.forecast is not None else None
         util = s.utilization
         self.query_one("#t-util", Tile).set(f"{util * 100:.1f}%", bar(util, 20, GREEN, CYAN)
                                             + Text(f" {s.busy_nodes:,}/{s.usable_nodes:,}", style=MUTED))
-        self.query_one("#t-run", Tile).set(f"{s.run_jobs:,}", Text(f"{s.run_nodes:,} nodes", style=MUTED))
+        sub = Text(f"{s.run_nodes:,} nodes", style=MUTED)
+        if fs is not None:
+            sub.append(f" · {human_num(fs.free_1h_fcst)} free <1h", style=f"bold {GREEN}")
+        self.query_one("#t-run", Tile).set(f"{s.run_jobs:,}", sub)
         self.query_one("#t-pend", Tile).set(
             f"{s.pend_jobs:,}", Text.assemble((f"{s.eligible_jobs:,} eligible", AMBER),
                                               (f" · {s.blocked_jobs:,} blocked", MUTED)))
-        self.query_one("#t-backlog", Tile).set(
-            human_num(s.backlog_nh), Text(f"≈ {s.drain_hours:.1f} h of full machine", style=MUTED))
+        if fs is not None and s.usable_nodes:
+            # hours of the full machine: at the requested limits, and at the forecast runtimes
+            sub = Text.assemble((f"{s.drain_hours:.1f} h limit", MUTED),
+                                (f" · {fs.backlog_nh / s.usable_nodes:.1f} h fcst", f"bold {GREEN}"))
+        else:
+            sub = Text(f"≈ {s.drain_hours:.1f} h of full machine", style=MUTED)
+        self.query_one("#t-backlog", Tile).set(human_num(s.backlog_nh), sub)
         self.query_one("#t-mine", Tile).set(
             f"{s.my_run}", Text.assemble(("running", PINK), (f" · {s.my_pend} pending · {s.my_nodes:,} nodes", MUTED)))
         out_frac = s.out_nodes / s.total_nodes if s.total_nodes else 0
@@ -258,7 +305,8 @@ class MyJobs(LiveView):
     MyJobs DataTable { background: $panel; }
     """
 
-    COLS = ("job", "name", "project", "state", "nodes", "progress", "left / limit", "start", "queue", "reason")
+    COLS = ("job", "name", "project", "state", "nodes", "progress", "left / limit", "forecast", "W/node", "start",
+            "queue", "reason")
     HCOLS = ("job", "name", "project", "state", "nodes", "ran", "of limit", "ended", "exit")
 
     def compose(self) -> ComposeResult:
@@ -300,7 +348,8 @@ class MyJobs(LiveView):
             reason = Text(j.reason if j.pending else (j.nodelist[:28] + ("…" if len(j.nodelist) > 28 else "")),
                           style=AMBER if j.pending else MUTED)
             rows.append((Text(j.id, style="bold"), j.name[:28], j.account, state_text(j.state),
-                         Text(f"{j.nodes:,}", justify="right"), prog, left, start, queue, reason))
+                         Text(f"{j.nodes:,}", justify="right"), prog, left, forecast_text(state, j, long=True),
+                         power_text(state, j), start, queue, reason))
         sync_table(table, [j.id for j in mine], rows)
         self.set_class(not mine, "empty")
         if not mine:
@@ -431,8 +480,8 @@ class Queue(LiveView):
     Queue.filtering #q-filter { display: block; }
     Queue #q-table { height: 1fr; background: $panel; }
     """
-    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "ran / waited", "start", "node-h",
-            "reason", "priority", "qos")
+    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "ran / waited",
+            "start", "node-h", "reason", "priority", "qos")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -483,14 +532,16 @@ class Queue(LiveView):
                 Text(j.user, style=f"bold {PINK}" if mine else ""),
                 j.account, j.name[:30], state_text(j.state),
                 Text(f"{j.nodes:,}", justify="right", style=f"bold {heat(min(j.nodes / 9408, 1) ** 0.4)}"),
-                human_dur(j.limit), ran, start, Text(human_num(j.node_hours), justify="right"),
+                human_dur(j.limit), forecast_text(state, j), power_text(state, j), ran, start,
+                Text(human_num(j.node_hours), justify="right"),
                 Text(j.reason[:26], style=AMBER if j.pending else MUTED),
                 Text(f"{j.priority:,}", justify="right", style=MUTED), j.qos,
             ))
         table = self.query_one("#q-table", DataTable)
         sync_table(table, [j.id for j in jobs], rows)
         table.border_title = f"queue · {len(jobs):,} of {len(state.jobs):,} jobs"
-        table.border_subtitle = "enter details · / filter · f state · m mine · s sort"
+        table.border_subtitle = ("forecast ● same job ◐ same user ○ same project · "
+                                 "enter details · / filter · f state · m mine · s sort")
 
         head = Text()
         for label, on_ in ((f"showing {f}", True), ("only mine", self.only_mine)):

@@ -207,8 +207,12 @@ class ClusterState:
     fairshare: list[FairShare] | None = None
     history: list[HistJob] | None = None
     reservations: list[Reservation] | None = None
+    forecast: object | None = None    # raps.live.forecast.HistoryRule
     updated: dict[str, datetime] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
+
+    def predict(self, job):
+        return self.forecast.predict(job) if self.forecast is not None else None
 
     @property
     def my_jobs(self):

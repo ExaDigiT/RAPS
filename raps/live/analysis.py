@@ -151,3 +151,40 @@ def top_accounts(jobs, n=8, key="account"):
 
 def reason_counts(jobs):
     return Counter(j.reason for j in jobs if j.pending).most_common()
+
+
+@dataclass
+class ForecastSummary:
+    covered: int = 0          # eligible pending jobs with a forecast
+    eligible: int = 0
+    backlog_nh: float = 0.0   # eligible backlog with forecast runtimes (limit where none)
+    limit_nh: float = 0.0     # the same backlog at requested limits
+    free_1h_fcst: int = 0     # nodes running jobs are forecast to release within the hour
+    free_1h_limit: int = 0    # ... if every job ran to its limit
+
+    @property
+    def coverage(self):
+        return self.covered / self.eligible if self.eligible else 0.0
+
+
+def forecast_summary(state, horizon=3600):
+    """How the history-rule forecast changes the backlog and the nodes freeing up soon."""
+    s = ForecastSummary()
+    for j in state.jobs or []:
+        p = state.predict(j)
+        if eligible(j):
+            s.eligible += 1
+            s.limit_nh += j.node_hours
+            if p is not None:
+                s.covered += 1
+                s.backlog_nh += j.nodes * p.runtime / 3600
+            else:
+                s.backlog_nh += j.node_hours
+        elif j.running and j.limit:
+            if j.remaining <= horizon:
+                s.free_1h_limit += j.nodes
+            # a job that has outrun its forecast is assumed to run to its limit
+            left = p.runtime - j.elapsed if p is not None else -1
+            if (left if left > 0 else j.remaining) <= horizon:
+                s.free_1h_fcst += j.nodes
+    return s

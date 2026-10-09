@@ -2,6 +2,7 @@
 Live console for the real machine: Slurm queue, my jobs, node map, system state and a shell.
 
 - ``slurm``: run the Slurm/OLCF CLI tools and parse their output into records (no UI code)
+- ``forecast``: per-job runtime / power forecasts (the history rule from ``raps.forecast``)
 - ``analysis``: derived numbers (utilization, backlog, queue position); where a RAPS forecast plugs in
 - ``poller``: background refresh of each source on its own interval, plus a persisted trend
 - ``app``/``views``/``widgets``/``screens``: the Textual UI (``LiveApp``)
@@ -18,6 +19,9 @@ def live_add_parser(subparsers):
     parser.add_argument("--tab", default="overview",
                         choices=["overview", "myjobs", "queue", "nodes", "system", "shell"], help="Tab to open on")
     parser.add_argument("--history-days", type=int, default=7, help="Days of sacct history in My Jobs")
+    parser.add_argument("--forecast-days", type=int, default=30, metavar="D",
+                        help="Days of every user's finished jobs (sacct -a) behind the runtime forecasts; "
+                             "0 turns them off")
     parser.add_argument("--slow", type=float, default=1.0, metavar="X",
                         help="Multiply every polling interval by X (e.g. 2 to poll half as often)")
 
