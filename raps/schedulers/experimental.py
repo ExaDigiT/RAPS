@@ -150,7 +150,8 @@ class Scheduler:
         else:
             nodes_required = first_job.nodes_required
 
-        sorted_running = sorted(running, key=lambda job: job.end_time)
+        # Running jobs in the order they reach their time limits (what a live scheduler knows)
+        sorted_running = sorted(running, key=lambda job: job.start_time + job.time_limit)
 
         # Identify when we have enough nodes therefore the start time of the first_job in line
         shadow_time_end = 0
@@ -160,7 +161,7 @@ class Scheduler:
                 break
             else:
                 shadow_nodes_avail += job.nodes_required
-                shadow_time_end = job.time_limit
+                shadow_time_end = job.start_time + job.time_limit
 
         time_limit = shadow_time_end - current_time
         # We now have the time_limit after which no backfilled job should end

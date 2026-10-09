@@ -1,10 +1,10 @@
-"""Backfill shadow time in the default scheduler."""
+"""Backfill shadow time in the default and experimental schedulers."""
 import pytest
 
 from raps.job import Job, job_dict
 from raps.policy import PolicyType
 from raps.resmgr.default import ExclusiveNodeResourceManager
-from raps.schedulers.default import Scheduler
+from raps.schedulers import default, experimental
 
 pytestmark = pytest.mark.nodata
 
@@ -15,9 +15,10 @@ def make_job(id, nodes, limit, runtime=None):
                         end_time=None, expected_run_time=runtime or limit))
 
 
-def test_shadow_time_uses_when_running_jobs_reach_their_limits():
+@pytest.mark.parametrize("module", [default, experimental])
+def test_shadow_time_uses_when_running_jobs_reach_their_limits(module):
     rm = ExclusiveNodeResourceManager(10, [])
-    sched = Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
+    sched = module.Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
     # A: 4 nodes, 10 h limit, started 9 h ago -> limit reached at t=+1 h
     # B: 4 nodes, 2 h limit, just started     -> limit reached at t=+2 h
     a, b = make_job("A", 4, 10 * 3600), make_job("B", 4, 2 * 3600)
