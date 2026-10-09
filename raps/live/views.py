@@ -151,7 +151,7 @@ class Overview(LiveView):
     Overview #ov-body { height: 1fr; }
     Overview #ov-mapbox { width: 3fr; }
     Overview #ov-map { height: 1fr; }
-    Overview #ov-legend { height: 1; }
+    Overview #ov-legend { height: 2; }
     Overview #ov-right { width: 2fr; min-width: 44; }
     Overview #ov-right > TextPane { height: auto; }
     """
@@ -233,7 +233,7 @@ class Overview(LiveView):
             nm.set_data(state.node_states, node_job_map(jobs), state.user, node_power=state.node_power,
                         max_w=state.node_max_w)
             hovered = getattr(self, "hovered", None)
-            self.query_one("#ov-legend", TextPane).update(node_hover_text(hovered, nm) if hovered else nm.legend())
+            self.query_one("#ov-legend", TextPane).update(map_footer(nm, hovered, "hover a node · click for its job"))
 
         if state.partitions:
             t = Text()
@@ -307,7 +307,7 @@ class Overview(LiveView):
         self.hovered = event.nodes  # kept so refreshes show the node instead of the legend
         legend = self.query_one("#ov-legend", TextPane)
         nm = self.query_one("#ov-map", NodeMap)
-        legend.update(node_hover_text(event.nodes, nm) if event.nodes else nm.legend())
+        legend.update(map_footer(nm, event.nodes, "hover a node · click for its job"))
 
     @on(NodeMap.Clicked)
     def _click(self, event):
@@ -344,6 +344,17 @@ def up_next(state, width, n=6):
         t.append(f"reservation {rel_time(r.start, now)}: ", style=AMBER)
         t.append(f"{r.nodes:,} nodes ", style="bold")
         t.append(f"{r.name[:max(width - 40, 8)]}", style=MUTED)
+    return t
+
+
+NODES_HINT = "hover a node, or arrow keys · click / enter for its job · esc clears"
+
+
+def map_footer(nm, nodes, hint):
+    """Two lines under a node map: the color legend, then the hovered/highlighted node (or a hint)."""
+    t = nm.legend()
+    t.append("\n")
+    t.append_text(node_hover_text(nodes, nm) if nodes else Text(hint, style="#64748b"))
     return t
 
 
@@ -740,7 +751,7 @@ class Nodes(LiveView):
     Nodes #nd-head { height: 1; padding: 0 1; }
     Nodes #nd-box { height: 1fr; }
     Nodes #nd-map { height: 1fr; }
-    Nodes #nd-info { height: 1; }
+    Nodes #nd-info { height: 2; }
     """
 
     def compose(self) -> ComposeResult:
@@ -756,7 +767,7 @@ class Nodes(LiveView):
             nm.set_data(state.node_states, node_job_map(state.jobs or []), state.user, node_power=state.node_power,
                         max_w=state.node_max_w)
             hovered = getattr(self, "hovered", None)
-            self.query_one("#nd-info", TextPane).update(node_hover_text(hovered, nm) if hovered else nm.legend())
+            self.query_one("#nd-info", TextPane).update(map_footer(nm, hovered, NODES_HINT))
         head = Text()
         for m in NodeMap.MODES:
             sel = m == nm.mode
@@ -778,7 +789,7 @@ class Nodes(LiveView):
     def _hover(self, event):
         self.hovered = event.nodes
         nm = self.query_one("#nd-map", NodeMap)
-        self.query_one("#nd-info", TextPane).update(node_hover_text(event.nodes, nm) if event.nodes else nm.legend())
+        self.query_one("#nd-info", TextPane).update(map_footer(nm, event.nodes, NODES_HINT))
 
     @on(NodeMap.Clicked)
     def _click(self, event):

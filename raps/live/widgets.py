@@ -259,6 +259,7 @@ class NodeMap(PixelGrid):
         Binding("shift+left,pageup", "move(-128, 0)", "Cabinet", show=False),
         Binding("shift+right,pagedown", "move(128, 0)", "Cabinet", show=False),
         Binding("enter", "open", "Open job", show=False),
+        Binding("escape", "clear_cursor", "Clear", show=False),
     ]
 
     can_focus = True  # so the Nodes tab's keys (c: color mode) reach it
@@ -400,6 +401,12 @@ class NodeMap(PixelGrid):
             self.cursor = min(self._names, key=lambda n: abs((node_index(n) or 0) - target))
         self.refresh_image()
         self.post_message(self.Hover([self.cursor]))
+
+    def action_clear_cursor(self):
+        if self.cursor is not None:
+            self.cursor = None
+            self.refresh_image()
+            self.post_message(self.Hover([]))
 
     def action_open(self):
         if self.cursor:
