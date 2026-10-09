@@ -121,6 +121,21 @@ Each change should be judged by start-time and power scores before and after.
 - Rerun any published or ongoing RAPS studies that used `--backfill firstfit` or `--backfill
   easy` since 2025-08-22 (commit `f2b77f8`), since their queue-wait results will shift.
 
+## E. Launch tab follow-ups (added 2026-10-08)
+
+The Launch tab (key 7) shows access by `sbatch --test-only`, "starts at once" windows from the
+twin's plan at limits, and Slurm-vs-twin start estimates for a described job.
+
+- The site filter enforces limits the config does not show (extended: 64 nodes per job;
+  service: 4 nodes, though the develop QOS says 30). Learn them from `--test-only` messages
+  ("greater than max N") and show them in the "limits" column.
+- Slurm and the twin disagree a lot for new jobs. For 128 nodes × 2 h in batch, Slurm said
+  19 h and the twin 2.4 h. Score both in the scoreboard: record `--test-only` estimates for a
+  few fixed probe jobs each hour, and compare them with the twin and with when similar real
+  jobs actually started.
+- The twin's what-if priority (priority minus seconds waited, median over the project's pending
+  jobs nearest in size) should be checked against `sprio` output.
+
 ## Decisions for Wes
 
 1. Scoreboard: tmux only, or tmux plus an hourly scrontab check (charged to stf053)?
