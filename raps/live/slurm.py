@@ -208,6 +208,7 @@ class ClusterState:
     history: list[HistJob] | None = None
     reservations: list[Reservation] | None = None
     forecast: object | None = None    # raps.live.forecast.HistoryRule
+    twin: object | None = None        # raps.live.twin.TwinResult
     updated: dict[str, datetime] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
 
@@ -336,6 +337,16 @@ def parse_sacct(text):
     return jobs
 
 
+def parse_partition_nodes(text):
+    """``scontrol show partition -o`` -> {partition: [node names]}."""
+    out = {}
+    for line in text.splitlines():
+        kv = dict(re.findall(r"(\w+)=(\S*)", line))
+        if "PartitionName" in kv:
+            out[kv["PartitionName"]] = expand_hostlist(kv.get("Nodes", ""))
+    return out
+
+
 def parse_reservations(text):
     out = []
     for block in re.split(r"\n\s*\n", text.strip()):
@@ -395,6 +406,9 @@ class Slurm:
 
     def reservations(self):
         return parse_reservations(run(["scontrol", "show", "res"]))
+
+    def partition_nodes(self):
+        return parse_partition_nodes(run(["scontrol", "show", "partition", "-o"]))
 
     def job_detail(self, job_id):
         return run(["scontrol", "show", "job", str(job_id)])

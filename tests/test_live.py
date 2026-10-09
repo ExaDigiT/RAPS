@@ -144,6 +144,43 @@ def test_forecaster_incremental():
     assert fc.refresh().n_runs == 1
 
 
+def test_twin_backfill_and_forecast_ends():
+    from raps.live.twin import build_pools, simulate
+    now = datetime(2026, 10, 8, 12, 0, 0)
+    pn = {"batch": [f"n{i}" for i in range(10)], "batch-spi": [f"n{i}" for i in range(5)], "x": ["m0", "m1"]}
+    pools = build_pools(pn)
+    assert sorted((sorted(p.partitions), len(p.nodes)) for p in pools) == [(["batch", "batch-spi"], 10), (["x"], 2)]
+
+    def line(id, state, nodes, limit, nodelist="", prio=0, part="batch", elapsed="0:00", start="N/A"):
+        reason = "Priority" if state == "PENDING" else "None"
+        return squeue_line(id, state=state, nodes=nodes, limit=limit, nodelist=nodelist, priority=prio,
+                           partition=part, elapsed=elapsed, start=start, reason=reason)
+    t0 = (now - timedelta(minutes=30)).isoformat()
+    jobs = parse_squeue("\n".join([
+        line(1, "RUNNING", 8, "2:00:00", "n[0-7]", elapsed="30:00", start=t0),   # 8 of 10 busy until +1:30 (limit)
+        line(2, "PENDING", 10, "1:00:00", prio=100),                             # head: needs the whole pool
+        line(3, "PENDING", 2, "1:00:00", prio=50),                               # fits now, ends before the shadow
+        line(4, "PENDING", 2, "4:00:00", prio=40),                               # would delay job 2: waits
+        line(5, "PENDING", 1, "1:00:00", prio=1, part="x"),                      # other pool: starts now
+        line(6, "PENDING", 11, "1:00:00", prio=1),                               # bigger than the pool
+    ]))
+    nodes = {f"n{i}": "allocated" if i < 8 else "idle" for i in range(10)} | {"m0": "idle", "m1": "down"}
+    st = ClusterState(user="me", jobs=jobs, node_states=nodes)
+    r = simulate(st, pn, now=now)
+    mins = {k: None if v is None else round((v - now).total_seconds() / 60) for k, v in r.starts.items()}
+    assert mins == {"2": 90, "3": 0, "4": 150, "5": 0, "6": None}
+    assert r.usable == 11 and r.simulated == 4  # job 6 never enters the queue
+    # with a forecast that job 1 ends at +10 min, job 2 starts once job 3 is done at +60
+    from raps.live.forecast import Prediction
+
+    class Rule:
+        def predict(self, job):
+            return Prediction(runtime=2400, power=None, basis="job", n=1) if job.id == "1" else None
+    st.forecast = Rule()
+    r = simulate(st, pn, now=now)
+    assert round((r.starts["2"] - now).total_seconds() / 60) == 60
+
+
 class FakeSlurm(Slurm):
     def __init__(self):
         super().__init__(user="me")
@@ -169,6 +206,9 @@ class FakeSlurm(Slurm):
     def reservations(self):
         return []
 
+    def partition_nodes(self):
+        return {"batch": expand_hostlist("frontier[00001-00003,00130-00132]")}
+
     def job_detail(self, job_id):
         return f"JobId={job_id} JobName=job{job_id}\n   UserId=me(1) JobState=RUNNING Reason=None"
 
@@ -187,11 +227,11 @@ def test_app_pilot():
     async def run():
         from raps.live.forecast import Forecaster
         fc = Forecaster(days=30, fetch=lambda since: parse_runs(RUNS))
-        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None), forecaster=fc))
+        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None), forecaster=fc, twin=True))
         async with app.run_test(size=(160, 48)) as pilot:
             for _ in range(40):
                 await pilot.pause(0.1)
-                if app.poller.latest().reservations is not None:
+                if app.poller.latest().twin is not None:
                     break
             await pilot.pause(0.3)
             for key in "123456":
@@ -209,6 +249,8 @@ def test_app_pilot():
             fcst = {mj.get_row_at(i)[0].plain: mj.get_row_at(i)[7].plain for i in range(mj.row_count)}
             assert "past forecast" in fcst["2"] and "job ×2" in fcst["2"]
             assert "user ×3" in fcst["4"]
+            starts = {mj.get_row_at(i)[0].plain: mj.get_row_at(i)[9].plain for i in range(mj.row_count)}
+            assert starts["4"].startswith("twin ") and "not simulated" in starts["5"]
             await pilot.press("3")
             await pilot.pause(0.2)
             await pilot.press("m")

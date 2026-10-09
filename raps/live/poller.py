@@ -18,6 +18,7 @@ from pathlib import Path
 
 from raps.live.forecast import Forecaster
 from raps.live.slurm import ClusterState, Slurm
+from raps.live.twin import Twin
 
 # source -> (state field, Slurm method, interval seconds)
 SOURCES = {
@@ -28,7 +29,8 @@ SOURCES = {
     "fairshare": ("fairshare", "fairshare", 600),
     "allocations": ("allocations", "allocations", 600),
     "reservations": ("reservations", "reservations", 300),
-    "forecast": ("forecast", None, 600),  # Poller.forecaster.refresh; last, as the first pull is slow
+    "forecast": ("forecast", None, 600),  # Poller.forecaster.refresh; late, as the first pull is slow
+    "twin": ("twin", None, 120),          # Poller.twin.refresh: RAPS start-time forecast from the above
 }
 
 
@@ -108,7 +110,7 @@ class Trend:
 
 class Poller:
     def __init__(self, slurm: Slurm | None = None, trend: Trend | None = None, scale=1.0,
-                 forecaster: Forecaster | None = None):
+                 forecaster: Forecaster | None = None, twin=False):
         self.slurm = slurm or Slurm()
         self.forecaster = forecaster  # None: no runtime forecasts
         self.trend = trend if trend is not None else Trend(cache_dir() / "trend.jsonl")
@@ -119,7 +121,9 @@ class Poller:
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._stop = threading.Event()
-        self.sources = {k: v for k, v in SOURCES.items() if k != "forecast" or forecaster is not None}
+        self.twin = Twin(self.slurm, lambda: self.state) if twin else None
+        off = {"forecast": forecaster is None, "twin": self.twin is None}
+        self.sources = {k: v for k, v in SOURCES.items() if not off.get(k)}
         self._due = {name: 0.0 for name in self.sources}
         self._thread = None
 
@@ -160,7 +164,8 @@ class Poller:
                     continue
                 self.busy.add(name)
                 try:
-                    fetch = self.forecaster.refresh if name == "forecast" else getattr(self.slurm, method)
+                    fetch = {"forecast": self.forecaster, "twin": self.twin}.get(name)
+                    fetch = fetch.refresh if fetch is not None else getattr(self.slurm, method)
                     value = fetch()
                     errors = {k: v for k, v in self.state.errors.items() if k != name}
                     self._publish(**{attr: value}, updated={**self.state.updated, name: datetime.now()},

@@ -116,7 +116,7 @@ class LiveApp(App):
         if busy:
             t.append(f"{SPINNER[self._tick % len(SPINNER)]} fetching {', '.join(busy)}  ", style=CYAN)
         if state is not None:
-            for name in ("jobs", "nodes", "history", "allocations", "forecast"):
+            for name in ("jobs", "nodes", "history", "allocations", "forecast", "twin"):
                 upd = state.updated.get(name)
                 if name in state.errors:
                     t.append(f"✖ {name}: {state.errors[name][:50]}  ", style=f"bold {RED}")
@@ -130,8 +130,11 @@ class LiveApp(App):
             t.append(f" history rule: {human_num(rule.n_runs)} runs / {rule.days} d", style="#64748b")
         elif self.poller.forecaster is None:
             t.append(" forecasts off", style="#475569")
-        t.append("   twin: ", style="#475569")
-        t.append("not connected", style="italic #475569")
+        tw = state.twin if state is not None else None
+        if tw is not None:
+            t.append(f"   RAPS twin: {tw.simulated:,} jobs in {tw.seconds:.1f} s", style="#64748b")
+        elif self.poller.twin is None:
+            t.append("   RAPS twin off", style="#475569")
         self.query_one("#statusbar", TextPane).update(t)
 
     # -- actions ------------------------------------------------------------------------------
@@ -194,6 +197,7 @@ def run(args):
     from raps.live.forecast import Forecaster
     from raps.live.slurm import Slurm
     forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
-    poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster)
+    poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster,
+                    twin=not args.no_twin)
     LiveApp(poller, start_tab=args.tab).run()
 

@@ -123,18 +123,19 @@ def hashed_color(key, sat=0.65, light=0.58):
     return int(r * 255), int(g * 255), int(b * 255)
 
 
-def spark(values, width, color=CYAN):
-    """Unicode sparkline of the last `width` values, scaled to their own range."""
+def spark(values, width, color=CYAN, lo=None, hi=None):
+    """Unicode sparkline of the last `width` values, scaled to [lo, hi] (default: their own range)."""
     blocks = "▁▂▃▄▅▆▇█"
     vals = list(values)[-width:]
     t = Text()
     if not vals:
         return t.append("·" * width, style="#334155")
-    lo, hi = min(vals), max(vals)
+    lo = min(vals) if lo is None else lo
+    hi = max(vals) if hi is None else hi
     span = hi - lo or 1
     t.append(" " * (width - len(vals)))
     for i, v in enumerate(vals):
-        level = int((v - lo) / span * 7)
+        level = min(max(int((v - lo) / span * 7), 0), 7)
         t.append(blocks[level], style=lerp_hex("#1e3a5f", color, 0.35 + 0.65 * level / 7))
     return t
 

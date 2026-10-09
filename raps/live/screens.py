@@ -30,8 +30,14 @@ HELP = """\
           the forecast runtime, running jobs the forecast time left. Built from 30 days of
           sacct -a, kept in memory only (--forecast-days, 0 turns it off).
 
+[b]Twin start[/b]  every 2 min the queue is run forward through RAPS's scheduler (priority
+          order with backfill, planning with time limits as Slurm does) while jobs end at
+          their forecast runtimes. "slurm" is Slurm's own estimate, which assumes every job
+          runs to its limit. Not modelled: new submissions, priority aging, dependencies,
+          per-user limits, future reservations. --no-twin turns it off.
+
 Data refreshes in the background: squeue every 15 s, node states every 60 s,
-history every 2 min, allocations and fair share every 10 min, forecasts every 10 min.
+history and the twin every 2 min, allocations, fair share and forecasts every 10 min.
 """
 
 

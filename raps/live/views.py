@@ -104,6 +104,20 @@ def forecast_text(state, job, long=False):
     return t
 
 
+def twin_start(state, job):
+    """(text, datetime or None) for the RAPS twin's start forecast of a pending job."""
+    tw = state.twin
+    if tw is None or not job.pending:
+        return None
+    if job.id not in tw.starts:
+        return Text("not simulated", style=SLATE)  # blocked: dependency, hold, limits
+    start = tw.starts[job.id]
+    if start is None:
+        return Text("> 14 days", style=SLATE)
+    now = datetime.now()
+    return Text("now" if start <= now + timedelta(minutes=1) else rel_time(start, now), style=f"bold {CYAN}")
+
+
 def power_text(state, job):
     p = state.predict(job)
     if p is None or p.power is None:
@@ -138,7 +152,8 @@ class Overview(LiveView):
             with VerticalScroll(id="ov-right"):
                 yield _panel(TextPane(_waiting("sinfo"), id="ov-parts"), "partitions")
                 yield _panel(TextPane(_waiting("squeue"), id="ov-sizes"), "queue by job size")
-                yield _panel(TextPane(_waiting("squeue"), id="ov-next"), "up next · slurm backfill estimates")
+                yield _panel(TextPane(_waiting("RAPS twin"), id="ov-twin"), "RAPS twin · next 24 h")
+                yield _panel(TextPane(_waiting("squeue"), id="ov-next"), "up next · large jobs · twin vs slurm")
                 yield _panel(TextPane(_waiting("squeue"), id="ov-accts"), "top projects · running nodes · pending node-h")
                 yield _panel(TextPane(_waiting("samples"), id="ov-trend"), "trends")
 
@@ -203,6 +218,8 @@ class Overview(LiveView):
             self.query_one("#ov-sizes", TextPane).update(t)
 
             self.query_one("#ov-next", TextPane).update(up_next(state, w))
+            if state.twin is not None:
+                self.query_one("#ov-twin", TextPane).update(twin_panel(state, w))
 
             accts = top_accounts(jobs, n=7)
             peak = max((a[1] for a in accts), default=1) or 1
@@ -243,19 +260,26 @@ class Overview(LiveView):
 
 
 def up_next(state, width, n=6):
-    """The next big jobs Slurm expects to start, and reservations about to begin."""
+    """The next big jobs to start (RAPS twin, else Slurm's estimate), and reservations about to begin."""
     now = datetime.now()
-    jobs = sorted((j for j in state.jobs or [] if j.pending and j.start and j.start > now and j.nodes >= 64),
-                  key=lambda j: j.start)[:n]
+    starts = state.twin.starts if state.twin is not None else {}
+
+    def when(j):
+        return starts.get(j.id) or j.start
+
+    jobs = sorted((j for j in state.jobs or [] if j.pending and j.nodes >= 64 and when(j) and when(j) > now),
+                  key=when)[:n]
     t = Text()
     for i, j in enumerate(jobs):
         if i:
             t.append("\n")
         mine = j.user == state.user
-        t.append(f"{rel_time(j.start, now):>10} ", style=f"bold {CYAN}")
+        t.append(f"{rel_time(when(j), now):>10} ", style=f"bold {CYAN}")
         t.append(f"{j.nodes:>5,}n ", style=f"bold {heat(min(j.nodes / 9408, 1) ** 0.4)}")
         t.append(f"{j.user[:10]:<11}", style=f"bold {PINK}" if mine else "")
-        t.append(f"{j.account:<8} {j.name[:max(width - 45, 6)]}", style=MUTED)
+        if starts:
+            t.append(f"slurm {rel_time(j.start, now) if j.start else '—':<10} ", style=MUTED)
+        t.append(f"{j.name[:max(width - 56, 6)]}", style=MUTED)
     if not jobs:
         t.append("no large jobs with a start estimate", style=MUTED)
     soon = sorted((r for r in state.reservations or [] if r.start and r.start > now
@@ -279,6 +303,41 @@ def node_hover_text(nodes, nm):
         t.append(f"{job.user}", style=f"bold {PINK}" if job.user == nm.user else "")
         t.append(f" · {job.account} · {job.name[:30]} · {job.nodes:,} nodes · ", style=MUTED)
         t.append(f"{human_dur(job.remaining)} left", style=AMBER)
+    return t
+
+
+def twin_panel(state, width):
+    """The twin's next 24 hours: busy nodes and waiting jobs, when the backlog clears, my next start."""
+    tw = state.twin
+    now = datetime.now()
+    sw = max(width - 24, 10)
+    ts = [i * 86400 / sw for i in range(sw)]
+    busy = [tw.busy_at(t) for t in ts]
+    wait = [tw.waiting_at(t) for t in ts]
+    t = Text(f"{tw.simulated:,} eligible jobs through RAPS's scheduler · {rel_time(tw.at, now)}\n", style=MUTED)
+    t.append(f"{'busy nodes':<15}", style=MUTED)
+    t.append_text(spark(busy, sw, GREEN, lo=0, hi=max(tw.usable, 1)))
+    t.append(f" {busy[-1] / max(tw.usable, 1) * 100:5.1f}%\n", style=f"bold {GREEN}")
+    t.append(f"{'waiting jobs':<15}", style=MUTED)
+    t.append_text(spark(wait, sw, AMBER))
+    t.append(f" {human_num(wait[-1]):>6}\n", style=f"bold {AMBER}")
+    t.append(f"{'':<15}{'now':<{sw // 2}}{'+12 h':<{sw - sw // 2}}+24 h\n", style="#475569")
+    starts = [s for s in tw.starts.values() if s is not None]
+    if starts:
+        t.append("every eligible job started ", style=MUTED)
+        t.append(rel_time(max(starts), now), style=f"bold {CYAN}")
+        never = sum(1 for s in tw.starts.values() if s is None)
+        if never:
+            t.append(f" · {never} not within 14 days", style=MUTED)
+    mine = sorted((tw.starts[j.id], j) for j in state.my_jobs if j.pending and tw.starts.get(j.id))
+    if mine:
+        s, j = mine[0]
+        t.append("\nyour next job ", style=MUTED)
+        t.append(f"{j.id}", style=f"bold {PINK}")
+        t.append(" starts ", style=MUTED)
+        t.append(rel_time(s, now) if s > now else "now", style=f"bold {CYAN}")
+        if j.start:
+            t.append(f" (slurm: {rel_time(j.start, now)})", style=MUTED)
     return t
 
 
@@ -340,7 +399,10 @@ class MyJobs(LiveView):
                 wait = (now - j.submit).total_seconds() if j.submit else None
                 prog = Text(f"waiting {human_dur(wait)}", style=AMBER)
                 left = Text(f"limit {human_dur(j.limit)}", style=MUTED)
-                start = Text(f"slurm est. {rel_time(j.start, now)}", style=CYAN) if j.start else Text("no estimate", style=MUTED)
+                start = twin_start(state, j) or Text()
+                if start.plain:
+                    start = Text.assemble(("twin ", MUTED), start, ("  ", ""))
+                start.append(f"slurm {rel_time(j.start, now)}" if j.start else "no slurm estimate", style=MUTED)
                 qp = queue_position(j, jobs)
                 queue = (Text.assemble((f"#{qp.rank}", f"bold {VIOLET}"), (f"/{qp.of}", MUTED),
                                        (f" · {human_num(qp.ahead_nh)} nh ahead", MUTED))
@@ -481,7 +543,7 @@ class Queue(LiveView):
     Queue #q-table { height: 1fr; background: $panel; }
     """
     COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "ran / waited",
-            "start", "node-h", "reason", "priority", "qos")
+            "twin start", "slurm start", "node-h", "reason", "priority", "qos")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -532,7 +594,8 @@ class Queue(LiveView):
                 Text(j.user, style=f"bold {PINK}" if mine else ""),
                 j.account, j.name[:30], state_text(j.state),
                 Text(f"{j.nodes:,}", justify="right", style=f"bold {heat(min(j.nodes / 9408, 1) ** 0.4)}"),
-                human_dur(j.limit), forecast_text(state, j), power_text(state, j), ran, start,
+                human_dur(j.limit), forecast_text(state, j), power_text(state, j), ran,
+                twin_start(state, j) or Text("—", style=SLATE), start,
                 Text(human_num(j.node_hours), justify="right"),
                 Text(j.reason[:26], style=AMBER if j.pending else MUTED),
                 Text(f"{j.priority:,}", justify="right", style=MUTED), j.qos,
