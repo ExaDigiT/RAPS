@@ -260,3 +260,15 @@ def test_app_pilot():
             await pilot.pause(0.3)
             assert type(app.screen).__name__ == "JobDetailScreen"
     asyncio.run(run())
+
+
+def test_backtest_snapshot_has_no_names():
+    from raps.live.backtest import snapshot
+    slurm = FakeSlurm()
+    now, rows, twin = snapshot(slurm, Forecaster(days=30, fetch=lambda since: parse_runs(RUNS)),
+                               slurm.partition_nodes())
+    kinds = sorted(r["kind"] for r in rows)
+    assert kinds == ["pending", "pending", "running", "running"]  # job 5 is blocked on a dependency
+    assert all("user" not in r and "name" not in r and "account" not in r for r in rows)
+    pend = {r["job"]: r for r in rows if r["kind"] == "pending"}
+    assert pend["4"]["twin"] is not None and pend["4"]["twin_limit"] is not None and pend["4"]["slurm"]
