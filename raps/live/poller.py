@@ -25,6 +25,7 @@ SOURCES = {
     "jobs": ("jobs", "squeue", 15),
     "nodes": ("node_states", "node_states", 60),
     "partitions": ("partitions", "partitions", 60),
+    "power": ("node_power", "node_power", 60),
     "history": ("history", "history", 120),
     "fairshare": ("fairshare", "fairshare", 600),
     "allocations": ("allocations", "allocations", 600),
@@ -42,7 +43,7 @@ def cache_dir():
 class Trend:
     """Queue-wide numbers sampled after each squeue fetch, kept for `keep_hours` and saved to disk."""
 
-    KEYS = ("run_jobs", "run_nodes", "pend_jobs", "pend_nodes", "backlog_nh", "my_run", "my_pend")
+    KEYS = ("run_jobs", "run_nodes", "pend_jobs", "pend_nodes", "backlog_nh", "my_run", "my_pend", "power_mw")
 
     def __init__(self, path=None, keep_hours=24):
         self.path = path
@@ -78,7 +79,7 @@ class Trend:
         except OSError:
             pass
 
-    def add(self, jobs, user):
+    def add(self, jobs, user, power_mw=None):
         run = [j for j in jobs if j.running]
         pend = [j for j in jobs if j.pending]
         s = {
@@ -89,6 +90,8 @@ class Trend:
             "my_run": sum(1 for j in run if j.user == user),
             "my_pend": sum(1 for j in pend if j.user == user),
         }
+        if power_mw is not None:
+            s["power_mw"] = round(power_mw, 3)
         self.samples.append(s)
         cutoff = s["t"] - self.keep
         while self.samples and self.samples[0]["t"] < cutoff:
@@ -102,7 +105,7 @@ class Trend:
                 pass
 
     def series(self, key):
-        return [s.get(key, 0) for s in self.samples]
+        return [s[key] for s in self.samples if key in s]
 
     def span_seconds(self):
         return self.samples[-1]["t"] - self.samples[0]["t"] if len(self.samples) > 1 else 0
@@ -171,7 +174,8 @@ class Poller:
                     self._publish(**{attr: value}, updated={**self.state.updated, name: datetime.now()},
                                   errors=errors)
                     if name == "jobs":
-                        self.trend.add(value, self.slurm.user)
+                        p = self.state.power
+                        self.trend.add(value, self.slurm.user, p / 1e6 if p is not None else None)
                 except Exception as exc:  # keep the last good data; report the failure
                     msg = str(exc).splitlines()[0] if str(exc) else traceback.format_exc(limit=1)
                     self._publish(errors={**self.state.errors, name: msg})

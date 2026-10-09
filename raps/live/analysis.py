@@ -153,6 +153,14 @@ def reason_counts(jobs):
     return Counter(j.reason for j in jobs if j.pending).most_common()
 
 
+def job_power(job, watts):
+    """Measured mean watts per node of a running job (Slurm CurrentWatts), or None."""
+    if not watts or not job.running or not job.nodelist:
+        return None
+    w = [watts[n] for n in expand_hostlist(job.nodelist) if n in watts]
+    return sum(w) / len(w) if w else None
+
+
 @dataclass
 class ForecastSummary:
     covered: int = 0          # eligible pending jobs with a forecast

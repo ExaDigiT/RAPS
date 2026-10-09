@@ -207,6 +207,7 @@ class ClusterState:
     fairshare: list[FairShare] | None = None
     history: list[HistJob] | None = None
     reservations: list[Reservation] | None = None
+    node_power: dict[str, int] | None = None  # node -> current watts
     forecast: object | None = None    # raps.live.forecast.HistoryRule
     twin: object | None = None        # raps.live.twin.TwinResult
     updated: dict[str, datetime] = field(default_factory=dict)
@@ -214,6 +215,11 @@ class ClusterState:
 
     def predict(self, job):
         return self.forecast.predict(job) if self.forecast is not None else None
+
+    @property
+    def power(self):
+        """Measured node watts, None until scontrol show node arrives."""
+        return power_total(self.node_power, len(self.node_states or {}))
 
     @property
     def my_jobs(self):
@@ -337,6 +343,32 @@ def parse_sacct(text):
     return jobs
 
 
+NODE_WATTS_MAX = 5000  # a Frontier node draws at most ~3 kW; some report glitches near 1e9
+
+
+def parse_node_power(text):
+    """
+    ``scontrol show node -o`` -> {node: current watts} from Slurm's energy plugin. Impossible
+    readings are left out, so a node can be missing; ``power_total`` fills those in.
+    """
+    out = {}
+    for line in text.splitlines():
+        m = re.match(r"NodeName=(\S+)", line)
+        w = re.search(r"\bCurrentWatts=(\d+)", line)
+        if m and w and int(w.group(1)) <= NODE_WATTS_MAX:
+            out[m.group(1)] = int(w.group(1))
+    return out
+
+
+def power_total(watts, n_nodes=None):
+    """Total watts, counting each node without a valid reading as the mean of the others."""
+    if not watts:
+        return None
+    total = sum(watts.values())
+    missing = max((n_nodes or 0) - len(watts), 0)
+    return total + missing * total / len(watts)
+
+
 def parse_partition_nodes(text):
     """``scontrol show partition -o`` -> {partition: [node names]}."""
     out = {}
@@ -406,6 +438,9 @@ class Slurm:
 
     def reservations(self):
         return parse_reservations(run(["scontrol", "show", "res"]))
+
+    def node_power(self):
+        return parse_node_power(run(["scontrol", "show", "node", "-o"], timeout=60))
 
     def partition_nodes(self):
         return parse_partition_nodes(run(["scontrol", "show", "partition", "-o"]))

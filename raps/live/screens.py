@@ -21,7 +21,7 @@ HELP = """\
 
 [b]My Jobs[/b]   enter details   c cancel   h hold   u release   (all ask first)
 [b]Queue[/b]     / filter   esc clear   f running/pending/all   m only mine   s sort   enter details
-[b]Nodes[/b]     c color mode (state, job, account, mine)   hover a node · click for its job
+[b]Nodes[/b]     c color mode (state, job, account, mine, power)   hover a node · click for its job
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)
 
@@ -29,6 +29,13 @@ HELP = """\
           and job name), else the same user (◐), else the same project (○). Pending jobs show
           the forecast runtime, running jobs the forecast time left. Built from 30 days of
           sacct -a, kept in memory only (--forecast-days, 0 turns it off).
+
+[b]Power[/b]     measured: Slurm's CurrentWatts per node (compute nodes only; no cooling,
+          network or storage), every minute; readings above 5 kW are glitches and are
+          dropped. "W now" is a running job's measured W/node, "W/node" its forecast.
+          The twin's power forecast keeps running jobs at their measured power, gives
+          starting jobs their forecast (else the running median) and free nodes the idle mean.
+          Nodes view: c cycles to the power color mode.
 
 [b]Twin start[/b]  every 2 min the queue is run forward through RAPS's scheduler (priority
           order with backfill, planning with time limits as Slurm does) while jobs end at

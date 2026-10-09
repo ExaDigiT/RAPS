@@ -238,7 +238,10 @@ class NodeMap(PixelGrid):
     Hovering reports the node under the mouse; clicking posts ``NodeMap.Clicked``.
     """
 
-    MODES = ("state", "job", "account", "mine")
+    can_focus = True  # so the Nodes tab's keys (c: color mode) reach it
+    MODES = ("state", "job", "account", "mine", "power")
+    POWER_STOPS = ((0, (30, 41, 59)), (500, (14, 116, 144)), (1200, (34, 197, 94)), (2000, (245, 158, 11)),
+                   (2800, (239, 68, 68)))
 
     class Hover(Message):
         def __init__(self, nodes):
@@ -256,14 +259,16 @@ class NodeMap(PixelGrid):
         self.user = ""
         self.node_states = {}
         self.node_job = {}       # node -> Job
+        self.node_power = {}     # node -> current watts
         self._names = []         # sorted node names
         self._cabs = []          # cabinet numbers present, in draw order
         self._pix_nodes = None   # (H, W) object array of node-name lists, for hover lookup
         self._layout = None
 
-    def set_data(self, node_states, node_job, user, mode=None):
+    def set_data(self, node_states, node_job, user, mode=None, node_power=None):
         self.node_states = node_states or {}
         self.node_job = node_job or {}
+        self.node_power = node_power or {}
         self.user = user
         if mode:
             self.mode = mode
@@ -278,6 +283,9 @@ class NodeMap(PixelGrid):
         job = self.node_job.get(name)
         rgb = NODE_STATE_RGB.get(st, NODE_STATE_RGB["unknown"])
         busy = st in ("allocated", "mixed", "completing")
+        if self.mode == "power":
+            w = self.node_power.get(name)
+            return self.power_rgb(w) if w is not None else (51, 65, 85)
         if self.mode == "state":
             if busy and job is not None and job.user == self.user:
                 return MINE_RGB
@@ -291,6 +299,17 @@ class NodeMap(PixelGrid):
             return MINE_RGB
         r, g, b = rgb
         return (r // 4 + 8, g // 4 + 10, b // 4 + 14)
+
+    @classmethod
+    def power_rgb(cls, w):
+        stops = cls.POWER_STOPS
+        if w >= stops[-1][0]:
+            return stops[-1][1]
+        for (w0, c0), (w1, c1) in zip(stops, stops[1:]):
+            if w < w1:
+                f = (w - w0) / (w1 - w0)
+                return tuple(round(a + (b - a) * f) for a, b in zip(c0, c1))
+        return stops[0][1]
 
     def _draw(self, wpx, hpx):
         img = np.empty((hpx, wpx, 3), dtype=np.uint8)
@@ -352,7 +371,16 @@ class NodeMap(PixelGrid):
 
     def legend(self):
         t = Text()
-        if self.mode in ("state", "mine"):
+        if self.mode == "power":
+            for w, label in ((0, "0"), (500, "500 W"), (1200, "1.2 kW"), (2000, "2 kW"), (2800, "2.8 kW+")):
+                t.append("■ ", style="#%02x%02x%02x" % self.power_rgb(w))
+                t.append(f"{label}  ", style="#94a3b8")
+            vals = list(self.node_power.values())
+            if vals:
+                t.append(f"total {sum(vals) / 1e6:.2f} MW · mean {sum(vals) / len(vals):,.0f} W", style="bold")
+            else:
+                t.append("no power readings yet", style="#64748b")
+        elif self.mode in ("state", "mine"):
             counts = {}
             for st in self.node_states.values():
                 counts[base_state(st)] = counts.get(base_state(st), 0) + 1

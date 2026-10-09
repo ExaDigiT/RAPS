@@ -96,6 +96,8 @@ class LiveApp(App):
             tables = event.pane.query("DataTable")
             if tables:
                 tables.first().focus()
+            elif event.pane.query("NodeMap"):
+                event.pane.query("NodeMap").first().focus()
 
     def _render_bars(self):
         self._tick += 1
@@ -116,7 +118,7 @@ class LiveApp(App):
         if busy:
             t.append(f"{SPINNER[self._tick % len(SPINNER)]} fetching {', '.join(busy)}  ", style=CYAN)
         if state is not None:
-            for name in ("jobs", "nodes", "history", "allocations", "forecast", "twin"):
+            for name in ("jobs", "nodes", "power", "history", "allocations", "forecast", "twin"):
                 upd = state.updated.get(name)
                 if name in state.errors:
                     t.append(f"✖ {name}: {state.errors[name][:50]}  ", style=f"bold {RED}")

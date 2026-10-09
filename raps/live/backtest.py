@@ -10,8 +10,10 @@ to ``<dir>/snapshots-YYYY-MM-DD.jsonl``:
   how much of the twin's skill comes from the runtime forecast)
 - ``slurm``: Slurm's own backfill estimate (squeue %S), when it has one
 
-Rows hold job ids, sizes, limits, priorities and times only, no user or job names. Running jobs
-get a row too (``kind: running``) with the forecast end, so runtime forecasts can be checked.
+Rows hold job ids, sizes, limits, priorities, times and watts only, no user or job names. Running
+jobs get a row too (``kind: running``) with the forecast end and measured W/node, so runtime
+forecasts can be checked; pending rows carry the forecast W/node. One ``kind: power`` row per
+snapshot holds the measured node power and the twin's forecast for +0.5 h to +24 h.
 
 ``evaluate`` looks up actual starts and ends with ``sacct`` and reports errors by how far ahead
 the prediction was made and by job size.
@@ -29,12 +31,13 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from raps.live.analysis import eligible
+from raps.live.analysis import eligible, job_power
 from raps.live.forecast import Forecaster
 from raps.live.slurm import SEP, ClusterState, Slurm, parse_slurm_time, run
 from raps.live.twin import simulate
 
 TFMT = "%Y-%m-%dT%H:%M:%S"
+POWER_LEADS_H = (0.5, 1, 2, 4, 8, 12, 24)
 
 
 def _iso(dt):
@@ -49,14 +52,15 @@ class NoForecast:
 def snapshot(slurm, forecaster, partition_nodes):
     now = datetime.now()
     state = ClusterState(user=slurm.user, jobs=slurm.squeue(), node_states=slurm.node_states(),
-                         forecast=forecaster.refresh())
+                         node_power=slurm.node_power(), forecast=forecaster.refresh())
     twin = simulate(state, partition_nodes, now=now)
     plain = simulate(replace(state, forecast=NoForecast()), partition_nodes, now=now)
     rows = []
     for j in state.jobs:
         p = state.predict(j)
         base = {"t": _iso(now), "job": j.id, "nodes": j.nodes, "limit": j.limit, "partition": j.partition,
-                "fcst_runtime": round(p.runtime) if p else None, "basis": p.basis if p else None}
+                "fcst_runtime": round(p.runtime) if p else None, "basis": p.basis if p else None,
+                "fcst_w": round(p.power) if p and p.power else None}
         if eligible(j):
             rows.append({**base, "kind": "pending", "priority": j.priority, "submit": _iso(j.submit),
                          "reason": j.reason, "twin": _iso(twin.starts.get(j.id)),
@@ -64,8 +68,12 @@ def snapshot(slurm, forecaster, partition_nodes):
                          # an estimate in the past means Slurm expects to start it now
                          "slurm": _iso(max(j.start, now)) if j.start else None})
         elif j.running:
+            w = job_power(j, state.node_power)
             rows.append({**base, "kind": "running", "start": _iso(j.start), "elapsed": j.elapsed,
-                         "twin_end": _iso(twin.ends.get(j.id))})
+                         "twin_end": _iso(twin.ends.get(j.id)), "w_now": round(w) if w else None})
+    if state.power is not None:
+        rows.append({"t": _iso(now), "kind": "power", "measured": round(state.power),
+                     "twin_power": {str(h): round(twin.power_at(h * 3600)) for h in POWER_LEADS_H}})
     return now, rows, twin
 
 
@@ -193,6 +201,28 @@ def evaluate(args):
                   "node-weighted: "
                   f"{np.average(run_.err_fcst.abs(), weights=run_.nodes):.2f} h vs "
                   f"{np.average(run_.err_limit.abs(), weights=run_.nodes):.2f} h.", ""]
+    pw = df[df.kind == "power"].sort_values("t")
+    if len(pw) > 1:
+        meas = pw.set_index("t").measured.astype(float)
+        out = ["## Node power (MW)", "",
+               "Measured total vs the twin's forecast made h hours earlier, and vs persistence (the "
+               "power at the time of the forecast). Targets are the nearest snapshot within 10 min.", "",
+               "| lead | pairs | twin MAE | persistence MAE | twin bias |", "|---|---|---|---|---|"]
+        for h in POWER_LEADS_H:
+            pairs = []
+            for t, m, fc in zip(pw.t, pw.measured, pw.twin_power):
+                target = t + pd.Timedelta(hours=h)
+                k = meas.index.get_indexer([target], method="nearest")[0]
+                if k >= 0 and abs(meas.index[k] - target) <= pd.Timedelta(minutes=10):
+                    pairs.append((fc.get(str(h)), m, meas.iloc[k]))
+            pairs = [p for p in pairs if p[0] is not None]
+            if pairs:
+                f, m0, y = (np.array(x, dtype=float) / 1e6 for x in zip(*pairs))
+                out.append(f"| +{h} h | {len(pairs):,} | {np.abs(f - y).mean():.2f} | {np.abs(m0 - y).mean():.2f} "
+                           f"| {(f - y).mean():+.2f} |")
+            else:
+                out.append(f"| +{h} h | 0 | — | — | — |")
+        lines += out + [""]
     report = "\n".join(lines)
     print(report)
     (Path(args.dir) / "report.md").write_text(report)

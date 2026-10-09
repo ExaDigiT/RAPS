@@ -14,7 +14,7 @@ from textual.suggester import SuggestFromList
 from textual.widgets import DataTable, Input, RichLog
 
 from raps.live.analysis import (
-    eligible, forecast_summary, node_job_map, queue_position, reason_counts, size_histogram, summarize,
+    eligible, forecast_summary, job_power, node_job_map, queue_position, reason_counts, size_histogram, summarize,
     top_accounts,
 )
 from raps.live.forecast import remaining
@@ -118,11 +118,31 @@ def twin_start(state, job):
     return Text("now" if start <= now + timedelta(minutes=1) else rel_time(start, now), style=f"bold {CYAN}")
 
 
+def watts_style(w):
+    return heat(min(w / 2500, 1))
+
+
 def power_text(state, job):
+    """History-rule forecast of mean watts per node."""
     p = state.predict(job)
     if p is None or p.power is None:
         return Text("—", justify="right", style=SLATE)
-    return Text(f"{p.power:,.0f}", justify="right", style=heat(min(p.power / 2500, 1)))
+    return Text(f"{p.power:,.0f}", justify="right", style=watts_style(p.power))
+
+
+def power_now_text(state, job):
+    """Measured watts per node right now (running jobs)."""
+    w = job_power(job, state.node_power)
+    if w is None:
+        return Text("—", justify="right", style=SLATE)
+    return Text(f"{w:,.0f}", justify="right", style=f"bold {watts_style(w)}")
+
+
+def peak_low(tw, hours=24, step=300):
+    """((watts, seconds) at the forecast peak, at the low) over the next `hours`."""
+    pts = [(tw.power_at(t), t) for t in range(0, hours * 3600 + 1, step)]
+    pts = [p for p in pts if p[0] is not None]
+    return (max(pts), min(pts)) if pts else (None, None)
 
 
 class Overview(LiveView):
@@ -142,6 +162,7 @@ class Overview(LiveView):
             yield Tile("running jobs", id="t-run", classes="good")
             yield Tile("pending jobs", id="t-pend", classes="warn")
             yield Tile("backlog node-h", id="t-backlog")
+            yield Tile("node power MW", id="t-power", classes="accent")
             yield Tile("my jobs", id="t-mine", classes="accent")
             yield Tile("nodes out", id="t-out", classes="bad")
         with Horizontal(id="ov-body"):
@@ -182,13 +203,20 @@ class Overview(LiveView):
         self.query_one("#t-backlog", Tile).set(human_num(s.backlog_nh), sub)
         self.query_one("#t-mine", Tile).set(
             f"{s.my_run}", Text.assemble(("running", PINK), (f" · {s.my_pend} pending · {s.my_nodes:,} nodes", MUTED)))
+        if state.power is not None:
+            sub = Text(f"{state.power / max(len(state.node_states or {}), 1):,.0f} W/node", style=MUTED)
+            if state.twin is not None and state.twin.power_now is not None:
+                (pk, tpk), _ = peak_low(state.twin)
+                sub = Text.assemble((f"peak {pk / 1e6:.1f} MW ", f"bold {PINK}"),
+                                    ("now" if tpk == 0 else f"in {human_dur(tpk)}", MUTED))
+            self.query_one("#t-power", Tile).set(f"{state.power / 1e6:.2f}", sub)
         out_frac = s.out_nodes / s.total_nodes if s.total_nodes else 0
         self.query_one("#t-out", Tile).set(
             f"{s.out_nodes}", Text(f"{out_frac * 100:.1f}% · {s.planned_nodes} planned", style=MUTED))
 
         nm = self.query_one("#ov-map", NodeMap)
         if state.node_states:
-            nm.set_data(state.node_states, node_job_map(jobs), state.user)
+            nm.set_data(state.node_states, node_job_map(jobs), state.user, node_power=state.node_power)
             self.query_one("#ov-legend", TextPane).update(nm.legend())
 
         if state.partitions:
@@ -240,11 +268,15 @@ class Overview(LiveView):
             span = human_dur(tr.span_seconds()) if tr.span_seconds() else "now"
             t = Text(f"last {span} · {len(tr.samples)} samples\n", style=MUTED)
             for label, key, color in (("running nodes", "run_nodes", GREEN), ("pending jobs", "pend_jobs", AMBER),
-                                      ("backlog node-h", "backlog_nh", VIOLET), ("my jobs (run)", "my_run", PINK)):
+                                      ("backlog node-h", "backlog_nh", VIOLET), ("node power MW", "power_mw", PINK),
+                                      ("my jobs (run)", "my_run", PINK)):
                 vals = tr.series(key)
+                if not vals:
+                    continue
                 t.append(f"{label:<15}", style=MUTED)
                 t.append_text(spark(vals, sw, color))
-                t.append(f" {human_num(vals[-1]):>7}\n", style=f"bold {color}")
+                last = f"{vals[-1]:.2f}" if key == "power_mw" else human_num(vals[-1])
+                t.append(f" {last:>7}\n", style=f"bold {color}")
             t.rstrip()
             self.query_one("#ov-trend", TextPane).update(t)
 
@@ -297,6 +329,9 @@ def node_hover_text(nodes, nm):
     t = Text()
     t.append(f"{name}" + (f" (+{len(nodes) - 1})" if len(nodes) > 1 else ""), style=f"bold {CYAN}")
     t.append(f"  {nm.node_states.get(name, '?')}", style=MUTED)
+    w = nm.node_power.get(name)
+    if w is not None:
+        t.append(f"  {w:,} W", style=f"bold {watts_style(w)}")
     job = nm.node_job.get(name)
     if job is not None:
         t.append(f"  job {job.id} ", style="bold")
@@ -321,7 +356,18 @@ def twin_panel(state, width):
     t.append(f"{'waiting jobs':<15}", style=MUTED)
     t.append_text(spark(wait, sw, AMBER))
     t.append(f" {human_num(wait[-1]):>6}\n", style=f"bold {AMBER}")
+    if tw.power_now is not None:
+        power = [tw.power_at(t) / 1e6 for t in ts]
+        t.append(f"{'node power MW':<15}", style=MUTED)
+        t.append_text(spark(power, sw, PINK, lo=0, hi=max(power)))
+        t.append(f" {power[-1]:6.2f}\n", style=f"bold {PINK}")
     t.append(f"{'':<15}{'now':<{sw // 2}}{'+12 h':<{sw - sw // 2}}+24 h\n", style="#475569")
+    if tw.power_now is not None:
+        (pk, tpk), (lo, tlo) = peak_low(tw)
+        t.append("power ", style=MUTED)
+        t.append(f"{tw.power_now / 1e6:.2f} MW now", style=f"bold {PINK}")
+        t.append(f" · peak {pk / 1e6:.2f} MW {'now' if tpk == 0 else 'in ' + human_dur(tpk)}", style=PINK)
+        t.append(f" · low {lo / 1e6:.2f} MW {'now' if tlo == 0 else 'in ' + human_dur(tlo)}\n", style=MUTED)
     starts = [s for s in tw.starts.values() if s is not None]
     if starts:
         t.append("every eligible job started ", style=MUTED)
@@ -411,7 +457,7 @@ class MyJobs(LiveView):
                           style=AMBER if j.pending else MUTED)
             rows.append((Text(j.id, style="bold"), j.name[:28], j.account, state_text(j.state),
                          Text(f"{j.nodes:,}", justify="right"), prog, left, forecast_text(state, j, long=True),
-                         power_text(state, j), start, queue, reason))
+                         power_now_text(state, j) if j.running else power_text(state, j), start, queue, reason))
         sync_table(table, [j.id for j in mine], rows)
         self.set_class(not mine, "empty")
         if not mine:
@@ -542,7 +588,7 @@ class Queue(LiveView):
     Queue.filtering #q-filter { display: block; }
     Queue #q-table { height: 1fr; background: $panel; }
     """
-    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "ran / waited",
+    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "W now", "ran / waited",
             "twin start", "slurm start", "node-h", "reason", "priority", "qos")
 
     def __init__(self, **kwargs):
@@ -594,7 +640,7 @@ class Queue(LiveView):
                 Text(j.user, style=f"bold {PINK}" if mine else ""),
                 j.account, j.name[:30], state_text(j.state),
                 Text(f"{j.nodes:,}", justify="right", style=f"bold {heat(min(j.nodes / 9408, 1) ** 0.4)}"),
-                human_dur(j.limit), forecast_text(state, j), power_text(state, j), ran,
+                human_dur(j.limit), forecast_text(state, j), power_text(state, j), power_now_text(state, j), ran,
                 twin_start(state, j) or Text("—", style=SLATE), start,
                 Text(human_num(j.node_hours), justify="right"),
                 Text(j.reason[:26], style=AMBER if j.pending else MUTED),
@@ -683,7 +729,7 @@ class Nodes(LiveView):
     def render_state(self, state):
         nm = self.query_one("#nd-map", NodeMap)
         if state.node_states:
-            nm.set_data(state.node_states, node_job_map(state.jobs or []), state.user)
+            nm.set_data(state.node_states, node_job_map(state.jobs or []), state.user, node_power=state.node_power)
             self.query_one("#nd-info", TextPane).update(nm.legend())
         head = Text()
         for m in NodeMap.MODES:

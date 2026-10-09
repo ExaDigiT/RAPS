@@ -7,6 +7,7 @@ import pytest
 from raps.live import analysis
 from raps.live.forecast import Forecaster, HistoryRule, parse_runs
 from raps.live.slurm import (
+    parse_node_power, power_total,
     SEP, ClusterState, Slurm, expand_hostlist, parse_sacct, parse_showusage, parse_sinfo_nodes,
     parse_sinfo_partitions, parse_slurm_duration, parse_squeue,
 )
@@ -181,6 +182,40 @@ def test_twin_backfill_and_forecast_ends():
     assert round((r.starts["2"] - now).total_seconds() / 60) == 60
 
 
+def test_node_power_drops_glitches():
+    w = parse_node_power("NodeName=a CurrentWatts=1000 AveWatts=1\nNodeName=b CurrentWatts=929240236\n"
+                         "NodeName=c Arch=x CurrentWatts=0\nnonsense")
+    assert w == {"a": 1000, "c": 0}
+    assert power_total(w, 3) == 1500  # b counts as the mean of a and c
+    assert power_total({}, 3) is None
+
+
+def test_twin_power_forecast():
+    from raps.live.forecast import Prediction
+    from raps.live.twin import simulate
+    now = datetime(2026, 10, 8, 12, 0, 0)
+    pn = {"batch": [f"n{i}" for i in range(4)]}
+    t0 = (now - timedelta(minutes=30)).isoformat()
+    jobs = parse_squeue("\n".join([
+        squeue_line(1, nodes=2, limit="1:00:00", elapsed="30:00", start=t0, nodelist="n[0-1]"),
+        squeue_line(2, state="PENDING", nodes=4, limit="1:00:00", elapsed="0:00", reason="Priority"),
+    ]))
+    states = {"n0": "allocated", "n1": "allocated", "n2": "idle", "n3": "idle"}
+    watts = {"n0": 2000, "n1": 1800, "n2": 400, "n3": 600}
+
+    class Rule:
+        def predict(self, job):
+            return Prediction(runtime=3600, power=1000, basis="job", n=1) if job.id == "2" else None
+    st = ClusterState(user="me", jobs=jobs, node_states=states, node_power=watts, forecast=Rule())
+    r = simulate(st, pn, now=now)
+    assert r.power_now == 4800
+    assert r.power_at(0) == 2 * 1900 + 2 * 500             # job 1 at its measured 1,900 W/node, idle at 500
+    assert r.power_at(1800 + 1) == 4 * 1000                # job 1 ends at +30 min, job 2 starts at 1 kW/node
+    assert r.power_at(5400 + 1) == 4 * 500                 # all idle after job 2
+    st.node_power = None
+    assert simulate(st, pn, now=now).power_at(0) is None
+
+
 class FakeSlurm(Slurm):
     def __init__(self):
         super().__init__(user="me")
@@ -206,6 +241,10 @@ class FakeSlurm(Slurm):
     def reservations(self):
         return []
 
+    def node_power(self):
+        return parse_node_power("\n".join(f"NodeName={n} Arch=x86_64 CurrentWatts={1500 if s == 'allocated' else 500} "
+                                          "AveWatts=400" for n, s in parse_sinfo_nodes(NODES).items()))
+
     def partition_nodes(self):
         return {"batch": expand_hostlist("frontier[00001-00003,00130-00132]")}
 
@@ -221,7 +260,7 @@ def test_app_pilot():
     pytest.importorskip("textual")
     from raps.live.app import LiveApp
     from raps.live.poller import Poller, Trend
-    from raps.live.views import MyJobs, Queue
+    from raps.live.views import MyJobs, Nodes, Queue
     from textual.widgets import DataTable
 
     async def run():
@@ -234,6 +273,12 @@ def test_app_pilot():
                 if app.poller.latest().twin is not None:
                     break
             await pilot.pause(0.3)
+            await pilot.press("4")
+            await pilot.pause(0.2)
+            for _ in range(4):
+                await pilot.press("c")
+            nm = app.query_one(Nodes).query_one("#nd-map")
+            assert nm.mode == "power" and "MW" in nm.legend().plain
             for key in "123456":
                 await pilot.press(key)
                 await pilot.pause(0.1)
@@ -268,7 +313,9 @@ def test_backtest_snapshot_has_no_names():
     now, rows, twin = snapshot(slurm, Forecaster(days=30, fetch=lambda since: parse_runs(RUNS)),
                                slurm.partition_nodes())
     kinds = sorted(r["kind"] for r in rows)
-    assert kinds == ["pending", "pending", "running", "running"]  # job 5 is blocked on a dependency
+    assert kinds == ["pending", "pending", "power", "running", "running"]  # job 5 is blocked (dependency)
     assert all("user" not in r and "name" not in r and "account" not in r for r in rows)
     pend = {r["job"]: r for r in rows if r["kind"] == "pending"}
     assert pend["4"]["twin"] is not None and pend["4"]["twin_limit"] is not None and pend["4"]["slurm"]
+    power = [r for r in rows if r["kind"] == "power"]
+    assert len(power) == 1 and power[0]["measured"] > 0 and set(power[0]["twin_power"]) >= {"0.5", "24"}

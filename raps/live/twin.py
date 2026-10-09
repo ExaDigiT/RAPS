@@ -9,6 +9,9 @@ scheduler and resource manager, and read off when each pending job starts.
 - Nodes that are down, drained or reserved are left out; running jobs keep their nodes.
 - The scheduler plans with time limits, as Slurm does, but jobs actually end at their history-rule
   forecast (``raps.live.forecast``), so nodes free up early the way they do on the real machine.
+- Power: running jobs keep their measured power per node (Slurm's CurrentWatts), jobs that
+  start get their history-rule power forecast (else the median of running jobs), free nodes draw
+  the measured idle mean, and nodes outside the pools or down stay at what they draw now.
 - Time advances from one job end to the next (event-driven) rather than RAPS's one-second engine
   ticks, and no power or cooling is modelled, so a full Frontier queue simulates in about a second.
 
@@ -75,27 +78,30 @@ class TwinResult:
     at: datetime                                   # when the simulation started ("now")
     starts: dict = field(default_factory=dict)     # pending job id -> datetime, None if not within horizon
     ends: dict = field(default_factory=dict)       # job id -> forecast end (running and pending)
-    timeline: list = field(default_factory=list)   # (seconds from now, busy nodes, waiting jobs)
+    timeline: list = field(default_factory=list)   # (seconds from now, busy nodes, waiting jobs, node watts)
+    power_now: float | None = None                 # measured node watts at the start
     usable: int = 0
     simulated: int = 0                             # pending jobs put through the scheduler
     seconds: float = 0.0                           # wall time the simulation took
 
-    def busy_at(self, t):
-        """Busy nodes t seconds from now (step function over the timeline)."""
-        busy = self.timeline[0][1] if self.timeline else 0
-        for ts, b, _ in self.timeline:
-            if ts > t:
+    def _at(self, t, k):
+        """Column k of the timeline t seconds from now (a step function)."""
+        v = self.timeline[0][k] if self.timeline else None
+        for row in self.timeline:
+            if row[0] > t:
                 break
-            busy = b
-        return busy
+            v = row[k]
+        return v
+
+    def busy_at(self, t):
+        return self._at(t, 1) or 0
 
     def waiting_at(self, t):
-        w = self.timeline[0][2] if self.timeline else 0
-        for ts, _, q in self.timeline:
-            if ts > t:
-                break
-            w = q
-        return w
+        return self._at(t, 2) or 0
+
+    def power_at(self, t):
+        """Forecast node watts t seconds from now, None without power readings."""
+        return self._at(t, 3)
 
 
 def _runtime(state, job):
@@ -113,6 +119,8 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     pool_of_part = {p: i for i, pool in enumerate(pools) for p in pool.partitions}
     pool_of_node = {n: i for i, pool in enumerate(pools) for n in pool.nodes}
     node_states = state.node_states or {}
+    watts = state.node_power or {}
+    has_power = bool(watts)
 
     running = [[] for _ in pools]
     queued = [[] for _ in pools]
@@ -127,6 +135,28 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             if i is not None:
                 queued[i].append(j)
 
+    # power per node: measured for running jobs, forecast (else the running median) for new ones
+    job_w = {}
+    for i in range(len(pools)):
+        for j, nodes in running[i]:
+            w = [watts[n] for n in nodes if watts.get(n)]
+            if w:
+                job_w[j.id] = sum(w) / len(w)
+    typical_w = sorted(job_w.values())[len(job_w) // 2] if job_w else 1100.0
+    for i in range(len(pools)):
+        for j, _ in running[i]:
+            if j.id not in job_w:
+                p = state.predict(j)
+                job_w[j.id] = p.power if p is not None and p.power else typical_w
+        for j in queued[i]:
+            p = state.predict(j)
+            job_w[j.id] = p.power if p is not None and p.power else typical_w
+    idle = [watts[n] for n, s in node_states.items() if watts.get(n) and base_state(s) in ("idle", "planned")]
+    idle_w = sum(idle) / len(idle) if idle else 480.0
+    fixed_w = sum(w for n, w in watts.items() if n not in pool_of_node)   # outside every pool
+    fixed_w += (len(node_states) - len(watts)) * idle_w if has_power else 0  # no valid reading
+    run_w = [0.0]                                                        # running jobs' total
+
     events = []  # (end time, seq, pool, raps job)
     seq = itertools.count()
     pending_ids = {}
@@ -135,6 +165,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
         busy_names = {n for _, nodes in running[i] for n in nodes}
         down = [k for k, n in enumerate(pool.nodes)
                 if n not in busy_names and base_state(node_states.get(n, "down")) not in USABLE]
+        fixed_w += sum(watts.get(pool.nodes[k], 0) for k in down)
         rm = FastNodeManager(len(pool.nodes), down)
         sched = Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
         res.usable += len(rm.available_nodes)
@@ -150,6 +181,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             except ValueError:  # squeue and sinfo disagree for a moment; skip the job
                 continue
             run_list.append(rj)
+            run_w[0] += rj.nodes_required * job_w[j.id]
             res.ends[j.id] = now + timedelta(seconds=rj.end_time)
             heapq.heappush(events, (rj.end_time, next(seq), i, rj))
         queue = []
@@ -169,18 +201,23 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             before = len(run_list)
             sched.schedule(queue, run_list, t)
             for rj in run_list[before:]:
+                run_w[0] += rj.nodes_required * job_w[rj.id]
                 res.starts[rj.id] = now + timedelta(seconds=t)
                 res.ends[rj.id] = now + timedelta(seconds=rj.end_time)
                 heapq.heappush(events, (rj.end_time, next(seq), i, rj))
 
     def sample(t):
         busy = sum(len(rm.nodes) - len(rm.down_nodes) - len(rm.available_nodes) for rm, *_ in pools_state)
-        res.timeline.append((t, busy, sum(len(q) for *_, q in pools_state)))
+        free = sum(len(rm.available_nodes) for rm, *_ in pools_state)
+        power = fixed_w + run_w[0] + free * idle_w if has_power else None
+        res.timeline.append((t, busy, sum(len(q) for *_, q in pools_state), power))
 
     t = 0.0
     schedule_all(t)
     sample(t)
-    while events and any(q for *_, q in pools_state):
+    # keep going after the queue is empty so the timeline shows running jobs ending (with no new
+    # submissions, which the twin does not model, the machine then drains)
+    while events:
         t = events[0][0]
         if t > horizon:
             break
@@ -189,8 +226,10 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             rm, _, run_list, _ = pools_state[i]
             rm.free_nodes_from_job(rj)
             run_list.remove(rj)
+            run_w[0] -= rj.nodes_required * job_w[rj.id]
         schedule_all(t)
         sample(t)
+    res.power_now = state.power
     for jid in pending_ids:
         res.starts.setdefault(jid, None)
     res.seconds = time.perf_counter() - t_wall
