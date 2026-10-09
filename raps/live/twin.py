@@ -5,6 +5,7 @@ scheduler and resource manager, and read off when each pending job starts.
 - The machine is split into independent pools of partitions that share nodes (on Frontier: batch
   with batch-spi, extended with extended-spi, g1, service). Each pool gets its own RAPS
   ``ExclusiveNodeResourceManager`` and ``Scheduler`` (priority order with first-fit backfill).
+  Jobs bigger than their pool's usable nodes are left out, so the head of a queue can always start.
 - Nodes that are down, drained or reserved are left out; running jobs keep their nodes.
 - The scheduler plans with time limits, as Slurm does, but jobs actually end at their history-rule
   forecast (``raps.live.forecast``), so nodes free up early the way they do on the real machine.
@@ -54,27 +55,6 @@ def build_pools(partition_nodes):
             groups.remove(g)
         groups.append((names, ns))
     return [Pool(names, sorted(ns)) for names, ns in groups]
-
-
-class TwinScheduler(Scheduler):
-    """
-    RAPS's default scheduler with one change to backfill: the shadow time (when the job at the
-    head of the queue can start) comes from running jobs sorted by when they reach their limits,
-    not by the limit alone.
-    """
-
-    def find_backfill_job(self, queue, running, current_time):
-        if not queue:
-            return None
-        need = queue[0].nodes_required
-        avail = len(self.resource_manager.available_nodes)
-        shadow = float("inf")  # head job never fits (bigger than the pool): anything may backfill
-        for job in sorted(running, key=lambda j: j.start_time + j.time_limit):
-            avail += job.nodes_required
-            if avail >= need:
-                shadow = job.start_time + job.time_limit
-                break
-        return self.return_first_fit(queue, shadow - current_time)
 
 
 class FastNodeManager(ExclusiveNodeResourceManager):
@@ -156,7 +136,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
         down = [k for k, n in enumerate(pool.nodes)
                 if n not in busy_names and base_state(node_states.get(n, "down")) not in USABLE]
         rm = FastNodeManager(len(pool.nodes), down)
-        sched = TwinScheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
+        sched = Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
         res.usable += len(rm.available_nodes)
         run_list = []
         for j, _ in running[i]:
