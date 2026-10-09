@@ -328,9 +328,10 @@ def test_app_pilot():
             await pilot.pause(0.3)
             await pilot.press("4")
             await pilot.pause(0.2)
-            for _ in range(4):
-                await pilot.press("c")
             nm = app.query_one(Nodes).query_one("#nd-map")
+            assert nm.mode == "power"  # the Nodes tab opens in power mode
+            for _ in range(len(nm.MODES)):  # a full cycle of colour modes comes back to power
+                await pilot.press("c")
             assert nm.mode == "power" and "MW" in nm.legend().plain
             # without a mouse: arrows pick a node, its info survives refreshes, enter opens its job
             await pilot.press("right")
