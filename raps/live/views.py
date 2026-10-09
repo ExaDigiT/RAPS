@@ -147,6 +147,37 @@ def power_now_text(state, job):
     return Text(f"{w:,.0f}", justify="right", style=f"bold {watts_style(w, state.node_max_w)}")
 
 
+def job_energy(state, job):
+    """
+    (kWh, basis) the job uses over its whole run: nodes x watts per node x runtime, or None without a power figure.
+    Runtime is the history rule's forecast (at least the time already run), else the time limit (basis "limit", an
+    upper bound). Watts per node is what the job draws now if it runs, else the history rule's forecast.
+    """
+    p = state.predict(job)
+    watts = job_power(job, state.node_power)
+    if watts is None and p is not None:
+        watts = p.power
+    if watts is None:
+        return None
+    if p is not None:
+        runtime, basis = (max(p.runtime, job.elapsed) if job.running else p.runtime), p.basis
+    elif job.limit:
+        runtime, basis = job.limit, "limit"
+    else:
+        return None
+    return job.nodes * watts * runtime / 3.6e6, basis
+
+
+def energy_text(est):
+    """'1.2 MWh' / '340 kWh', colored by what the runtime forecast rests on (muted: only the time limit)."""
+    if est is None:
+        return Text("—", justify="right", style=SLATE)
+    kwh, basis = est
+    style = BASIS_STYLE[basis][0] if basis in BASIS_STYLE else MUTED
+    num = f"{kwh / 1000:,.2f} MWh" if kwh >= 1000 else f"{kwh:,.0f} kWh"
+    return Text(("≤" if basis == "limit" else "") + num, justify="right", style=style)
+
+
 def peak_low(tw, hours=24, step=300):
     """((watts, seconds) at the forecast peak, at the low) over the next `hours`."""
     pts = [(tw.power_at(t), t) for t in range(0, hours * 3600 + 1, step)]
@@ -643,6 +674,7 @@ SORTS = [
     ("submitted", lambda j: (j.submit or datetime.max,)),
     ("user", lambda j: (j.user, -j.priority)),
     ("node-hours", lambda j: (-j.node_hours,)),
+    ("energy", None),  # biggest estimated energy first; needs the forecasts, so Queue.render_state builds the key
 ]
 FILTERS = ["all", "running", "pending", "eligible"]
 
@@ -654,6 +686,7 @@ class Queue(LiveView):
         Binding("f", "cycle_filter", "Running/Pending"),
         Binding("m", "mine", "Only mine"),
         Binding("s", "sort", "Sort"),
+        Binding("e", "sort_energy", "Sort by energy"),
     ]
     DEFAULT_CSS = """
     Queue #q-head { height: 1; padding: 0 1; }
@@ -661,7 +694,8 @@ class Queue(LiveView):
     Queue.filtering #q-filter { display: block; }
     Queue #q-table { height: 1fr; background: $panel; }
     """
-    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "W now", "ran / waited",
+    COLS = ("job", "user", "project", "name", "state", "nodes", "limit", "forecast", "W/node", "W now", "energy",
+            "ran / waited",
             "twin start", "slurm start", "node-h", "reason", "priority", "qos")
 
     def __init__(self, **kwargs):
@@ -697,7 +731,9 @@ class Queue(LiveView):
             needle = self.text.lower()
             jobs = [j for j in jobs if needle in " ".join((j.id, j.user, j.account, j.name, j.reason, j.partition,
                                                            j.qos, j.state)).lower()]
-        jobs = sorted(jobs, key=lambda j: (not j.running,) + SORTS[self.sort][1](j))
+        energy = {j.id: job_energy(state, j) for j in jobs}
+        sort_key = SORTS[self.sort][1] or (lambda j: (-(energy[j.id][0] if energy[j.id] else -1.0),))
+        jobs = sorted(jobs, key=lambda j: (not j.running,) + sort_key(j))
 
         rows = []
         for j in jobs:
@@ -713,7 +749,8 @@ class Queue(LiveView):
                 Text(j.user, style=f"bold {PINK}" if mine else ""),
                 j.account, j.name[:30], state_text(j.state),
                 Text(f"{j.nodes:,}", justify="right", style=f"bold {heat(min(j.nodes / 9408, 1) ** 0.4)}"),
-                human_dur(j.limit), forecast_text(state, j), power_text(state, j), power_now_text(state, j), ran,
+                human_dur(j.limit), forecast_text(state, j), power_text(state, j), power_now_text(state, j), energy_text(energy[j.id]),
+                ran,
                 twin_start(state, j) or Text("—", style=SLATE), start,
                 Text(human_num(j.node_hours), justify="right"),
                 Text(j.reason[:26], style=AMBER if j.pending else MUTED),
@@ -721,7 +758,9 @@ class Queue(LiveView):
             ))
         table = self.query_one("#q-table", DataTable)
         sync_table(table, [j.id for j in jobs], rows)
-        table.border_title = f"queue · {len(jobs):,} of {len(state.jobs):,} jobs"
+        total = sum(e[0] for e in energy.values() if e)
+        table.border_title = (f"queue · {len(jobs):,} of {len(state.jobs):,} jobs · "
+                              f"est. {total / 1000:,.1f} MWh over their runs")
         table.border_subtitle = ("forecast ● same job ◐ same user ○ same project · "
                                  "enter details · / filter · f state · m mine · s sort")
 
@@ -767,6 +806,10 @@ class Queue(LiveView):
 
     def action_mine(self):
         self.only_mine = not self.only_mine
+        self._rerender()
+
+    def action_sort_energy(self):
+        self.sort = [name for name, _ in SORTS].index("energy")
         self._rerender()
 
     def action_sort(self):

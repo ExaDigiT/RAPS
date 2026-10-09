@@ -5,6 +5,7 @@ Run with ``python main.py live`` (or ``python -m raps.live``). Slurm is polled i
 thread (see ``poller.py``); the UI only renders the latest published ``ClusterState``.
 """
 import subprocess
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -51,6 +52,7 @@ class LiveApp(App):
         Binding("tab", "next_tab", "Next", show=False, priority=True),
         Binding("shift+tab", "prev_tab", "Prev", show=False, priority=True),
         Binding("c", "color_mode", "Map colors", show=False),
+        Binding("x", "forecast_run", "24 h run", show=False),
     ] + [Binding(str(i + 1), f"tab({i})", title, show=False) for i, (_, title, _) in enumerate(VIEWS)] \
       + [Binding(f"f{i + 1}", f"tab({i})", title, show=False, priority=True) for i, (_, title, _) in enumerate(VIEWS)]
 
@@ -196,7 +198,7 @@ class LiveApp(App):
     def action_prev_tab(self):
         self._step_tab(-1)
 
-    def open_shell_with(self, cmd):
+    def open_shell_with(self, cmd, note="add your batch script (or --wrap \"...\") and press enter"):
         """Switch to the Shell tab with `cmd` typed at the prompt, ready to edit and run."""
         from textual.widgets import Input
         self.query_one(TabbedContent).active = "shell"
@@ -204,7 +206,30 @@ class LiveApp(App):
         inp.value = cmd
         inp.cursor_position = len(cmd)
         inp.focus()
-        self.notify("add your batch script (or --wrap \"...\") and press enter", timeout=6)
+        self.notify(note, timeout=8)
+
+    def action_forecast_run(self):
+        """`x`: write the queue as a RAPS replay (jobs.npz + experiment.yaml) and put `raps run` at the Shell prompt."""
+        state = self._applied
+        if state is None or state.jobs is None:
+            self.notify("waiting for the queue", severity="warning")
+            return
+        self.notify(f"exporting {len(state.jobs):,} jobs as a 24 h RAPS run …")
+        threading.Thread(target=self._export_forecast_run, args=(state, self.poller.system or "frontier"),
+                         daemon=True).start()
+
+    def _export_forecast_run(self, state, system):
+        from raps.live.forecast_run import export
+        try:
+            folder, yaml, rep = export(state, system)
+        except Exception as exc:
+            self.call_from_thread(self.notify, f"export failed: {exc}", severity="error", timeout=10)
+            return
+        lost = f", {rep['dropped']} did not fit" if rep["dropped"] else ""
+        self.call_from_thread(
+            self.open_shell_with, f"raps run {yaml} --noui",
+            f"{rep['running']} running + {rep['queued']} queued jobs{lost} in {folder} "
+            f"(also {folder.parent / 'latest'}); enter runs it, edit the yaml first to change policy, time or cooling")
 
     def action_color_mode(self):
         """`c` on a tab with a node map (Overview, Nodes), whatever has focus; My Jobs keeps c = cancel."""

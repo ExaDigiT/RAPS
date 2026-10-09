@@ -436,3 +436,26 @@ def test_frontier_node_power_model():
     assert 2700 < m.max_w < 2800 and 600 < m.idle_w < 700
     st = ClusterState(user="me", node_states={"a": "idle", "b": "idle"}, power_model=m)
     assert st.machine_max_w == 2 * m.max_w
+
+
+def test_forecast_run_export(tmp_path):
+    """The queue becomes a RAPS replay: running jobs keep their nodes, pending ones carry submit time and priority."""
+    import numpy as np
+    from raps.live import forecast_run
+    state = ClusterState(user="me", jobs=parse_squeue(QUEUE), node_states=parse_sinfo_nodes(NODES))
+    jobs, report = forecast_run.build(state, "frontier", hours=24)
+    assert (report["running"], report["queued"], report["dropped"]) == (2, 2, 0)  # job 5 waits on a dependency
+    running = [j for j in jobs if j["start_time"] is not None]
+    assert sorted(len(j["scheduled_nodes"]) for j in running) == [1, 2]
+    nodes = [n for j in running for n in j["scheduled_nodes"]]
+    assert len(nodes) == len(set(nodes)) and all(isinstance(n, int) for n in nodes)
+    assert all(j["start_time"] <= 0 < j["end_time"] and j["expected_run_time"] <= j["time_limit"] for j in running)
+    pending = [j for j in jobs if j["start_time"] is None]
+    assert sorted(j["priority"] for j in pending) == [200, 300] and all(j["submit_time"] <= 0 for j in pending)
+
+    folder, yaml, _ = forecast_run.export(state, "frontier", hours=6, root=tmp_path)
+    data = np.load(folder / "jobs.npz", allow_pickle=True)
+    assert len(data["jobs"]) == 4 and data["telemetry_end"].item() == 6 * 3600
+    assert data["args"].item().system_name == "frontier"
+    text = yaml.read_text()
+    assert "system: frontier" in text and "time: 6h" in text and str(folder / "jobs.npz") in text

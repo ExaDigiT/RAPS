@@ -27,6 +27,8 @@ HELP = """\
           jump a cabinet, shift+↑/↓ a row of cabinets, home/end the first/last node;
           click or enter opens the node's job. In tmux, hover and click need
           `set -g mouse on`.   hover a node · click for its job
+[b]24 h run[/b] x anywhere: write the queue as a RAPS replay (jobs.npz + experiment.yaml, in
+          ~/raps-forecast-runs, newest as `latest`) and put `raps run <yaml> --noui` at the Shell prompt
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then digits switch tabs; F1-F7 always do)
 [b]Launch[/b]    where and when could my job run? Type nodes and time, a: next project,
