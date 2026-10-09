@@ -99,7 +99,8 @@ class Scheduler:
                         "Depending on the Policy this choice should be explicit. Add the implementation above!")
 
     def place_job_and_manage_queues(self, job, queue, running, current_time):
-        self.resource_manager.assign_nodes_to_job(job, current_time)
+        # as in default.py: the exclusive-node manager has needed the policy since 5710f2b
+        self.resource_manager.assign_nodes_to_job(job, current_time, self.policy)
         running.append(job)
         queue.remove(job)
         if self.debug:
@@ -134,66 +135,53 @@ class Scheduler:
                 break
 
     def find_backfill_job(self, queue, running, current_time):
-        """Finds a backfill job based on available nodes and estimated completion times.
-
-        Loosely based on pseudocode from Leonenkov and Zhumatiy, 'Introducing new backfill-based
-        scheduler for slurm resource manager.' Procedia computer science 66 (2015): 661-669.
         """
-        if not queue:
+        A job that can start now without delaying the job at the head of the queue (EASY
+        backfill: Lifka 1995; Leonenkov and Zhumatiy, Procedia Computer Science 66 (2015) 661-669).
+
+        The head job is promised the shadow time: when enough running jobs have reached their
+        time limits for it to fit. A candidate may start now if it fits in the free nodes and
+        either ends (by its time limit) before the shadow time, or needs no more than the extra
+        nodes the head job will leave unused at the shadow time. FIRSTFIT tries candidates in
+        queue (priority) order, EASY in submit order; the queue itself is not reordered, so the
+        head job keeps its place on the next call.
+        """
+        if not queue or self.bfpolicy == BackfillType.NONE:
             return None
-
-        # Identify when the nex job in the queue could run as a time limit:
-        first_job = queue[0]
-        nodes_required = 0
-        if self.policy == PolicyType.REPLAY and first_job.scheduled_nodes:
-            nodes_required = len(first_job.scheduled_nodes)
-        else:
-            nodes_required = first_job.nodes_required
-
-        # Running jobs in the order they reach their time limits (what a live scheduler knows)
-        sorted_running = sorted(running, key=lambda job: job.start_time + job.time_limit)
-
-        # Identify when we have enough nodes therefore the start time of the first_job in line
-        shadow_time_end = 0
-        shadow_nodes_avail = len(self.resource_manager.available_nodes)
-        for job in sorted_running:
-            if shadow_nodes_avail >= nodes_required:
-                break
-            else:
-                shadow_nodes_avail += job.nodes_required
-                shadow_time_end = job.start_time + job.time_limit
-
-        time_limit = shadow_time_end - current_time
-        # We now have the time_limit after which no backfilled job should end
-        # as the next job in line has the necessary resrouces after this time limit.
-
-        # Find and return the first job that fits
-        if self.bfpolicy == BackfillType.NONE:
-            pass
-        elif self.bfpolicy == BackfillType.EASY:
-            queue[:] = sorted(queue, key=lambda job: job.submit_time)
-            return self.return_first_fit(queue, time_limit)
-        elif self.bfpolicy == BackfillType.FIRSTFIT:
-            pass  # Stay with the prioritization!
-            return self.return_first_fit(queue, time_limit)
-        elif self.bfpolicy in [BackfillType.BESTFIT,
-                               BackfillType.GREEDY,
-                               BackfillType.CONSERVATIVE,
-                               ]:
+        if self.bfpolicy in [BackfillType.BESTFIT, BackfillType.GREEDY, BackfillType.CONSERVATIVE]:
             raise NotImplementedError(f"{self.bfpolicy} not implemented! Please implement!")
-        else:
+        if self.bfpolicy not in [BackfillType.EASY, BackfillType.FIRSTFIT]:
             raise NotImplementedError(f"{self.bfpolicy} not implemented.")
 
-    def return_first_fit(self, queue, time_limit):
+        first_job = queue[0]
+        replay_nodes = self.policy == PolicyType.REPLAY and first_job.scheduled_nodes
+        nodes_required = len(first_job.scheduled_nodes) if replay_nodes else first_job.nodes_required
+
+        # Running jobs in the order they reach their time limits (what a live scheduler knows)
+        shadow_time = float("inf")  # never enough nodes for the head job: nothing to protect
+        shadow_nodes = len(self.resource_manager.available_nodes)
+        for job in sorted(running, key=lambda job: job.start_time + job.time_limit):
+            shadow_nodes += job.nodes_required
+            if shadow_nodes >= nodes_required:
+                shadow_time = job.start_time + job.time_limit
+                break
+        # Nodes free at the shadow time beyond what the head job needs. A replayed head job needs
+        # specific nodes, so counting spare nodes says nothing there.
+        extra_nodes = 0 if replay_nodes else shadow_nodes - nodes_required
+        if shadow_time == float("inf"):
+            extra_nodes = float("inf")
+
+        candidates = queue[1:]
+        if self.bfpolicy == BackfillType.EASY:
+            candidates = sorted(candidates, key=lambda job: job.submit_time)
+        return self.return_first_fit(candidates, shadow_time - current_time, extra_nodes)
+
+    def return_first_fit(self, queue, time_limit, extra_nodes=0):
+        """First job that fits now and ends within time_limit or needs at most extra_nodes."""
         for job in queue:
-            if job.time_limit <= time_limit:
-                nodes_available = self.check_available_nodes(job)
-                if nodes_available:
+            if job.time_limit <= time_limit or job.nodes_required <= extra_nodes:
+                if self.check_available_nodes(job):
                     return job
-                else:
-                    continue
-            else:
-                continue
         return None
 
     def sort_fugaku_redeeming(self, queue, accounts=None):
