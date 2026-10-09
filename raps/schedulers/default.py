@@ -164,7 +164,9 @@ class Scheduler:
         else:
             nodes_required = first_job.nodes_required
 
-        sorted_running = sorted(running, key=lambda job: job.time_limit)
+        # Running jobs in the order they reach their time limits (sorting by the limit alone puts
+        # a long job that started hours ago behind a short one that just started)
+        sorted_running = sorted(running, key=lambda job: job.start_time + job.time_limit)
 
         # Identify when we have enough nodes therefore the start time of the first_job in line
         shadow_time_end = 0
