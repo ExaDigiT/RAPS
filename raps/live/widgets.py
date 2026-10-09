@@ -291,6 +291,8 @@ class NodeMap(PixelGrid):
         self.node_job = {}       # node -> Job
         self.node_power = {}     # node -> current watts
         self.max_w = 2800.0      # node maximum, scales the power colors
+        self.node_parts = {}     # node -> [partitions]
+        self.part_ok = {}        # partition -> True/False: can any of my projects submit there
         self._names = []         # sorted node names
         self._cabs = []          # cabinet numbers present, in draw order
         self._pix_nodes = None   # (H, W) object array of node-name lists, for hover lookup
@@ -298,10 +300,15 @@ class NodeMap(PixelGrid):
         self._layout = None
         self.cursor = None       # node highlighted with the keyboard
 
-    def set_data(self, node_states, node_job, user, mode=None, node_power=None, max_w=None):
+    def set_data(self, node_states, node_job, user, mode=None, node_power=None, max_w=None,
+                 node_parts=None, part_ok=None):
         self.node_states = node_states or {}
         self.node_job = node_job or {}
         self.node_power = node_power or {}
+        if node_parts is not None:
+            self.node_parts = node_parts
+        if part_ok is not None:
+            self.part_ok = part_ok
         if max_w:
             self.max_w = max_w
         self.user = user

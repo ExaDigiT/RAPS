@@ -231,7 +231,7 @@ class Overview(LiveView):
         nm = self.query_one("#ov-map", NodeMap)
         if state.node_states:
             nm.set_data(state.node_states, node_job_map(jobs), state.user, node_power=state.node_power,
-                        max_w=state.node_max_w)
+                        max_w=state.node_max_w, **node_access(state))
             hovered = getattr(self, "hovered", None)
             self.query_one("#ov-legend", TextPane).update(map_footer(nm, hovered, "hover a node · click for its job"))
 
@@ -358,6 +358,27 @@ def map_footer(nm, nodes, hint):
     return t
 
 
+_NODE_PARTS = {}
+
+
+def node_access(state):
+    """NodeMap kwargs: each node's partitions (cached per layout) and which I may submit to."""
+    out = {}
+    if state.layout:
+        key = id(state.layout)
+        if key not in _NODE_PARTS:
+            _NODE_PARTS.clear()
+            parts = {}
+            for name, part in state.layout.items():
+                for n in part.nodes:
+                    parts.setdefault(n, []).append(name)
+            _NODE_PARTS[key] = parts
+        out["node_parts"] = _NODE_PARTS[key]
+    if state.access is not None:
+        out["part_ok"] = {p: state.access.ok(p) for _, p in state.access.results}
+    return out
+
+
 def node_hover_text(nodes, nm):
     name = nodes[0]
     t = Text()
@@ -366,6 +387,14 @@ def node_hover_text(nodes, nm):
     w = nm.node_power.get(name)
     if w is not None:
         t.append(f"  {w:,} W ({w / nm.max_w * 100:.0f}% of max)", style=f"bold {watts_style(w, nm.max_w)}")
+    parts = nm.node_parts.get(name)
+    if parts:
+        t.append("  partitions ", style=MUTED)
+        for i, p in enumerate(parts):
+            ok = nm.part_ok.get(p)
+            t.append(("," if i else "") + p, style=GREEN if ok else (RED if ok is False else ""))
+        if nm.part_ok and not any(nm.part_ok.get(p) for p in parts):
+            t.append(" (not open to your projects)", style=RED)
     job = nm.node_job.get(name)
     if job is not None:
         t.append(f"  job {job.id} ", style="bold")
@@ -765,7 +794,7 @@ class Nodes(LiveView):
         nm = self.query_one("#nd-map", NodeMap)
         if state.node_states:
             nm.set_data(state.node_states, node_job_map(state.jobs or []), state.user, node_power=state.node_power,
-                        max_w=state.node_max_w)
+                        max_w=state.node_max_w, **node_access(state))
             hovered = getattr(self, "hovered", None)
             self.query_one("#nd-info", TextPane).update(map_footer(nm, hovered, NODES_HINT))
         head = Text()
@@ -904,7 +933,7 @@ class Shell(LiveView):
         log = RichLog(id="sh-log", wrap=True, markup=False, highlight=False, max_lines=5000)
         log.border_title = "shell"
         yield log
-        yield Input(placeholder="command (bash) · ↑ history · ctrl+k kill · esc leaves the prompt so 1-5 switch tabs (F1-F6 always do)", id="sh-input",
+        yield Input(placeholder="command (bash) · ↑ history · ctrl+k kill · esc leaves the prompt so digits switch tabs (F1-F7 always do)", id="sh-input",
                     suggester=SuggestFromList(list(dict.fromkeys(reversed(self.history))) + QUICK,
                                               case_sensitive=True))
 
@@ -1008,6 +1037,237 @@ class Shell(LiveView):
         event.stop()
 
 
+
+# ---------------------------------------------------------------------------------------------
+# 7 · Launch: where and when could a job of mine run?
+# ---------------------------------------------------------------------------------------------
+
+
+def _short(msg, n=44):
+    """Slurm filter messages, cut to their first clause ('You are not a member of partition g1')."""
+    msg = msg.split(". ")[0]
+    return msg if len(msg) <= n else msg[:n - 1] + "…"
+
+
+class Launch(LiveView):
+    """
+    Where you may submit (sbatch --test-only per project x partition), what would start right now
+    (the twin's plan at time limits), and Slurm's and the twin's start for a job you describe.
+    Enter on a row puts its sbatch line into the Shell tab.
+    """
+
+    BINDINGS = [Binding("a", "next_account", "Project"), Binding("t", "test", "Ask Slurm")]
+    DEFAULT_CSS = """
+    Launch #ln-form { height: 3; }
+    Launch #ln-form Input { width: 18; }
+    Launch #ln-form TextPane { width: 1fr; padding: 1 1 0 1; }
+    Launch #ln-table { height: auto; max-height: 50%; background: $panel; }
+    Launch #ln-lower { height: 1fr; }
+    Launch #ln-lower > * { width: 1fr; }
+    Launch #ln-lower TextPane { height: auto; }
+    """
+    COLS = ("partition", "you", "qos", "limits", "idle now", "starts at once?", "slurm start", "twin start", "command")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.account = None
+        self.checked = {}      # (account, partition, nodes, seconds) -> (slurm TestResult, twin start)
+        self.busy = False
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="ln-form"):
+            yield Input("1", placeholder="nodes", id="ln-nodes")
+            yield Input("1h", placeholder="time: 90m, 2h, 1:30:00", id="ln-time")
+            yield TextPane("", id="ln-acct")
+        yield _panel(DataTable(id="ln-table", cursor_type="row", zebra_stripes=True), "where could it run?")
+        with Horizontal(id="ln-lower"):
+            with VerticalScroll():
+                yield _panel(TextPane(_waiting("twin"), id="ln-now"), "starts at once · nodes → longest time limit")
+            with VerticalScroll():
+                yield _panel(TextPane(_waiting("sbatch --test-only"), id="ln-access"), "access · per project")
+
+    def on_mount(self):
+        self.query_one("#ln-table", DataTable).add_columns(*self.COLS)
+
+    # -- request -------------------------------------------------------------------------------
+    def request(self):
+        from raps.live.launch import parse_walltime
+        try:
+            nodes = max(int(self.query_one("#ln-nodes", Input).value.strip()), 1)
+        except ValueError:
+            nodes = 1
+        seconds = parse_walltime(self.query_one("#ln-time", Input).value) or 3600
+        return nodes, seconds
+
+    def accounts(self, state):
+        acc = state.access
+        return sorted({a for a, _ in acc.results}) if acc is not None else []
+
+    def render_state(self, state):
+        from raps.live.launch import qos_for, sbatch_line, start_now_windows
+        accounts = self.accounts(state)
+        if accounts and self.account not in accounts:
+            # Slurm's default account, else (Frontier has none) the project with the most allocation left
+            left = {a.project: a.remaining or 0 for a in state.allocations or []}
+            default = state.access.default_account
+            self.account = default if default in accounts else max(accounts, key=lambda a: left.get(a, -1))
+        nodes, seconds = self.request()
+        head = Text()
+        head.append("project ", style=MUTED)
+        head.append(self.account or "…", style=f"bold {PINK}")
+        head.append("  (a: next)  ", style=MUTED)
+        head.append(f"{nodes:,} nodes × {human_dur(seconds)}", style="bold")
+        head.append("   t or enter in a field: ask Slurm (sbatch --test-only, nothing is submitted)",
+                    style=MUTED)
+        if self.busy:
+            head.append("  asking…", style=CYAN)
+        self.query_one("#ln-acct", TextPane).update(head)
+
+        layout = state.layout or {}
+        acc = state.access
+        windows = start_now_windows(state.twin.plan, layout, sizes=(nodes,)) \
+            if state.twin is not None and state.twin.plan is not None else {}
+        idle = {}
+        for name, part in layout.items():
+            idle[name] = sum(1 for n in part.nodes
+                             if (state.node_states or {}).get(n, "").rstrip("*$~#!%@^-+").lower() == "idle")
+        rows, keys = [], []
+        for name, part in sorted(layout.items(), key=lambda kv: (not (acc and acc.ok(kv[0], self.account)), kv[0])):
+            ok = acc.ok(name, self.account) if acc is not None else None
+            you = Text("…", style=SLATE) if ok is None else (Text("✓ yes", style=f"bold {GREEN}") if ok
+                                                             else Text("✗ no", style=f"bold {RED}"))
+            limits = []
+            if part.max_nodes:
+                limits.append(f"≤{part.max_nodes:,} n")
+            if part.max_wall:
+                limits.append(f"≤{human_dur(part.max_wall)}")
+            w = dict(windows.get(name, [])).get(nodes, "?")
+            if part.max_nodes and nodes > part.max_nodes:
+                at_once = Text(f"over the {part.max_nodes}-node limit", style=RED)
+            elif w == "?":
+                at_once = Text("…", style=SLATE)
+            elif w is None:
+                at_once = Text("no: not enough free nodes", style=AMBER)
+            elif w >= seconds:
+                up_to = human_dur(w) if w != float("inf") else "any time"
+                at_once = Text(f"yes · up to {up_to}", style=f"bold {GREEN}")
+            else:
+                at_once = Text(f"only if ≤ {human_dur(w)}", style=AMBER)
+            slurm = twin = Text("—", style=SLATE)
+            got = self.checked.get((self.account, name, nodes, seconds))
+            if got is not None:
+                res, tstart = got
+                now = datetime.now()
+                if res.ok:
+                    when = rel_time(res.start, now) if res.start and res.start > now else "now"
+                    slurm = Text(when, style=f"bold {CYAN}")
+                else:
+                    slurm = Text(_short(res.message) or "rejected", style=RED)
+                if tstart is not None:
+                    twin = Text(rel_time(tstart, now) if tstart > now + timedelta(minutes=1) else "now",
+                                style=f"bold {CYAN}")
+            elif ok is False:
+                slurm = Text(_short(acc.reason(name)) or "rejected", style=RED)
+            cmd = sbatch_line(self.account or "<project>", name, nodes, min(seconds, part.max_wall or seconds),
+                              qos_for(part)) if ok else ""
+            rows.append((Text(name, style="bold"), you, part.job_qos or "normal", " ".join(limits) or "—",
+                         Text(f"{idle[name]:,}/{len(part.nodes):,}", justify="right"), at_once, slurm, twin,
+                         Text(cmd, style=MUTED)))
+            keys.append(name)
+        table = self.query_one("#ln-table", DataTable)
+        sync_table(table, keys, rows)
+        table.border_subtitle = "enter: put the sbatch line in the Shell tab · ✗ = Slurm rejects this project there"
+
+        if state.twin is not None and state.twin.plan is not None and layout:
+            sizes = (1, 8, 32, 128, 512, 1024, 2048, 4096)
+            allw = start_now_windows(state.twin.plan, layout, sizes=sizes)
+            t = Text(f"{'':<13}" + "".join(f"{n:>8,}" for n in sizes) + "\n", style=MUTED)
+            for name in keys:
+                if acc is not None and not acc.ok(name, self.account):
+                    continue
+                t.append(f"{name:<13}", style="bold")
+                for n, w in allw.get(name, []):
+                    if w is None:
+                        t.append(f"{'—':>8}", style=SLATE)
+                    else:
+                        t.append(f"{'any' if w == float('inf') else human_dur(w):>8}", style=f"bold {GREEN}")
+                t.append("\n")
+            t.append("from the RAPS twin's plan at time limits, which is how Slurm backfills: a job this size\n"
+                     "with at most this time limit fits in nodes nobody is planned to use yet.", style="#64748b")
+            self.query_one("#ln-now", TextPane).update(t)
+
+        if acc is not None:
+            t = Text(f"checked {rel_time(acc.checked)} with a 1-node test job\n", style=MUTED)
+            for name in sorted({p for _, p in acc.results}):
+                t.append(f"{name:<13}", style="bold")
+                for a in accounts:
+                    r = acc.results.get((a, name))
+                    if r is not None:
+                        t.append(f" {a} ", style=f"bold {PINK}" if a == self.account else MUTED)
+                        t.append("✓" if r.ok else "✗", style=GREEN if r.ok else RED)
+                t.append("\n")
+            for name in sorted({p for _, p in acc.results}):
+                if not acc.ok(name):
+                    t.append(f"\n{name}: ", style=f"bold {RED}")
+                    t.append(acc.reason(name)[:200], style=MUTED)
+            self.query_one("#ln-access", TextPane).update(t)
+
+    # -- actions -------------------------------------------------------------------------------
+    def action_next_account(self):
+        accounts = self.accounts(self.state) if self.state else []
+        if accounts:
+            self.account = accounts[(accounts.index(self.account) + 1) % len(accounts)] \
+                if self.account in accounts else accounts[0]
+            self.render_state(self.state)
+
+    @on(Input.Changed, "#ln-nodes, #ln-time")
+    def _changed(self, event):
+        if self.state is not None:
+            self.render_state(self.state)
+
+    @on(Input.Submitted, "#ln-nodes, #ln-time")
+    def _submitted(self, event):
+        self.action_test()
+
+    def action_test(self):
+        state = self.state
+        if state is None or state.access is None or self.busy:
+            return
+        nodes, seconds = self.request()
+        account = self.account
+        parts = [name for name, part in (state.layout or {}).items() if state.access.ok(name, account)]
+        slurm = self.app.poller.slurm
+        partition_nodes = self.app.poller.twin.partition_nodes if self.app.poller.twin else None
+        self.busy = True
+        self.render_state(state)
+
+        def work():
+            from raps.live.launch import qos_for, what_if
+            for name in parts:
+                part = state.layout[name]
+                secs = min(seconds, part.max_wall or seconds)
+                res = slurm.test_only(account, name, nodes, secs, qos=qos_for(part))
+                tstart = what_if(state, partition_nodes, name, account, nodes, secs) \
+                    if partition_nodes and res.ok else None
+                self.checked[(account, name, nodes, seconds)] = (res, tstart)
+            self.app.call_from_thread(self._done)
+        threading.Thread(target=work, daemon=True, name="raps-live-launch").start()
+
+    def _done(self):
+        self.busy = False
+        if self.state is not None:
+            self.render_state(self.state)
+
+    @on(DataTable.RowSelected, "#ln-table")
+    def _picked(self, event):
+        cmd = str(self.query_one("#ln-table", DataTable).get_row(event.row_key)[-1])
+        if not cmd:
+            self.app.notify("no access to that partition with this project", severity="warning")
+            return
+        self.app.open_shell_with(cmd)
+
+
 VIEWS = [("overview", "Overview", Overview), ("myjobs", "My Jobs", MyJobs), ("queue", "Queue", Queue),
-         ("nodes", "Nodes", Nodes), ("system", "System", System), ("shell", "Shell", Shell)]
+         ("nodes", "Nodes", Nodes), ("system", "System", System), ("shell", "Shell", Shell),
+         ("launch", "Launch", Launch)]
 

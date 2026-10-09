@@ -14,7 +14,7 @@ from raps.live.widgets import CYAN, VIOLET, gradient, state_text
 
 HELP = """\
 [b]Views[/b]
-  1-6 / F1-F6   Overview · My Jobs · Queue · Nodes · System · Shell
+  1-7 / F1-F7   Overview · My Jobs · Queue · Nodes · System · Shell · Launch
   tab / S-tab   next / previous view
   r             refresh everything now
   ?             this help        q   quit
@@ -27,7 +27,11 @@ HELP = """\
           click or enter opens the node's job. In tmux, hover and click need
           `set -g mouse on`.   hover a node · click for its job
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
-          esc leaves the prompt (then 1-5 switch tabs; F1-F6 always do)
+          esc leaves the prompt (then digits switch tabs; F1-F7 always do)
+[b]Launch[/b]    where and when could my job run? Type nodes and time, a: next project,
+          t / enter: ask Slurm (sbatch --test-only, nothing is submitted) and the twin;
+          enter on a row puts its sbatch line in the Shell tab. "you ✓/✗" is what Slurm
+          says for each project (some partitions, e.g. g1, are for member projects only).
 
 [b]Forecast[/b]  runtime and W/node from the last 5 finished runs of the same job (●, same user
           and job name), else the same user (◐), else the same project (○). Pending jobs show

@@ -21,7 +21,7 @@ later (dependencies, holds), per-user limits, future reservations, and the batch
 import heapq
 import itertools
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from raps.job import Job, job_dict
@@ -80,6 +80,9 @@ class TwinResult:
     ends: dict = field(default_factory=dict)       # job id -> forecast end (running and pending)
     timeline: list = field(default_factory=list)   # (seconds from now, busy nodes, waiting jobs, node watts)
     power_now: float | None = None                 # measured node watts at the start
+    pool_of_partition: dict = field(default_factory=dict)   # partition -> pool index
+    pool_free: list = field(default_factory=list)           # per pool: [(seconds from now, free nodes)]
+    plan: object | None = None                     # the same queue run at time limits (how Slurm plans)
     usable: int = 0
     simulated: int = 0                             # pending jobs put through the scheduler
     seconds: float = 0.0                           # wall time the simulation took
@@ -117,6 +120,8 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     res = TwinResult(at=now)
     pools = build_pools(partition_nodes)
     pool_of_part = {p: i for i, pool in enumerate(pools) for p in pool.partitions}
+    res.pool_of_partition = pool_of_part
+    res.pool_free = [[] for _ in pools]
     pool_of_node = {n: i for i, pool in enumerate(pools) for n in pool.nodes}
     node_states = state.node_states or {}
     watts = state.node_power or {}
@@ -210,6 +215,8 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     def sample(t):
         busy = sum(len(rm.nodes) - len(rm.down_nodes) - len(rm.available_nodes) for rm, *_ in pools_state)
         free = sum(len(rm.available_nodes) for rm, *_ in pools_state)
+        for i, (rm, *_) in enumerate(pools_state):
+            res.pool_free[i].append((t, len(rm.available_nodes)))
         power = fixed_w + run_w[0] + free * idle_w if has_power else None
         res.timeline.append((t, busy, sum(len(q) for *_, q in pools_state), power))
 
@@ -237,6 +244,11 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     return res
 
 
+class NoRuntimeForecast:
+    def predict(self, job):
+        return None
+
+
 class Twin:
     """What the poller calls: fetches the partition layout once, then simulates on each refresh."""
 
@@ -252,4 +264,8 @@ class Twin:
             return None
         if self.partition_nodes is None:
             self.partition_nodes = self.slurm.partition_nodes()
-        return simulate(state, self.partition_nodes, self.horizon)
+        res = simulate(state, self.partition_nodes, self.horizon)
+        # the plan at time limits, which is what Slurm's backfill sees (Launch tab: "start right now")
+        res.plan = simulate(replace(state, forecast=NoRuntimeForecast()), self.partition_nodes, self.horizon,
+                            now=res.at)
+        return res

@@ -31,6 +31,8 @@ SOURCES = {
     "allocations": ("allocations", "allocations", 600),
     "reservations": ("reservations", "reservations", 300),
     "model": ("power_model", None, 10 ** 9),  # once: RAPS node power limits (Poller.system)
+    "layout": ("layout", "layout", 3600),     # partitions, their nodes and limits
+    "access": ("access", None, 3600),         # sbatch --test-only per project x partition (Launch tab)
     "forecast": ("forecast", None, 600),  # Poller.forecaster.refresh; late, as the first pull is slow
     "twin": ("twin", None, 120),          # Poller.twin.refresh: RAPS start-time forecast from the above
 }
@@ -114,7 +116,7 @@ class Trend:
 
 class Poller:
     def __init__(self, slurm: Slurm | None = None, trend: Trend | None = None, scale=1.0,
-                 forecaster: Forecaster | None = None, twin=False, system=None):
+                 forecaster: Forecaster | None = None, twin=False, system=None, access=False):
         self.slurm = slurm or Slurm()
         self.forecaster = forecaster  # None: no runtime forecasts
         self.trend = trend if trend is not None else Trend(cache_dir() / "trend.jsonl")
@@ -127,7 +129,8 @@ class Poller:
         self._stop = threading.Event()
         self.twin = Twin(self.slurm, lambda: self.state) if twin else None
         self.system = system  # RAPS system config for the node power model, e.g. "frontier"
-        off = {"forecast": forecaster is None, "twin": self.twin is None, "model": system is None}
+        off = {"forecast": forecaster is None, "twin": self.twin is None, "model": system is None,
+               "access": not access}
         self.sources = {k: v for k, v in SOURCES.items() if not off.get(k)}
         self._due = {name: 0.0 for name in self.sources}
         self._thread = None
@@ -156,6 +159,11 @@ class Poller:
             self.state = replace(self.state, **changes)
             self._latest = self.state
 
+    def _check_access(self):
+        from raps.live.launch import check_access
+        layout = self.state.layout or self.slurm.layout()
+        return check_access(self.slurm, layout, self.slurm.accounts(), self.slurm.default_account())
+
     def _loop(self):
         if not self.state.cluster:
             self._publish(cluster=self.slurm.cluster_name())
@@ -172,6 +180,8 @@ class Poller:
                     if name == "model":
                         from raps.live import power_model
                         fetch = lambda: power_model.load(self.system)  # noqa: E731
+                    elif name == "access":
+                        fetch = self._check_access
                     else:
                         fetch = {"forecast": self.forecaster, "twin": self.twin}.get(name)
                         fetch = fetch.refresh if fetch is not None else getattr(self.slurm, method)

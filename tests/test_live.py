@@ -216,6 +216,42 @@ def test_twin_power_forecast():
     assert simulate(st, pn, now=now).power_at(0) is None
 
 
+PARTITIONS = "\n".join([
+    "PartitionName=batch AllowQos=ALL Default=YES QoS=N/A DefaultTime=01:00:00 MaxTime=7-00:00:00 "
+    "Nodes=frontier[00001-00003,00130-00132] State=UP TotalNodes=6",
+    "PartitionName=g1 AllowQos=ALL Default=NO QoS=g1 DefaultTime=01:00:00 MaxTime=2-00:00:00 "
+    "Nodes=frontier00200 State=UP",
+])
+G1_REJECT = """sbatch: error: 1 ERROR FOUND:
+sbatch: error:
+sbatch: error: You are not a member of partition g1. Please specify a valid partition with the -p flag. Valid partitions are:
+sbatch: error:     batch
+sbatch: error:
+sbatch: error: Job not submitted, please update and resubmit batch job.
+allocation failure: Unspecified error"""
+
+
+def test_launch_parsing_and_windows():
+    from raps.live import launch
+    lay = launch.parse_partitions(PARTITIONS, launch.parse_qos_limits("g1|node=16|||\ndevelop||02:00:00|node=30|1"))
+    assert lay["batch"].max_wall == 7 * 86400 and lay["batch"].job_qos is None and len(lay["batch"].nodes) == 6
+    assert lay["g1"].job_qos == "g1" and lay["g1"].max_nodes == 16 and lay["g1"].max_wall == 2 * 86400
+    r = launch.parse_test_only("stf053", "g1", None, 1, G1_REJECT)
+    assert not r.ok and r.message.startswith("You are not a member of partition g1") and "Unspecified" not in r.message
+    r = launch.parse_test_only("stf053", "batch", None, 0, "sbatch: Job 5 to start at 2026-10-09T18:40:42 a using x")
+    assert r.ok and r.start == datetime(2026, 10, 9, 18, 40, 42)
+    assert launch.parse_walltime("90") == 5400 and launch.parse_walltime("2h") == 7200
+    assert launch.parse_walltime("1:30:00") == 5400
+    assert (launch.sbatch_line("stf053", "service", 2, 5400, "develop")
+            == "sbatch -A stf053 -p service -q develop -N 2 -t 01:30:00 ")
+
+    class Plan:  # batch pool: 4 free now, 2 free from +1 h (a planned job), all 6 free from +3 h
+        pool_of_partition = {"batch": 0}
+        pool_free = [[(0, 4), (3600, 2), (10800, 6)]]
+    w = dict(launch.start_now_windows(Plan, lay, sizes=(1, 2, 3, 6))["batch"])
+    assert w == {1: 7 * 86400, 2: 7 * 86400, 3: 3600, 6: None}
+
+
 class FakeSlurm(Slurm):
     def __init__(self):
         super().__init__(user="me")
@@ -245,6 +281,23 @@ class FakeSlurm(Slurm):
         return parse_node_power("\n".join(f"NodeName={n} Arch=x86_64 CurrentWatts={1500 if s == 'allocated' else 500} "
                                           "AveWatts=400" for n, s in parse_sinfo_nodes(NODES).items()))
 
+    def layout(self):
+        from raps.live.launch import parse_partitions, parse_qos_limits
+        return parse_partitions(PARTITIONS, parse_qos_limits("g1|node=16|||\nnormal||||"))
+
+    def accounts(self):
+        return {"abc123": ["normal"], "xyz": ["normal"]}
+
+    def default_account(self):
+        return "xyz"
+
+    def test_only(self, account, partition, nodes=1, seconds=600, qos=None):
+        from raps.live.launch import parse_test_only
+        if partition == "g1":
+            return parse_test_only(account, partition, qos, 1, G1_REJECT)
+        return parse_test_only(account, partition, qos, 0, "sbatch: Job 77 to start at 2026-10-09T18:40:42 a using "
+                               "56 processors on nodes frontier00003 in partition batch")
+
     def partition_nodes(self):
         return {"batch": expand_hostlist("frontier[00001-00003,00130-00132]")}
 
@@ -260,13 +313,13 @@ def test_app_pilot():
     pytest.importorskip("textual")
     from raps.live.app import LiveApp
     from raps.live.poller import Poller, Trend
-    from raps.live.views import MyJobs, Nodes, Queue
+    from raps.live.views import Launch, MyJobs, Nodes, Queue
     from textual.widgets import DataTable
 
     async def run():
         from raps.live.forecast import Forecaster
         fc = Forecaster(days=30, fetch=lambda since: parse_runs(RUNS))
-        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None), forecaster=fc, twin=True))
+        app = LiveApp(Poller(FakeSlurm(), trend=Trend(None), forecaster=fc, twin=True, access=True))
         async with app.run_test(size=(160, 48)) as pilot:
             for _ in range(40):
                 await pilot.pause(0.1)
@@ -307,6 +360,30 @@ def test_app_pilot():
             await pilot.press("tab")
             await pilot.pause(0.2)
             assert app.query_one("TabbedContent").active == "myjobs"
+            # Launch: access from --test-only, Slurm/twin estimates, enter -> sbatch line in the Shell
+            for _ in range(30):
+                if app.poller.latest().access is not None:
+                    break
+                await pilot.pause(0.1)
+            await pilot.press("f7")
+            await pilot.pause(0.3)
+            lt = app.query_one(Launch).query_one("#ln-table", DataTable)
+            rows = {str(lt.get_row_at(i)[0]): lt.get_row_at(i) for i in range(lt.row_count)}
+            assert "✓" in str(rows["batch"][1]) and "✗" in str(rows["g1"][1])
+            assert "not a member" in str(rows["g1"][6])
+            await pilot.press("t")
+            for _ in range(30):
+                await pilot.pause(0.1)
+                if not app.query_one(Launch).busy:
+                    break
+            rows = {str(lt.get_row_at(i)[0]): lt.get_row_at(i) for i in range(lt.row_count)}
+            assert str(rows["batch"][6]) != "—"  # Slurm's estimate is in
+            lt.move_cursor(row=[str(lt.get_row_at(i)[0]) for i in range(lt.row_count)].index("batch"))
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            assert app.query_one("TabbedContent").active == "shell"
+            assert app.query_one("#sh-input").value.startswith("sbatch -A xyz -p batch -N 1 -t 01:00:00")
+            await pilot.press("escape")
             for key in "123456":
                 await pilot.press(key)
                 await pilot.pause(0.1)

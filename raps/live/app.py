@@ -156,6 +156,16 @@ class LiveApp(App):
     def action_prev_tab(self):
         self._step_tab(-1)
 
+    def open_shell_with(self, cmd):
+        """Switch to the Shell tab with `cmd` typed at the prompt, ready to edit and run."""
+        from textual.widgets import Input
+        self.query_one(TabbedContent).active = "shell"
+        inp = self.query_one("#sh-input", Input)
+        inp.value = cmd
+        inp.cursor_position = len(cmd)
+        inp.focus()
+        self.notify("add your batch script (or --wrap \"...\") and press enter", timeout=6)
+
     def action_color_mode(self):
         """`c` on a tab with a node map (Overview, Nodes), whatever has focus; My Jobs keeps c = cancel."""
         view = self.query_one(TabbedContent).active_pane.query_children().first()
@@ -208,6 +218,6 @@ def run(args):
     from raps.live.slurm import Slurm
     forecaster = Forecaster(days=args.forecast_days) if args.forecast_days > 0 else None
     poller = Poller(Slurm(user=args.user, history_days=args.history_days), scale=args.slow, forecaster=forecaster,
-                    twin=not args.no_twin, system=args.system or None)
+                    twin=not args.no_twin, system=args.system or None, access=True)
     LiveApp(poller, start_tab=args.tab).run()
 

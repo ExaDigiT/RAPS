@@ -211,6 +211,8 @@ class ClusterState:
     power_model: object | None = None         # raps.live.power_model.NodePowerModel
     forecast: object | None = None    # raps.live.forecast.HistoryRule
     twin: object | None = None        # raps.live.twin.TwinResult
+    layout: dict | None = None        # partition -> raps.live.launch.PartitionInfo
+    access: object | None = None      # raps.live.launch.Access
     updated: dict[str, datetime] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
 
@@ -452,6 +454,26 @@ class Slurm:
 
     def node_power(self):
         return parse_node_power(run(["scontrol", "show", "node", "-o"], timeout=60))
+
+    def layout(self):
+        """{partition: PartitionInfo} with node lists and the partition QOS's per-user limits."""
+        from raps.live.launch import parse_partitions, parse_qos_limits
+        qos = parse_qos_limits(run(["sacctmgr", "-n", "-P", "show", "qos", "format=Name,MaxTRESPU,MaxWall,GrpTRES"]))
+        return parse_partitions(run(["scontrol", "show", "partition", "-o"]), qos)
+
+    def accounts(self):
+        """{project: [QOS]} this user may charge."""
+        from raps.live.launch import parse_accounts
+        return parse_accounts(run(["sacctmgr", "-n", "-P", "show", "assoc", f"user={self.user}",
+                                   "format=Account,QOS"]))
+
+    def default_account(self):
+        out = run(["sacctmgr", "-n", "-P", "show", "user", self.user, "format=DefaultAccount"]).strip()
+        return (out.splitlines()[0] if out else "") or None  # empty on Frontier: -A is always required
+
+    def test_only(self, account, partition, nodes=1, seconds=600, qos=None):
+        from raps.live import launch
+        return launch.test_only(account, partition, nodes, seconds, qos)
 
     def partition_nodes(self):
         return parse_partition_nodes(run(["scontrol", "show", "partition", "-o"]))

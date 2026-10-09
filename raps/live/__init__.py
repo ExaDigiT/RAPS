@@ -18,7 +18,8 @@ def live_add_parser(subparsers):
     """)
     parser.add_argument("--user", help="Whose jobs are 'my jobs' (default: $USER)")
     parser.add_argument("--tab", default="overview",
-                        choices=["overview", "myjobs", "queue", "nodes", "system", "shell"], help="Tab to open on")
+                        choices=["overview", "myjobs", "queue", "nodes", "system", "shell", "launch"],
+                        help="Tab to open on")
     parser.add_argument("--history-days", type=int, default=7, help="Days of sacct history in My Jobs")
     parser.add_argument("--forecast-days", type=int, default=30, metavar="D",
                         help="Days of every user's finished jobs (sacct -a) behind the runtime forecasts; "
