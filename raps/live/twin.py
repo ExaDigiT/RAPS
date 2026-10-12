@@ -194,7 +194,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None, placement="first
         down_set = set(down)
         res.pool_nodes.append([n for k, n in enumerate(pool.nodes) if k not in down_set])
         run_list = []
-        for j, _ in running[i]:
+        for j, nodes in running[i]:
             start = (j.start - now).total_seconds() if j.start else -j.elapsed
             p = state.predict(j)
             # a job that has outrun its forecast is assumed to run to its limit

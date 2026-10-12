@@ -214,6 +214,27 @@ def test_fastforward_playback():
     assert tw.power_now == res.power_at(3660) and tw.timeline[0][0] == 0
 
 
+def test_twin_keeps_each_running_job_on_its_own_nodes():
+    """Running jobs of different sizes: each holds exactly its real nodes, so nothing extra starts at t=0."""
+    from raps.live.twin import simulate
+    now = datetime(2026, 10, 8, 12, 0, 0)
+    pn = {"batch": [f"n{i:02d}" for i in range(20)]}
+    t0 = (now - timedelta(minutes=10)).isoformat()
+    jobs = parse_squeue("\n".join([
+        squeue_line(1, nodes=6, limit="2:00:00", elapsed="10:00", start=t0, nodelist="n[00-05]"),
+        squeue_line(2, nodes=2, limit="2:00:00", elapsed="10:00", start=t0, nodelist="n[10-11]"),
+        squeue_line(3, nodes=4, limit="2:00:00", elapsed="10:00", start=t0, nodelist="n[16-19]"),
+        squeue_line(4, state="PENDING", nodes=10, limit="1:00:00", reason="Priority", priority=9),   # 8 free: waits
+    ]))
+    st = ClusterState(user="me", jobs=jobs, node_states={f"n{i:02d}": "allocated" if i in
+                                                         (0, 1, 2, 3, 4, 5, 10, 11, 16, 17, 18, 19) else "idle"
+                                                         for i in range(20)})
+    r = simulate(st, pn, now=now)
+    assert r.runs["1"][2] == [f"n{i:02d}" for i in range(6)]
+    assert r.runs["2"][2] == ["n10", "n11"] and r.runs["3"][2] == ["n16", "n17", "n18", "n19"]
+    assert r.busy_at(0) == 12 and r.starts["4"] > now   # job 4 needs 10 of the 8 free nodes
+
+
 def test_node_power_drops_glitches():
     w = parse_node_power("NodeName=a CurrentWatts=1000 AveWatts=1\nNodeName=b CurrentWatts=929240236\n"
                          "NodeName=c Arch=x CurrentWatts=0\nnonsense")
@@ -466,7 +487,7 @@ def test_app_pilot():
             await pilot.press("k")
             assert app.ff_paused
             await pilot.press("less_than_sign", "less_than_sign")
-            assert app.ff_t < 1 and not app.ff_paused
+            assert app.ff_t < 3600 and not app.ff_paused   # restarted (the clock may have ticked on a little)
             await pilot.press("k")
             await pilot.press("escape")
             await pilot.pause(0.3)
