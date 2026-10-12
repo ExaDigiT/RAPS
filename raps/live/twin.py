@@ -86,6 +86,11 @@ class TwinResult:
     usable: int = 0
     simulated: int = 0                             # pending jobs put through the scheduler
     seconds: float = 0.0                           # wall time the simulation took
+    runs: dict = field(default_factory=dict)       # job id -> (start s, end s from now, node names), for fast-forward
+    job_w: dict = field(default_factory=dict)      # job id -> watts per node while it runs
+    idle_w: float = 480.0                          # watts of a free node
+    pool_nodes: list = field(default_factory=list)  # per pool: node names that are usable (not down)
+    has_power: bool = False
 
     def _at(self, t, k):
         """Column k of the timeline t seconds from now (a step function)."""
@@ -95,6 +100,10 @@ class TwinResult:
                 break
             v = row[k]
         return v
+
+    def _row_at(self, t):
+        """The (busy, waiting, watts) values in force t seconds from now."""
+        return tuple(self._at(t, k) for k in (1, 2, 3))
 
     def busy_at(self, t):
         return self._at(t, 1) or 0
@@ -126,6 +135,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     node_states = state.node_states or {}
     watts = state.node_power or {}
     has_power = bool(watts)
+    res.has_power = has_power
 
     running = [[] for _ in pools]
     queued = [[] for _ in pools]
@@ -168,6 +178,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
     pending_ids = {}
     pools_state = []
     for i, pool in enumerate(pools):
+        node_pos = {n: k for k, n in enumerate(pool.nodes)}
         busy_names = {n for _, nodes in running[i] for n in nodes}
         down = [k for k, n in enumerate(pool.nodes)
                 if n not in busy_names and base_state(node_states.get(n, "down")) not in USABLE]
@@ -175,6 +186,8 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
         rm = FastNodeManager(len(pool.nodes), down)
         sched = Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
         res.usable += len(rm.available_nodes)
+        down_set = set(down)
+        res.pool_nodes.append([n for k, n in enumerate(pool.nodes) if k not in down_set])
         run_list = []
         for j, _ in running[i]:
             start = (j.start - now).total_seconds() if j.start else -j.elapsed
@@ -182,10 +195,15 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             # a job that has outrun its forecast is assumed to run to its limit
             runtime = p.runtime if p is not None and p.runtime > j.elapsed else j.limit
             rj = raps_job(j.id, j.nodes, j.limit, max(runtime, j.elapsed + 1))
+            idx = [node_pos[n] for n in nodes if n in node_pos]
+            replay = len(idx) == len(nodes)   # keep the job on its real nodes, so new jobs get free ones
+            if replay:
+                rj.scheduled_nodes = idx
             try:
-                rm.assign_nodes_to_job(rj, start, PolicyType.PRIORITY)
+                rm.assign_nodes_to_job(rj, start, PolicyType.REPLAY if replay else PolicyType.PRIORITY)
             except ValueError:  # squeue and sinfo disagree for a moment; skip the job
                 continue
+            res.runs[j.id] = (start, rj.end_time, [pool.nodes[k] for k in rj.scheduled_nodes])
             run_list.append(rj)
             run_w[0] += rj.nodes_required * job_w[j.id]
             res.ends[j.id] = now + timedelta(seconds=rj.end_time)
@@ -209,6 +227,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
             for rj in run_list[before:]:
                 run_w[0] += rj.nodes_required * job_w[rj.id]
                 res.starts[rj.id] = now + timedelta(seconds=t)
+                res.runs[rj.id] = (t, rj.end_time, [pools[i].nodes[k] for k in rj.scheduled_nodes])
                 res.ends[rj.id] = now + timedelta(seconds=rj.end_time)
                 heapq.heappush(events, (rj.end_time, next(seq), i, rj))
 
@@ -238,6 +257,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
         schedule_all(t)
         sample(t)
     res.power_now = state.power
+    res.job_w, res.idle_w = job_w, idle_w
     for jid in pending_ids:
         res.starts.setdefault(jid, None)
     res.seconds = time.perf_counter() - t_wall

@@ -6,15 +6,18 @@ thread (see ``poller.py``); the UI only renders the latest published ``ClusterSt
 """
 import subprocess
 import threading
+import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.actions import SkipAction
 from textual.binding import Binding
 from textual.theme import Theme
 from textual.widgets import Footer, TabbedContent, TabPane
 
+from raps.live.fastforward import MAX_SPAN, DEFAULT_SPEED, SPEEDS, Playback, fmt_offset, fmt_speed
 from raps.live.poller import Poller
 from raps.live.screens import ConfirmScreen, HelpScreen, JobDetailScreen
 from raps.live.widgets import AMBER, CYAN, GREEN, PINK, RED, VIOLET, gradient, human_num, rel_time
@@ -37,6 +40,7 @@ class LiveApp(App):
     CSS = """
     Screen { background: $background; }
     #topbar { height: 1; background: #0f1a2b; padding: 0 1; }
+    #ffbar { height: 1; display: none; background: #2e1065; }
     #statusbar { height: 1; padding: 0 1; background: #0f1a2b; }
     TabbedContent { height: 1fr; }
     TabbedContent ContentSwitcher { height: 1fr; }
@@ -53,6 +57,13 @@ class LiveApp(App):
         Binding("shift+tab", "prev_tab", "Prev", show=False, priority=True),
         Binding("c", "color_mode", "Map colors", show=False),
         Binding("x", "forecast_run", "24 h run", show=False),
+        Binding("f", "ff_key", "Fast-forward (ff)", show=False),
+        Binding("l,plus,equals_sign", "ff_speed(1)", "Faster", show=False),   # the keys of `raps run`
+        Binding("j,minus,underscore", "ff_speed(-1)", "Slower", show=False),
+        Binding("k,space", "ff_pause", "Pause", show=False),
+        Binding("0", "ff_reset_speed", "Reset speed", show=False),
+        Binding("less_than_sign", "ff_restart_key", "Restart (<<)", show=False),
+        Binding("escape", "ff_stop", "Back to live", show=False),
     ] + [Binding(str(i + 1), f"tab({i})", title, show=False) for i, (_, title, _) in enumerate(VIEWS)] \
       + [Binding(f"f{i + 1}", f"tab({i})", title, show=False, priority=True) for i, (_, title, _) in enumerate(VIEWS)]
 
@@ -62,9 +73,18 @@ class LiveApp(App):
         self.start_tab = start_tab
         self._applied = None
         self._tick = 0
+        self.ff = None            # Playback while fast-forwarding, else None
+        self.ff_t = 0.0           # simulated seconds from now
+        self.ff_speed = DEFAULT_SPEED
+        self.ff_paused = False
+        self._ff_lt = 0.0         # monotonic time of the last `<`
+        self._ff_busy = False     # the simulation is running
+        self._ff_last = 0.0       # monotonic time of the last `f` and of the last ff frame
+        self._ff_frame = 0.0
 
     def compose(self) -> ComposeResult:
         yield TextPane("", id="topbar")
+        yield TextPane("", id="ffbar")
         with TabbedContent(initial=self.start_tab, id="tabs"):
             for i, (key, title, cls) in enumerate(VIEWS):
                 with TabPane(f"{i + 1} {title}", id=key):
@@ -78,12 +98,15 @@ class LiveApp(App):
         self.poller.start()
         self.set_interval(0.25, self._poll)
         self.set_interval(1.0, self._render_bars)
+        self.set_interval(0.5, self._ff_step)
 
     def on_unmount(self):
         self.poller.stop()
 
     # -- state flow ---------------------------------------------------------------------------
     def _poll(self):
+        if self.ff is not None:
+            return
         state = self.poller.latest()
         if state is not self._applied:
             self._applied = state
@@ -109,15 +132,25 @@ class LiveApp(App):
         self._tick += 1
         state = self._applied
         width = self.size.width - 2
-        left = gradient(f"◆ {(state.cluster if state and state.cluster else self.poller.system or 'frontier').upper()}", CYAN, VIOLET) + Text("  live", style=f"bold {PINK}")
+        left = gradient(f"◆ {(state.cluster if state and state.cluster else self.poller.system or 'frontier').upper()}", CYAN, VIOLET)
+        if self.ff is not None:
+            left.append("  ")
+            left.append(" ⏩ FORECAST ", style="bold #ffffff on #7c3aed")
+        else:
+            left.append("  ")
+            left.append(" ● LIVE ", style=f"bold #0b0f17 on {GREEN}")
         left.append("  ·  exadigit", style="#64748b")
         right = Text()
         if state is not None:
             right.append(f"{state.user}", style=f"bold {PINK}")
             right.append(f"@{state.cluster or 'frontier'}", style="#94a3b8")
-        right.append(f"   {datetime.now():%a %b %d  %H:%M:%S}", style="bold #e2e8f0")
+        shown = datetime.now() + timedelta(seconds=self.ff_t) if self.ff is not None else datetime.now()
+        right.append(f"   {shown:%a %b %d  %H:%M:%S}", style="bold #ddd6fe" if self.ff is not None else "bold #e2e8f0")
         pad = max(width - left.cell_len - right.cell_len, 1)
-        self.query_one("#topbar", TextPane).update(left + Text(" " * pad) + right)
+        topbar = self.query_one("#topbar", TextPane)
+        topbar.styles.background = "#1e1b4b" if self.ff is not None else "#0f1a2b"
+        topbar.update(left + Text(" " * pad) + right)
+        self._render_ffbar(width)
 
         if self.query_one(TabbedContent).active == "shell":
             self.query_one("#statusbar", TextPane).update(self._shell_stats(state))
@@ -147,6 +180,26 @@ class LiveApp(App):
         elif self.poller.twin is None:
             t.append("   RAPS twin off", style="#475569")
         self.query_one("#statusbar", TextPane).update(t)
+
+    def _render_ffbar(self, width):
+        """The banner under the top bar while fast-forwarding: where we are on the forecast timeline."""
+        bar = self.query_one("#ffbar", TextPane)
+        bar.display = self.ff is not None
+        if self.ff is None:
+            return
+        end = max(self.ff.end, 1)
+        when = datetime.now() + timedelta(seconds=self.ff_t)
+        head = Text()
+        head.append(" ⏩ THE FUTURE, NOT LIVE ", style="bold #ffffff on #7c3aed")
+        head.append(f" {when:%a %b %d %H:%M} ", style="bold #ddd6fe")
+        head.append(f" {fmt_offset(self.ff_t)} ", style="bold #c4b5fd")
+        tail = Text()
+        tail.append(f"  {'⏸ paused' if self.ff_paused else '▶ ' + fmt_speed(SPEEDS[self.ff_speed])}", style="bold #ddd6fe")
+        tail.append(f"   of {fmt_offset(end)}   j/l speed · k pause · << restart · esc live ", style="#a5b4fc")
+        room = max(width - head.cell_len - tail.cell_len - 2, 10)
+        filled = min(int(room * self.ff_t / end), room)
+        track = Text("█" * filled, style="#a78bfa") + Text("░" * (room - filled), style="#4c1d95")
+        bar.update(head + Text(" ") + track + tail)
 
     def _shell_stats(self, state):
         """Status line for the Shell tab: what the machine is doing, instead of when each source was fetched."""
@@ -210,13 +263,122 @@ class LiveApp(App):
 
     def action_forecast_run(self):
         """`x`: write the queue as a RAPS replay (jobs.npz + experiment.yaml) and put `raps run` at the Shell prompt."""
-        state = self._applied
+        state = self.poller.latest() if self.ff is not None else self._applied   # the real queue, not the future
         if state is None or state.jobs is None:
             self.notify("waiting for the queue", severity="warning")
             return
         self.notify(f"exporting {len(state.jobs):,} jobs as a 24 h RAPS run …")
         threading.Thread(target=self._export_forecast_run, args=(state, self.poller.system or "frontier"),
                          daemon=True).start()
+
+    # -- fast-forward (`ff`) --------------------------------------------------------------------
+    def ff_key(self):
+        """An `f` outside the Queue's filter key; True when it is the second of `ff`."""
+        now = time.monotonic()
+        double = now - self._ff_last < 0.6
+        self._ff_last = 0.0 if double else now
+        if double:
+            self.start_ff()
+        return double
+
+    def action_ff_key(self):
+        focused = self.focused
+        if focused is not None and focused.id == "sh-input":
+            raise SkipAction()
+        if not self.ff_key() and self.ff is None:
+            self.notify("press f again to fast-forward", timeout=1.5)
+
+    def start_ff(self):
+        if self.ff is not None:
+            self.action_ff_stop()
+            return
+        state = self.poller.latest()
+        if state is None or state.jobs is None or state.node_states is None:
+            self.notify("waiting for the queue and nodes", severity="warning")
+            return
+        if self._ff_busy:
+            return
+        self._ff_busy = True
+        self.notify(f"simulating {len(state.jobs):,} jobs into the future …")
+        threading.Thread(target=self._ff_simulate, args=(state,), daemon=True).start()
+
+    def _ff_simulate(self, state):
+        from raps.live.twin import simulate
+        try:
+            pn = (self.poller.twin.partition_nodes if self.poller.twin is not None else None) \
+                or self.poller.slurm.partition_nodes()
+            res = simulate(state, pn, horizon=MAX_SPAN)
+        except Exception as exc:
+            self._ff_busy = False
+            self.call_from_thread(self.notify, f"fast-forward failed: {exc}", severity="error", timeout=10)
+            return
+        self.call_from_thread(self._ff_begin, Playback(state, res))
+
+    def _ff_begin(self, playback):
+        self._ff_busy = False
+        self.ff, self.ff_t, self.ff_paused = playback, 0.0, False
+        self._ff_frame = time.monotonic()
+        self.notify("fast-forward: j/l (or - / +) speed, k (or space) pause, 0 reset speed, esc back to live, ff again also leaves", timeout=6)
+        self._ff_show()
+
+    def _ff_show(self):
+        self._applied = self.ff.state_at(self.ff_t)
+        for _, _, cls in VIEWS:
+            for v in self.query(cls):
+                v.apply(self._applied, self.poller.trend)
+        self._render_bars()
+
+    def _ff_step(self):
+        if self.ff is None:
+            return
+        now = time.monotonic()
+        dt, self._ff_frame = now - self._ff_frame, now
+        if self.ff_paused:
+            return
+        self.ff_t = min(self.ff_t + dt * SPEEDS[self.ff_speed], self.ff.end)
+        if self.ff_t >= self.ff.end:
+            self.ff_paused = True
+            self.notify("fast-forward: the queue has drained", timeout=5)
+        self._ff_show()
+
+    def action_ff_speed(self, d):
+        if self.ff is not None:
+            self.ff_speed = min(max(self.ff_speed + d, 0), len(SPEEDS) - 1)
+            self._render_bars()
+
+    def action_ff_restart_key(self):
+        """`<<`: back to the start of the forecast and play it again."""
+        if self.ff is None:
+            raise SkipAction()
+        now = time.monotonic()
+        if now - self._ff_lt < 0.6:
+            self._ff_lt = 0.0
+            self.ff_t, self.ff_paused, self._ff_frame = 0.0, False, now
+            self._ff_show()
+            self.notify("fast-forward restarted", timeout=1.5)
+        else:
+            self._ff_lt = now
+            self.notify("press < again to restart from now", timeout=1.5)
+
+    def action_ff_reset_speed(self):
+        if self.ff is not None:
+            self.ff_speed = DEFAULT_SPEED
+            self._render_bars()
+
+    def action_ff_pause(self):
+        if self.ff is not None:
+            self.ff_paused = not self.ff_paused
+            if self.ff_t >= self.ff.end and not self.ff_paused:
+                self.ff_t = 0.0
+            self._render_bars()
+
+    def action_ff_stop(self):
+        if self.ff is None:
+            raise SkipAction()
+        self.ff = None
+        self._applied = None   # _poll re-applies the live state
+        self.notify("back to live", timeout=2)
+        self._poll()
 
     def _export_forecast_run(self, state, system):
         from raps.live.forecast_run import export

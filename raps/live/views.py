@@ -782,6 +782,9 @@ class Queue(LiveView):
         self.query_one("#q-filter", Input).focus()
 
     def action_clear(self):
+        if self.app.ff is not None and not self.text and not self.has_class("filtering"):
+            self.app.action_ff_stop()   # nothing to clear: esc leaves fast-forward
+            return
         inp = self.query_one("#q-filter", Input)
         inp.value = ""
         self.text = ""
@@ -801,6 +804,10 @@ class Queue(LiveView):
             self.remove_class("filtering")
 
     def action_cycle_filter(self):
+        if self.app.ff_key():   # `ff`: the first f already cycled the filter, undo that
+            self.filt = (self.filt - 1) % len(FILTERS)
+            self._rerender()
+            return
         self.filt = (self.filt + 1) % len(FILTERS)
         self._rerender()
 

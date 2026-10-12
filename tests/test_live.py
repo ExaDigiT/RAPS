@@ -182,6 +182,38 @@ def test_twin_backfill_and_forecast_ends():
     assert round((r.starts["2"] - now).total_seconds() / 60) == 60
 
 
+def test_fastforward_playback():
+    from raps.live.fastforward import Playback
+    from raps.live.twin import simulate
+    now = datetime(2026, 10, 8, 12, 0, 0)
+    pn = {"batch": [f"n{i}" for i in range(10)]}
+    t0 = (now - timedelta(minutes=30)).isoformat()
+    jobs = parse_squeue("\n".join([
+        squeue_line(1, nodes=8, limit="2:00:00", elapsed="30:00", start=t0, nodelist="n[2-9]"),
+        squeue_line(2, user="me", state="PENDING", nodes=10, limit="1:00:00", reason="Priority", priority=100),
+        squeue_line(3, user="me", state="PENDING", nodes=2, limit="1:00:00", reason="Priority", priority=50),
+    ]))
+    nodes = {f"n{i}": "allocated" if i >= 2 else "idle" for i in range(10)}
+    st = ClusterState(user="me", jobs=jobs, node_states=nodes, node_power={f"n{i}": 1000 for i in range(10)})
+    res = simulate(st, pn, now=now)
+    pb = Playback(st, res)
+    s0 = pb.state_at(0)
+    assert {j.id: j.state for j in s0.jobs} == {"1": "RUNNING", "2": "PENDING", "3": "RUNNING"}
+    assert next(j for j in s0.jobs if j.id == "3").nodelist == "n0,n1"   # the free nodes, not job 1's
+    assert next(j for j in s0.jobs if j.id == "1").elapsed == 1800
+    s1 = pb.state_at(3600 + 60)   # job 3 is done, job 1 runs to its limit at +1:30
+    assert {j.id: j.state for j in s1.jobs} == {"1": "RUNNING", "2": "PENDING"}
+    assert next(j for j in s1.jobs if j.id == "1").elapsed == 1800 + 3660
+    s2 = pb.state_at(pb.end)
+    assert [j.id for j in s2.jobs] == []   # no new submissions: everything has run and ended
+    assert set(s2.node_states.values()) == {"idle"} and pb.end >= 90 * 60 + 3600
+    assert st.jobs[1].state == "PENDING"   # the live state is untouched
+    # the twin as seen from +1:01: the clock restarts there, so job 2 (starting at +1:30) is 29 min away
+    tw = pb.state_at(3660).twin
+    assert round((tw.starts["2"] - datetime.now()).total_seconds() / 60) == 29 and tw.busy_at(0) == 8
+    assert tw.power_now == res.power_at(3660) and tw.timeline[0][0] == 0
+
+
 def test_node_power_drops_glitches():
     w = parse_node_power("NodeName=a CurrentWatts=1000 AveWatts=1\nNodeName=b CurrentWatts=929240236\n"
                          "NodeName=c Arch=x CurrentWatts=0\nnonsense")
@@ -410,6 +442,36 @@ def test_app_pilot():
             await pilot.press("enter")
             await pilot.pause(0.3)
             assert type(app.screen).__name__ == "JobDetailScreen"
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            # ff on the Queue tab: the filter is left as it was, and the clock runs
+            await pilot.press("3")
+            await pilot.pause(0.2)
+            queue = app.query_one(Queue)
+            filt = queue.filt
+            await pilot.press("f", "f")
+            for _ in range(40):
+                await pilot.pause(0.1)
+                if app.ff is not None:
+                    break
+            assert app.ff is not None and queue.filt == filt
+            await pilot.pause(1.2)
+            assert app.ff_t > 0 and app.query_one("#ffbar").display and "FORECAST" in app.query_one("#topbar")._text.plain
+            await pilot.press("l")
+            assert app.ff_speed == 4
+            await pilot.press("j", "j")
+            assert app.ff_speed == 2
+            await pilot.press("0")
+            assert app.ff_speed == 3
+            await pilot.press("k")
+            assert app.ff_paused
+            await pilot.press("less_than_sign", "less_than_sign")
+            assert app.ff_t < 1 and not app.ff_paused
+            await pilot.press("k")
+            await pilot.press("escape")
+            await pilot.pause(0.3)
+            assert app.ff is None and app._applied is app.poller.latest()
+            assert not app.query_one("#ffbar").display and "LIVE" in app.query_one("#topbar")._text.plain
     asyncio.run(run())
 
 

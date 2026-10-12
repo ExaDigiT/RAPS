@@ -29,6 +29,10 @@ HELP = """\
           `set -g mouse on`.   hover a node · click for its job
 [b]24 h run[/b] x anywhere: write the queue as a RAPS replay (jobs.npz + experiment.yaml, in
           ~/raps-forecast-runs, newest as `latest`) and put `raps run <yaml> --noui` at the Shell prompt
+[b]Fast-forward[/b] ff (f twice) plays the twin's forecast of the queue on the existing tabs, jobs starting
+          and ending, nodes and power changing; j/l slower/faster, k pause, 0 reset speed, << restart from now (as in raps run; - + and space work too),
+          esc (or ff) back to live.
+          No new submissions. x still exports the real queue.
 [b]Shell[/b]     type any command; ↑/↓ history; ctrl+k kills it; `clear` clears;
           esc leaves the prompt (then digits switch tabs; F1-F7 always do)
 [b]Launch[/b]    where and when could my job run? Type nodes and time, a: next project,
