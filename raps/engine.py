@@ -343,7 +343,9 @@ class Engine:
         self.resource_manager = ResourceManager(
             total_nodes=self.config['TOTAL_NODES'],
             down_nodes=self.config['DOWN_NODES'],
-            config=self.config
+            config=self.config,
+            node_placement=sim_config.node_placement,
+            seed=sim_config.seed,
         )
         # Initialize running and queue, etc.
         self.running = []

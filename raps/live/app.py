@@ -307,7 +307,7 @@ class LiveApp(App):
         try:
             pn = (self.poller.twin.partition_nodes if self.poller.twin is not None else None) \
                 or self.poller.slurm.partition_nodes()
-            res = simulate(state, pn, horizon=MAX_SPAN)
+            res = simulate(state, pn, horizon=MAX_SPAN, placement="random")
         except Exception as exc:
             self._ff_busy = False
             self.call_from_thread(self.notify, f"fast-forward failed: {exc}", severity="error", timeout=10)

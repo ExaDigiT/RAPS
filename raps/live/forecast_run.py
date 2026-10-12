@@ -140,6 +140,7 @@ time: {hours}h
 policy: {policy}
 backfill: {backfill}
 time_delta: 15s
+# node_placement: random   # scatter jobs over the free nodes, as Slurm does on a busy machine
 # cooling: true     # needs the system's FMU
 # noui: true        # no console, just the final statistics
 """)

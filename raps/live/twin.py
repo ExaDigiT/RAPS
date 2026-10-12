@@ -122,8 +122,13 @@ def _runtime(state, job):
     return p.runtime if p is not None else job.limit
 
 
-def simulate(state, partition_nodes, horizon=HORIZON, now=None):
-    """Run the live queue in ``state`` forward through RAPS. Returns a ``TwinResult``."""
+def simulate(state, partition_nodes, horizon=HORIZON, now=None, placement="first"):
+    """
+    Run the live queue in ``state`` forward through RAPS. Returns a ``TwinResult``.
+
+    ``placement`` is the resource manager's node placement ("random" scatters new jobs over the free nodes,
+    as Slurm does on a busy machine; it changes which nodes a job gets, never when it starts).
+    """
     t_wall = time.perf_counter()
     now = now or datetime.now()
     res = TwinResult(at=now)
@@ -183,7 +188,7 @@ def simulate(state, partition_nodes, horizon=HORIZON, now=None):
         down = [k for k, n in enumerate(pool.nodes)
                 if n not in busy_names and base_state(node_states.get(n, "down")) not in USABLE]
         fixed_w += sum(watts.get(pool.nodes[k], 0) for k in down)
-        rm = FastNodeManager(len(pool.nodes), down)
+        rm = FastNodeManager(len(pool.nodes), down, node_placement=placement, seed=i)
         sched = Scheduler(config={}, policy="priority", bfpolicy="firstfit", resource_manager=rm)
         res.usable += len(rm.available_nodes)
         down_set = set(down)

@@ -1,3 +1,4 @@
+import random
 from raps.job import JobState
 from raps.policy import PolicyType
 
@@ -7,7 +8,13 @@ class ExclusiveNodeResourceManager:
     Legacy exclusive-node resource manager: allocates and frees full nodes.
     """
 
-    def __init__(self, total_nodes, down_nodes, config=None):
+    PLACEMENTS = ("first", "random")
+
+    def __init__(self, total_nodes, down_nodes, config=None, node_placement="first", seed=None):
+        if node_placement not in self.PLACEMENTS:
+            raise ValueError(f"node_placement must be one of {self.PLACEMENTS}, not {node_placement!r}")
+        self.node_placement = node_placement
+        self._rng = random.Random(seed)   # its own stream: placing jobs must not shift the workload's random numbers
         self.total_nodes = total_nodes
         self.down_nodes = set(down_nodes)
         self.config = config or {}
@@ -48,6 +55,11 @@ class ExclusiveNodeResourceManager:
         if policy == PolicyType.REPLAY and job.scheduled_nodes:
             # Telemetry replay: use the exact nodes
             self.available_nodes = [n for n in self.available_nodes if n not in job.scheduled_nodes]
+        elif self.node_placement == "random":
+            # Scattered allocation: any N of the free nodes
+            picked = set(self._rng.sample(self.available_nodes, job.nodes_required))
+            job.scheduled_nodes = sorted(picked)
+            self.available_nodes = [n for n in self.available_nodes if n not in picked]
         else:
             # Count-based allocation: take the first N free nodes
             job.scheduled_nodes = self.available_nodes[:job.nodes_required]
