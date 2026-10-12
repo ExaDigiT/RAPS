@@ -76,9 +76,14 @@ def run_sim(sim_config: SingleSimConfig):
         engine.keyboard_owner = False  # Textual owns stdin
         from raps.ui.app import RapsApp
         from raps.ui.snapshot import SnapshotBuilder
+        def new_run():   # `<<` in the console: the same simulation again, from the start
+            e = Engine(sim_config)
+            e.keyboard_owner = False
+            return e, SnapshotBuilder(e, sim_config)
         app = RapsApp(engine, SnapshotBuilder(engine, sim_config),
-                      hz=sim_config.ui_hz, cycle=sim_config.ui_cycle)
+                      hz=sim_config.ui_hz, cycle=sim_config.ui_cycle, engine_factory=new_run)
         app.run()
+        engine = app.engine   # the last run, if it was restarted
         if app.sim_error is not None:
             print(app.sim_error[1], file=sys.stderr)
             sys.exit(1)

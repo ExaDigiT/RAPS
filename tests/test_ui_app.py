@@ -237,6 +237,33 @@ def test_finishes_with_banner():
     asyncio.run(go())
 
 
+def test_double_less_than_restarts_the_run():
+    starts = []
+
+    class Short:
+        def __iter__(self):
+            starts.append(1)
+            meta = make_meta()
+            return iter([make_snapshot(meta, i) for i in range(3)])
+
+    async def go():
+        app = RapsApp(None, source=Short(), hz=20)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(0.8)
+            assert app.finished and len(starts) == 1
+            await pilot.press("less_than_sign")   # one `<` only asks for the second
+            await pilot.pause(0.1)
+            assert len(starts) == 1
+            await pilot.press("less_than_sign")
+            for _ in range(30):
+                await pilot.pause(0.1)
+                if len(starts) == 2 and app.finished:
+                    break
+            assert len(starts) == 2 and app.finished and app._run_id == 1
+            await pilot.press("q")
+    asyncio.run(go())
+
+
 def test_simulation_error_is_captured():
     def boom():
         yield make_snapshot(make_meta(), 0)

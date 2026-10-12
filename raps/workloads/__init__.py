@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from raps.utils import WorkloadData, SubParsers
+from raps.utils import WorkloadData, SubParsers, next_arrival
 from raps.utils import pydantic_add_args, create_file_indexed
 from raps.sim_config import SingleSimConfig
 from raps.telemetry import Telemetry
@@ -30,6 +30,8 @@ class BaseWorkload:
         self.args = args
 
     def generate_jobs(self):
+        if hasattr(next_arrival, 'next_time'):
+            del next_arrival.next_time   # its clock is module-global: a second Engine (`<<`) must start as the first did
         jobs = getattr(self, self.args.workload)(args=self.args)
         timestep_end = int(math.ceil(max([job.end_time for job in jobs])))
         now = pd.Timestamp.now('UTC').floor("min").to_pydatetime()

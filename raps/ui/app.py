@@ -31,6 +31,7 @@ HELP_TEXT = """\
   l / +        faster (coarser time step, then unthrottled)
   j / -        slower (finer time step, then wall-clock throttle)
   0            reset speed to where the run started
+  <<           restart the simulation from the beginning (press < twice)
 
 [b]Views[/b]
   1-6          Overview, Jobs, Node Map, Power, Cooling, Network
@@ -72,6 +73,7 @@ class RapsApp(App):
         Binding("l,plus", "faster", "Faster"),
         Binding("j,minus,underscore", "slower", "Slower"),
         Binding("0", "reset_speed", "Reset speed"),
+        Binding("less_than_sign", "restart_key", "Restart (<<)"),
         Binding("tab", "next_view", "Next view", show=False, priority=True),
         Binding("shift+tab", "prev_view", "Prev view", show=False, priority=True),
         Binding("a", "toggle_cycle", "Auto-cycle"),
@@ -79,10 +81,13 @@ class RapsApp(App):
         Binding("q", "quit", "Quit"),
     ] + [Binding(str(i + 1), f"view_index({i})", v.title, show=False) for i, v in enumerate(VIEWS)]
 
-    def __init__(self, engine=None, builder=None, *, source=None, hz=4.0, cycle=None, autoshutdown=True):
+    def __init__(self, engine=None, builder=None, *, source=None, hz=4.0, cycle=None, autoshutdown=True,
+                 engine_factory=None):
         """
         `engine`/`builder` run a real simulation. Tests can instead pass `source`, an iterable of
         UISnapshots, which the worker feeds exactly as it would feed built snapshots.
+        `engine_factory() -> (engine, builder)` builds a fresh run for `<<` (a restarted `source`
+        is simply iterated again).
         """
         super().__init__()
         self.engine = engine
@@ -91,6 +96,10 @@ class RapsApp(App):
         self.hz = hz
         self.cycle = cycle
         self.autoshutdown = autoshutdown
+        self.engine_factory = engine_factory
+        self._run_id = 0            # bumped by a restart: the worker of an older run stops publishing
+        self._restarting = False
+        self._last_lt = 0.0         # monotonic time of the last `<`
         self.meta = builder.meta if builder is not None else None
         self.sim_error = None       # (exception, traceback text) if the simulation thread failed
         self.finished = False       # the simulation ran to completion
@@ -114,8 +123,7 @@ class RapsApp(App):
     def on_mount(self):
         self.set_interval(0.1, self._poll)
         # A daemon thread rather than a Textual worker: quitting must never wait on the simulation
-        self._thread = threading.Thread(target=self._sim_worker, daemon=True, name="raps-sim")
-        self._thread.start()
+        self._start_worker()
         if self.meta is not None:
             self._build_views(self.meta)
 
@@ -129,7 +137,11 @@ class RapsApp(App):
         self._render_topbar()
 
     # -- simulation thread -------------------------------------------------------------------
-    def _sim_worker(self):
+    def _start_worker(self):
+        self._thread = threading.Thread(target=self._sim_worker, args=(self._run_id,), daemon=True, name="raps-sim")
+        self._thread.start()
+
+    def _sim_worker(self, run_id):
         interval = 1.0 / self.hz
         last_tick = None
         try:
@@ -137,7 +149,7 @@ class RapsApp(App):
             stream = self.source if self.source is not None else self.engine.run_simulation(
                 autoshutdown=self.autoshutdown)
             for item in stream:
-                if self._stop.is_set():
+                if self._stop.is_set() or self._run_id != run_id:
                     break
                 last_tick = item
                 now = time.monotonic()
@@ -145,11 +157,13 @@ class RapsApp(App):
                     self._publish(item)
                     next_due = now + interval
             else:
-                if last_tick is not None:
-                    self._publish(last_tick)  # make sure the final state is shown
-                self.finished = True
+                if self._run_id == run_id:
+                    if last_tick is not None:
+                        self._publish(last_tick)  # make sure the final state is shown
+                    self.finished = True
         except Exception as exc:
-            self.sim_error = (exc, traceback.format_exc())
+            if self._run_id == run_id:
+                self.sim_error = (exc, traceback.format_exc())
 
     def _publish(self, item):
         snap = self.builder.build(item) if self.builder is not None else item
@@ -258,6 +272,46 @@ class RapsApp(App):
     def action_slower(self):
         if self.sim_state is not None:
             self.sim_state.slow_down()
+
+    def action_restart_key(self):
+        """`<<`: restart the simulation from the beginning, without leaving the console."""
+        now = time.monotonic()
+        if now - self._last_lt < 0.6:
+            self._last_lt = 0.0
+            self.restart()
+        else:
+            self._last_lt = now
+            self.notify("press < again to restart the simulation", timeout=1.5)
+
+    def restart(self):
+        if self._restarting:
+            return
+        if self.engine_factory is None and self.source is None:
+            self.notify("this run cannot be restarted", severity="warning")
+            return
+        self._restarting = True
+        self._run_id += 1   # the running worker stops at its next tick
+        state = self.sim_state
+        if state is not None and state.is_paused():
+            state.toggle_pause()  # a paused engine never yields, so it could not notice
+        with self._lock:
+            self._latest = None
+        self._applied = None
+        self.finished, self.sim_error = False, None
+        self.notify("restarting the simulation …", timeout=3)
+        threading.Thread(target=self._restart_worker, args=(self._thread,), daemon=True, name="raps-restart").start()
+
+    def _restart_worker(self, old):
+        old.join(timeout=10)
+        try:
+            if self.engine_factory is not None:
+                self.engine, self.builder = self.engine_factory()
+                self.meta = self.builder.meta
+            self._start_worker()
+        except Exception as exc:
+            self.sim_error = (exc, traceback.format_exc())
+        finally:
+            self._restarting = False
 
     def action_reset_speed(self):
         if self.sim_state is not None:
