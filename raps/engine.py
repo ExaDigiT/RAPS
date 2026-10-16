@@ -91,14 +91,15 @@ class TickData:
 class SimulationState:
     NOTICE_SECONDS = 3.0
 
-    def __init__(self, time_delta):
+    def __init__(self, time_delta, target_rate=None):
         self.paused = False
         self.time_delta = time_delta
         self.initial_time_delta = time_delta  # speed the run started at, restored by reset_speed()
+        self.initial_target_rate = target_rate  # --speed; None = unthrottled
         self.lock = threading.Lock()
         self._notice = None
         self._notice_until = 0.0
-        self.target_rate = None   # wall-clock throttle in simulated s per real s; None = unthrottled
+        self.target_rate = target_rate   # wall-clock throttle in simulated s per real s; None = unthrottled
         self.free_rate = None     # unthrottled speed when the throttle was engaged
         self.measured_rate = None  # published by the UI
         self.pause_epoch = 0  # bumped on every pause/resume so the UI can reset its rate baseline
@@ -124,6 +125,8 @@ class SimulationState:
         with self.lock:
             if self.target_rate is not None:
                 # Climb back up the wall-clock throttle ladder before coarsening ticks
+                if self.free_rate is None:   # throttled from the start (--speed): use the measured speed
+                    self.free_rate = self.measured_rate
                 new = self.target_rate * 2
                 if self.free_rate is not None and new >= self.free_rate:
                     self.target_rate = None
@@ -160,11 +163,11 @@ class SimulationState:
     def reset_speed(self):
         """Back to the speed the run started at: original time step, no wall-clock throttle."""
         with self.lock:
-            if self.time_delta == self.initial_time_delta and self.target_rate is None:
+            if self.time_delta == self.initial_time_delta and self.target_rate == self.initial_target_rate:
                 self._set_notice(f"\u21ba  Already at start speed: \u0394t = {self.time_delta}x", "bold cyan")
                 return
             self.time_delta = self.initial_time_delta
-            self.target_rate = None
+            self.target_rate = self.initial_target_rate
             self.free_rate = None
             self._set_notice(f"\u21ba  RESET SPEED: \u0394t = {self.time_delta}x", "bold cyan")
 
@@ -339,6 +342,7 @@ class Engine:
         self.timestep_start = wd.telemetry_start
         self.timestep_end = wd.telemetry_end
         self.time_delta = time_delta
+        self.speed = sim_config.speed   # starting wall-clock throttle (simulated s per real s) or None
 
         self.down_nodes = summarize_ranges(self.config['DOWN_NODES'])
         self.resource_manager = ResourceManager(
@@ -887,7 +891,7 @@ class Engine:
         # Batch Jobs into 6h windows based on submit_time or twice the time_delta if larger
         batch_window = max(60 * 60 * 6, 2 * self.time_delta)  # at least 6h
 
-        sim_state = SimulationState(self.time_delta)
+        sim_state = SimulationState(self.time_delta, target_rate=self.speed)
         pace_deadline, pace_target = None, None
         self.sim_state = sim_state  # read by the UI for pause/speed banners
         # Keyboard controls (space/k: pause, l/+: faster, j/_: slower); needs an

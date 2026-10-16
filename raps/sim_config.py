@@ -22,6 +22,21 @@ from pydantic import model_validator, Field, BeforeValidator, ConfigDict
 Distribution = Literal['uniform', 'weibull', 'normal']
 
 
+def parse_speed(value):
+    """'1x', '0.5x', '10', 2 -> a rate in simulated seconds per real second (None passes through)."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        value = value.strip().lower().removesuffix("x")
+    try:
+        rate = float(value)
+    except ValueError:
+        raise ValueError(f"invalid speed {value!r}: use a multiple of real time such as 1x or 0.5x")
+    if not rate >= 1 / 64:
+        raise ValueError("speed must be at least 1/64x")
+    return rate
+
+
 class SimConfig(RAPSBaseModel, abc.ABC):
     cooling: bool = False
     """ Include the FMU cooling model """
@@ -60,6 +75,11 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """
     Step size for the power simulation (default seconds).
     Can pass a string like 15s, 1m, 1h, 1ms
+    """
+    speed: A[float | None, BeforeValidator(parse_speed)] = None
+    """
+    Start throttled to this multiple of real time, e.g. 1x (real time), 0.5x, 10x. Default: unthrottled.
+    In the console j/l still change it and 0 returns to it. Independent of --time-delta (the step size).
     """
     time_unit: A[timedelta, BeforeValidator(parse_time_unit)] = timedelta(seconds=1)
     """
