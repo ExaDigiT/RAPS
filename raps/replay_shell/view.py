@@ -1,7 +1,8 @@
 """The shell as a tab of the simulation console (``RapsApp``), shown with ``raps run --shell``."""
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.widgets import Input, RichLog
+from textual.containers import Horizontal
+from textual.widgets import Input, Label, RichLog
 
 from raps.ui.views.base import View
 
@@ -11,7 +12,9 @@ class ShellView(View):
     title = "Shell"
     DEFAULT_CSS = """
     ShellView #rs-log { height: 1fr; border: round $primary-darken-2; padding: 0 1; }
-    ShellView #rs-input { dock: bottom; border: tall $accent; }
+    ShellView #rs-bar { dock: bottom; height: 3; border: tall $accent; }
+    ShellView #rs-prompt { width: auto; padding: 0 1 0 1; color: $accent; text-style: bold; }
+    ShellView #rs-input { border: none; height: 1; padding: 0; width: 1fr; }
     """
 
     def __init__(self, shell, **kwargs):
@@ -22,13 +25,21 @@ class ShellView(View):
 
     def compose(self) -> ComposeResult:
         log = RichLog(id="rs-log", wrap=True, markup=False, highlight=False, max_lines=5000)
-        log.border_title = "simulated shell (nothing here touches the real machine)"
         yield log
-        yield Input(placeholder=self.shell.prompt + "(try: help)", id="rs-input")
+        with Horizontal(id="rs-bar"):
+            yield Label(self.shell.prompt, id="rs-prompt")
+            yield Input(placeholder="(try: help)", id="rs-input")
 
     def on_mount(self):
         self.query_one("#rs-log", RichLog).write(Text(
-            f"Sandbox: {self.shell.sandbox.root}\nsbatch/squeue/sinfo act on the simulation. Type help.", style="dim"))
+            f"~ is the sandbox: {self.shell.sandbox.root}\n"
+            "Put job scripts there from outside (or write them here with echo > file).\n"
+            "sbatch/squeue/sinfo act on the simulation, not the real machine. Type help.", style="dim"))
+        self._prompt_title()
+
+    def _prompt_title(self):
+        self.query_one("#rs-log", RichLog).border_title = "simulated shell (nothing here touches the real machine)"
+        self.query_one("#rs-prompt", Label).update(self.shell.prompt)
 
     def on_show(self):
         super().on_show()
@@ -42,6 +53,6 @@ class ShellView(View):
         result = self.shell.run(line)
         if result.output:
             log.write(Text(result.output.rstrip("\n")))
-        event.input.placeholder = self.shell.prompt
+        self._prompt_title()
         if result.exit:
             self.app.action_view_index(0)   # leave the tab; the other views keep running
