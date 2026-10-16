@@ -330,3 +330,32 @@ def test_job_detail_modal_opens_updates_and_shows_in_map():
         await pilot.press("escape")
         assert nm.focus_job is None
     run_app(make_meta(), check, size=(120, 50))
+
+
+def test_shell_tab_runs_commands():
+    """--shell adds a 7th tab with a prompt; commands run against the shell and show in the log."""
+    import tempfile
+    from raps.replay_shell import build_shell
+    from textual.widgets import Input, RichLog
+
+    async def go():
+        meta = make_meta()
+        with tempfile.TemporaryDirectory() as d:
+            shell = build_shell(None, d)
+            app = RapsApp(None, source=SlowSource(meta), hz=20, shell=shell)
+            async with app.run_test(size=(100, 30)) as pilot:
+                await pilot.pause(0.4)
+                assert active_view_ids(app)[-1] == "view-7"
+                await pilot.press("7")
+                await pilot.pause(0.2)
+                inp = app.query_one("#rs-input", Input)
+                inp.value = "echo hi > f && pwd"
+                await pilot.press("enter")
+                await pilot.pause(0.2)
+                inp.value = "ls"
+                await pilot.press("enter")
+                await pilot.pause(0.2)
+                text = "\n".join(line.text for line in app.query_one("#rs-log", RichLog).lines)
+                assert "$ ls" in text
+                await pilot.press("q")
+    asyncio.run(go())

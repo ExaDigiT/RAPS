@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Optional, List
 import dataclasses
 import pandas as pd
@@ -350,6 +351,9 @@ class Engine:
         # Initialize running and queue, etc.
         self.running = []
         self.queue = []
+        # Jobs handed in from another thread (the replay shell's sbatch); drained once per tick, see
+        # inject_job. A deque so that appending from the UI thread needs no lock.
+        self.injected_jobs = deque()
         self.accounts = accounts
         self.telemetry = telemetry
         self.job_history_dict = []
@@ -428,6 +432,24 @@ class Engine:
             telemetry_start=self.timestep_start, telemetry_end=self.timestep_end,
             start_date=self.start,
         )
+
+    def inject_job(self, job):
+        """Queue a job from outside the simulation thread; it enters self.queue at the next tick.
+
+        The caller builds the Job (submit_time is overwritten with the simulated time of arrival).
+        Used by raps.replay_shell; thread-safe.
+        """
+        self.injected_jobs.append(job)
+
+    def _drain_injected_jobs(self):
+        """Move jobs from inject_job into the queue at the current simulated time. True if any."""
+        n = 0
+        while self.injected_jobs:
+            job = self.injected_jobs.popleft()
+            job.submit_time = self.current_timestep
+            self.queue.append(job)
+            n += 1
+        return n > 0
 
     def add_running_jobs_to_queue(self, jobs_to_submit: List):
         """
@@ -911,6 +933,7 @@ class Engine:
 
             # 2. Identify eligible jobs and add them to the queue.
             has_new_additions = self.add_eligible_jobs_to_queue(jobs)
+            has_new_additions = self._drain_injected_jobs() or has_new_additions
             need_reschedule = need_reschedule or has_new_additions
 
             # 3. Schedule jobs that are now in the queue.

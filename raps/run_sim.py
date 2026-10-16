@@ -72,6 +72,9 @@ def run_sim(sim_config: SingleSimConfig):
     print(f"Simulation time delta: {engine.time_delta}{downscale_str} s,"
           f"Telemetry trace quanta: {jobs[0].trace_quanta}{downscale_str} s.")
     ui = resolve_ui(sim_config)
+    if sim_config.shell and ui != "textual":
+        print("--shell needs the textual UI (use --ui textual).", file=sys.stderr)
+        sys.exit(1)
     if ui == "textual":
         engine.keyboard_owner = False  # Textual owns stdin
         from raps.ui.app import RapsApp
@@ -80,8 +83,12 @@ def run_sim(sim_config: SingleSimConfig):
             e = Engine(sim_config)
             e.keyboard_owner = False
             return e, SnapshotBuilder(e, sim_config)
+        shell = None
+        if sim_config.shell:
+            from raps.replay_shell import build_shell
+            shell = build_shell(engine, sim_config.sandbox_dir)
         app = RapsApp(engine, SnapshotBuilder(engine, sim_config),
-                      hz=sim_config.ui_hz, cycle=sim_config.ui_cycle, engine_factory=new_run)
+                      hz=sim_config.ui_hz, cycle=sim_config.ui_cycle, engine_factory=new_run, shell=shell)
         app.run()
         engine = app.engine   # the last run, if it was restarted
         if app.sim_error is not None:

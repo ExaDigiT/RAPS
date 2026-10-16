@@ -35,6 +35,7 @@ HELP_TEXT = """\
 
 [b]Views[/b]
   1-6          Overview, Jobs, Node Map, Power, Cooling, Network
+  7            Shell (only with --shell): simulated sbatch/squeue/sinfo
   tab / S-tab  next / previous view (only views with data are shown)
   a            auto-cycle views (period set with --ui-cycle SECONDS)
 
@@ -79,10 +80,11 @@ class RapsApp(App):
         Binding("a", "toggle_cycle", "Auto-cycle"),
         Binding("question_mark", "help", "Help"),
         Binding("q", "quit", "Quit"),
-    ] + [Binding(str(i + 1), f"view_index({i})", v.title, show=False) for i, v in enumerate(VIEWS)]
+    ] + [Binding(str(i + 1), f"view_index({i})", v.title, show=False) for i, v in enumerate(VIEWS)] + [
+        Binding("7", "view_index(6)", "Shell", show=False)]   # only does something with --shell
 
     def __init__(self, engine=None, builder=None, *, source=None, hz=4.0, cycle=None, autoshutdown=True,
-                 engine_factory=None):
+                 engine_factory=None, shell=None):
         """
         `engine`/`builder` run a real simulation. Tests can instead pass `source`, an iterable of
         UISnapshots, which the worker feeds exactly as it would feed built snapshots.
@@ -97,6 +99,7 @@ class RapsApp(App):
         self.cycle = cycle
         self.autoshutdown = autoshutdown
         self.engine_factory = engine_factory
+        self.shell = shell          # a raps.replay_shell.ReplayShell: adds the Shell tab (key 7)
         self._run_id = 0            # bumped by a restart: the worker of an older run stops publishing
         self._restarting = False
         self._last_lt = 0.0         # monotonic time of the last `<`
@@ -129,7 +132,12 @@ class RapsApp(App):
 
     def _build_views(self, meta):
         self._active = [v for v in VIEWS if v.applies(meta)]
-        switcher = ContentSwitcher(*[v(id=f"view-{v.view_key}") for v in self._active], id="views",
+        views = [v(id=f"view-{v.view_key}") for v in self._active]
+        if self.shell is not None:
+            from raps.replay_shell.view import ShellView
+            self._active.append(ShellView)
+            views.append(ShellView(self.shell, id=f"view-{ShellView.view_key}"))
+        switcher = ContentSwitcher(*views, id="views",
                                    initial=f"view-{self._active[0].view_key}")
         self.query_one("#views-placeholder").remove()
         self.mount(switcher, before=self.query_one("#statusbar"))
@@ -307,6 +315,8 @@ class RapsApp(App):
             if self.engine_factory is not None:
                 self.engine, self.builder = self.engine_factory()
                 self.meta = self.builder.meta
+                if self.shell is not None and self.shell.adapter is not None:
+                    self.shell.adapter.engine = self.engine   # the shell follows the restarted run
             self._start_worker()
         except Exception as exc:
             self.sim_error = (exc, traceback.format_exc())
@@ -334,7 +344,7 @@ class RapsApp(App):
     def action_view_index(self, i: int):
         """Key `n` selects the view whose key is n, if that view applies to this run."""
         for pos, v in enumerate(self._active):
-            if v is VIEWS[i]:
+            if v.view_key == str(i + 1):
                 self._show(pos)
                 return
 

@@ -146,6 +146,13 @@ class SimConfig(RAPSBaseModel, abc.ABC):
     """ Maximum Textual UI updates per real second """
     ui_cycle: A[float, Field(gt=0)] | None = None
     """ Auto-cycle the Textual UI through its views every this many seconds """
+    shell: bool = False
+    """
+    Add a Shell tab to the Textual console: sbatch/squeue/sinfo act on the simulation, with files in a
+    sandbox directory (see raps/replay_shell/README.md). Needs the textual UI.
+    """
+    sandbox_dir: ResolvedPath | None = None
+    """ Directory the shell is confined to (default ~/.raps/sandbox) """
     plot: list[Literal["power", "loss", "pue", "temp", "util", "net"]] | None = None
     """ Plots to generate """
 
