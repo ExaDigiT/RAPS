@@ -165,7 +165,8 @@ def test_help_and_exit(shell):
         assert name in out
     assert "sbatch [" in run(shell, "help sbatch")[0]
     assert run(shell, "help nope")[1] == 1
-    assert shell.run("exit").exit
+    assert shell.run("exit").exit and not shell.run("exit").quit
+    assert shell.run("quit").quit and shell.run("quit").exit
 
 
 def test_command_without_simulation(box):

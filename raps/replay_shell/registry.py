@@ -57,11 +57,16 @@ class ExitShell(Exception):
     """Raised by ``exit`` to end the session."""
 
 
+class QuitConsole(ExitShell):
+    """Raised by ``quit``: end the session and ask the host (the RAPS console) to quit too."""
+
+
 @dataclass
 class Result:
     output: str = ""
     status: int = 0
     exit: bool = False
+    quit: bool = False   # also quit the console
 
 
 @dataclass
@@ -120,11 +125,11 @@ class ReplayShell:
         if cmd is None:
             return Result(f"{words[0]}: command not found (try help)\n", 127)
         ctx = Context(self.sandbox, self.adapter, self.registry)
-        status, leave = 0, False
+        status, leave, quit_ = 0, False, False
         try:
             status = cmd.handler(ctx, words[1:]) or 0
-        except ExitShell:
-            leave = True
+        except ExitShell as exc:
+            leave, quit_ = True, isinstance(exc, QuitConsole)
         except (CommandError, SandboxError) as exc:
             ctx.err(f"{words[0]}: {exc}")
             status = 1
@@ -144,4 +149,4 @@ class ReplayShell:
                 ctx.err(f"shell: {exc}")
                 status = 1
         err = "".join(s if s.endswith("\n") else s + "\n" for s in ctx._err)
-        return Result(out + err, status, leave)
+        return Result(out + err, status, leave, quit_)

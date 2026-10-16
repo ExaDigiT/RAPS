@@ -368,5 +368,12 @@ def test_shell_tab_runs_commands():
                 await pilot.pause(0.2)
                 assert app.query_one("#rs-input", Input).value == ""
                 assert active_view_ids(app)[app._current] == "view-1"
-                await pilot.press("q")
+                await pilot.press("7")
+                await pilot.pause(0.2)
+                inp = app.query_one("#rs-input", Input)
+                inp.focus()
+                inp.value = "quit"
+                await pilot.press("enter")
+                await pilot.pause(0.3)
+                assert not app.is_running
     asyncio.run(go())

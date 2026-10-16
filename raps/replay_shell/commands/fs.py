@@ -3,7 +3,7 @@
 TODO(intern): touch, rm (-r), cp, mv, head, tail, wc, grep, a tiny line editor (``edit job.sh``) or a
 Textual TextArea screen for writing job scripts, and ``ls -l`` sizes/mtimes.
 """
-from raps.replay_shell.registry import CommandError, ExitShell
+from raps.replay_shell.registry import CommandError, ExitShell, QuitConsole
 
 
 def _pwd(ctx, args):
@@ -80,6 +80,10 @@ def _exit(ctx, args):
     raise ExitShell
 
 
+def _quit(ctx, args):
+    raise QuitConsole
+
+
 def register_all(r):
     r.register("pwd", "print the working directory (~ is the sandbox root)", "pwd")(_pwd)
     r.register("cd", "change directory inside the sandbox", "cd [dir]")(_cd)
@@ -88,4 +92,5 @@ def register_all(r):
     r.register("mkdir", "make directories", "mkdir [-p] dir ...")(_mkdir)
     r.register("echo", "print text (use > file or >> file to write a script)", "echo text ...")(_echo)
     r.register("help", "list commands, or describe one", "help [command]")(_help)
-    r.register("exit", "leave the shell", "exit")(_exit)
+    r.register("exit", "leave the shell tab (the simulation keeps running)", "exit")(_exit)
+    r.register("quit", "quit RAPS (same as q outside the prompt)", "quit")(_quit)

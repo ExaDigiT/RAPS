@@ -62,7 +62,7 @@ class ShellView(View):
         super().on_show()
         self.query_one("#rs-input", Input).focus()
 
-    def on_input_submitted(self, event):
+    async def on_input_submitted(self, event):
         line = event.value
         event.input.value = ""
         log = self.query_one("#rs-log", RichLog)
@@ -71,5 +71,7 @@ class ShellView(View):
         if result.output:
             log.write(Text(result.output.rstrip("\n")))
         self._prompt_title()
-        if result.exit:
+        if result.quit:
+            await self.app.action_quit()   # same path as pressing q (stops the run)
+        elif result.exit:
             self.app.action_view_index(0)   # leave the tab; the other views keep running
