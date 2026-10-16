@@ -259,3 +259,16 @@ def test_sbatch_into_a_real_engine(tmp_path):
     job = next(j for j in list(engine.running) + list(engine.queue) if j.id == job_id)
     assert job.name == "hello" and job.submit_time == 0 and job.nodes_required == 2
     assert not engine.injected_jobs
+
+
+def test_default_job_script_is_seeded_and_submittable(tmp_path):
+    from raps.replay_shell import build_shell
+    from raps.replay_shell.jobscript import parse_job_script
+    shell = build_shell(None, tmp_path)
+    script = (tmp_path / "job.sh").read_text()
+    spec = parse_job_script(script)
+    assert spec.nodes == 4 and spec.runtime == 600
+    (tmp_path / "job.sh").write_text("edited")
+    build_shell(None, tmp_path)
+    assert (tmp_path / "job.sh").read_text() == "edited"
+    assert "job.sh" in shell.run("ls").output
