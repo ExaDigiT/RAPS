@@ -357,5 +357,16 @@ def test_shell_tab_runs_commands():
                 await pilot.pause(0.2)
                 text = "\n".join(line.text for line in app.query_one("#rs-log", RichLog).lines)
                 assert "$ ls" in text
+                # escape leaves the prompt; a digit on an empty prompt switches view
+                await pilot.press("escape")
+                await pilot.pause(0.1)
+                assert app.focused is None
+                await pilot.press("7")
+                await pilot.pause(0.2)
+                app.query_one("#rs-input", Input).focus()
+                await pilot.press("1")
+                await pilot.pause(0.2)
+                assert app.query_one("#rs-input", Input).value == ""
+                assert active_view_ids(app)[app._current] == "view-1"
                 await pilot.press("q")
     asyncio.run(go())

@@ -1,10 +1,27 @@
 """The shell as a tab of the simulation console (``RapsApp``), shown with ``raps run --shell``."""
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Input, Label, RichLog
 
 from raps.ui.views.base import View
+
+
+class ShellInput(Input):
+    """The prompt. Escape leaves it (so the console keys work again); a digit typed into an empty prompt
+    jumps to that tab, like the Shell tab in raps/live. Tab and Shift-Tab always switch views."""
+
+    BINDINGS = [Binding("escape", "leave", "Leave prompt", show=False)]
+
+    def action_leave(self):
+        self.screen.set_focus(None)
+
+    def on_key(self, event):
+        if not self.value and event.character and event.character in "123456":
+            event.stop()
+            event.prevent_default()   # keeps Input from inserting the digit
+            self.app.action_view_index(int(event.character) - 1)
 
 
 class ShellView(View):
@@ -28,7 +45,7 @@ class ShellView(View):
         yield log
         with Horizontal(id="rs-bar"):
             yield Label(self.shell.prompt, id="rs-prompt")
-            yield Input(placeholder="(try: help)", id="rs-input")
+            yield ShellInput(placeholder="(try: help; esc leaves the prompt, 1-6 or tab switch view)", id="rs-input")
 
     def on_mount(self):
         self.query_one("#rs-log", RichLog).write(Text(

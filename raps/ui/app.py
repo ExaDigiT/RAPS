@@ -35,7 +35,8 @@ HELP_TEXT = """\
 
 [b]Views[/b]
   1-6          Overview, Jobs, Node Map, Power, Cooling, Network
-  7            Shell (only with --shell): simulated sbatch/squeue/sinfo
+  7            Shell (only with --shell): simulated sbatch/squeue/sinfo; esc leaves the prompt
+               (then the keys above work again), or press 1-6 / tab on an empty prompt
   tab / S-tab  next / previous view (only views with data are shown)
   a            auto-cycle views (period set with --ui-cycle SECONDS)
 
