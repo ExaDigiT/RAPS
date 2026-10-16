@@ -2,85 +2,62 @@
 Simulated Slurm commands. They act on the simulation through ``ctx.adapter`` (a ``SimAdapter``); nothing
 runs on the real machine and no real Slurm binary is called.
 
-Done: ``sbatch`` (script directives -> queued job), ``squeue`` (simulated queue), ``sinfo`` (node counts).
-Stubs for the intern: ``scancel``, ``sacct``, ``srun`` (and the TODOs inside the others).
+All of these are stubs for the intern (see README.md for the task list and recommended order):
+``sbatch``, ``squeue``, ``sinfo``, ``scancel``, ``sacct``, ``srun``. The shell prints "not implemented yet"
+when a handler raises ``NotImplementedError``. The pieces they build on already exist: ``jobscript.py``
+(directive parsing), ``Engine.inject_job`` (thread-safe queueing) and the ``SimAdapter`` interface.
 """
-from raps.replay_shell.jobscript import apply_option, parse_job_script
 from raps.replay_shell.registry import CommandError
-from raps.utils import convert_seconds_to_hhmmss
 
 
 def _sbatch(ctx, args):
     """sbatch [--runtime T] [-N n] [-t T] [-J name] script
 
-    Reads the script from the sandbox, takes its ``#SBATCH`` directives, lets options on the command line
-    override them (as real sbatch does) and queues the job at the current simulated time.
+    Read the script from the sandbox, take its ``#SBATCH`` directives, let options on the command line
+    override them (as real sbatch does) and queue the job at the current simulated time.
 
-    TODO(intern): more options on the command line (everything jobscript.apply_option knows already
-    works after the flag parsing below is generalised), ``--wrap="cmd"``, ``--test-only``, and
-    printing the warnings in ``spec.ignored`` ("sbatch: ignoring unsupported option --gres").
+    TODO(intern):
+      1. Parse the arguments: options with values (``-N 4``, ``--nodes=4``) and one script name. Raise
+         ``CommandError("usage: sbatch [options] script")`` without a script.
+      2. ``spec = jobscript.parse_job_script(text)``, then ``jobscript.apply_option(spec, key, value)`` for each
+         command-line option (it returns False for options it does not know; report those as errors).
+         ``ValueError`` from the parser should become a ``CommandError``.
+      3. Fall back to the script's file name for the job name; reject non-positive nodes or time limit.
+      4. ``job_id = adapter.submit(spec)`` (see ``EngineAdapter.submit``), then print
+         ``Submitted batch job <id>``.
+      5. Later: --wrap, --test-only, and a warning for each directive in ``spec.ignored``.
     """
-    adapter = ctx.need_sim()
-    opts, script, i = [], None, 0
-    while i < len(args):
-        a = args[i]
-        if a.startswith("--") and "=" in a:
-            opts.append((a[2:].split("=", 1)[0], a.split("=", 1)[1]))
-        elif a in ("-N", "-t", "-J", "-A", "-p", "--nodes", "--time", "--job-name", "--account",
-                   "--partition", "--runtime"):
-            if i + 1 >= len(args):
-                raise CommandError(f"option {a} needs a value")
-            opts.append(({"-N": "nodes", "-t": "time", "-J": "job-name", "-A": "account",
-                          "-p": "partition"}.get(a, a.lstrip("-")), args[i + 1]))
-            i += 1
-        elif a.startswith("-"):
-            raise CommandError(f"unsupported option {a}")
-        else:
-            script = a
-        i += 1
+    ctx.need_sim()
+    script = next((a for a in args if not a.startswith("-")), None)
     if script is None:
         raise CommandError("usage: sbatch [options] script")
-    real = ctx.sandbox.resolve(script)
+    real = ctx.sandbox.resolve(script)   # keep this: it is the sandbox check for the script path
     if not real.is_file():
         raise CommandError(f"{script}: no such file")
-    try:
-        spec = parse_job_script(real.read_text(errors="replace"))
-        for key, value in opts:
-            if not apply_option(spec, key, value):
-                raise CommandError(f"unsupported option --{key}")
-    except ValueError as exc:
-        raise CommandError(str(exc))
-    if spec.name == "sbatch":
-        spec.name = real.name
-    if spec.nodes < 1 or spec.time_limit < 1:
-        raise CommandError("invalid job request: nodes and time limit must be positive")
-    job_id = adapter.submit(spec)
-    ctx.out(f"Submitted batch job {job_id}")
+    raise NotImplementedError("see the TODO in _sbatch")
 
 
 def _squeue(ctx, args):
     """squeue: the simulated queue (running first, then pending).
 
-    TODO(intern): -u/--user, -j <id>, -t <states>, -o format strings, --start (use the scheduler's
-    expected start), sorting by priority, and the REASON column.
+    TODO(intern): ``adapter.queue()`` returns ``JobInfo`` records (adapter.py); print a Slurm-like table:
+    JOBID NAME ACCOUNT ST NODES TIME TIME_LIMIT (``raps.utils.convert_seconds_to_hhmmss`` for the times).
+    Then -u/--user, -j <id>, -t <states>, -o format strings, --start (expected start from the scheduler),
+    sorting by priority, and the REASON column.
     """
-    adapter = ctx.need_sim()
-    ctx.out(f"{'JOBID':>8} {'NAME':<16} {'ACCOUNT':<10} {'ST':<3} {'NODES':>6} {'TIME':>10} {'TIME_LIMIT':>10}")
-    for j in adapter.queue():
-        ctx.out(f"{j.id:>8} {j.name[:16]:<16} {j.account[:10]:<10} {j.state:<3} {j.nodes:>6} "
-                f"{convert_seconds_to_hhmmss(j.elapsed):>10} {convert_seconds_to_hhmmss(j.time_limit):>10}")
+    ctx.need_sim()
+    raise NotImplementedError("see the TODO in _squeue")
 
 
 def _sinfo(ctx, args):
     """sinfo: node counts by state for the simulated machine.
 
-    TODO(intern): per-partition rows, a node list (``-N``), ``-o`` formats, and a draining/reserved state.
+    TODO(intern): ``adapter.nodes()`` returns a ``NodeSummary`` (allocated, idle, down, total); print a
+    table of states. Then per-partition rows, a node list (``-N``), ``-o`` formats, and a draining/reserved
+    state.
     """
-    n = ctx.need_sim().nodes()
-    ctx.out(f"{'STATE':<10} {'NODES':>6}")
-    for state, count in (("allocated", n.allocated), ("idle", n.idle), ("down", n.down)):
-        ctx.out(f"{state:<10} {count:>6}")
-    ctx.out(f"{'total':<10} {n.total:>6}")
+    ctx.need_sim()
+    raise NotImplementedError("see the TODO in _sinfo")
 
 
 def _scancel(ctx, args):
@@ -112,10 +89,10 @@ def _srun(ctx, args):
 
 
 def register_all(r):
-    r.register("sbatch", "submit a job script to the simulated queue", "sbatch [-N n] [-t time] [-J name] "
-               "[--runtime time] script")(_sbatch)
-    r.register("squeue", "show the simulated queue", "squeue")(_squeue)
-    r.register("sinfo", "show simulated node states", "sinfo")(_sinfo)
+    r.register("sbatch", "submit a job script to the simulated queue (not implemented)",
+               "sbatch [-N n] [-t time] [-J name] [--runtime time] script")(_sbatch)
+    r.register("squeue", "show the simulated queue (not implemented)", "squeue")(_squeue)
+    r.register("sinfo", "show simulated node states (not implemented)", "sinfo")(_sinfo)
     r.register("scancel", "cancel a simulated job (not implemented)", "scancel jobid ...")(_scancel)
     r.register("sacct", "show finished simulated jobs (not implemented)", "sacct")(_sacct)
     r.register("srun", "run a command on the simulated machine (not implemented)", "srun [options] command")(_srun)

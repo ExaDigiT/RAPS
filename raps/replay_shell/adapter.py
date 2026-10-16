@@ -11,7 +11,7 @@ Rules for adapter methods:
 """
 from dataclasses import dataclass
 
-from raps.job import Job, JobState, job_dict
+from raps.job import JobState
 from raps.replay_shell.jobscript import JobSpec
 
 
@@ -87,39 +87,32 @@ class EngineAdapter(SimAdapter):
     def now(self):
         return int(self.engine.current_timestep)
 
-    def _next_id(self):
-        # Replayed telemetry ids can be anything; stay above every id the engine has seen.
-        e = self.engine
-        ids = [j.id for j in list(e.jobs) + list(e.queue) + list(e.running) if isinstance(j.id, int)]
-        floor = max([Job._id_counter] + ids)
-        Job._id_counter = floor + 1
-        return Job._id_counter
-
     def submit(self, spec):
-        """Build a Job from the spec and hand it to ``Engine.inject_job``.
+        """TODO(intern): build a ``Job`` from the spec and hand it to ``Engine.inject_job`` (already
+        implemented: thread-safe, drained once per tick in ``run_simulation``). Return the job id.
 
-        The job runs for ``spec.runtime`` (default: its time limit) at a constant utilisation, as a
-        synthetic job would (compare ``raps.workloads`` and ``raps.live.twin.raps_job``).
+        Suggested shape: ``Job(job_dict(nodes_required=spec.nodes, name=spec.name, account=spec.account,
+        id=<fresh id>, cpu_trace=spec.cpu_util, gpu_trace=spec.gpu_util, ntx_trace=0, nrx_trace=0,
+        submit_time=self.now(), time_limit=spec.time_limit, start_time=None, end_time=None,
+        expected_run_time=<spec.runtime or spec.time_limit>, scheduled_nodes=[]))``; compare
+        ``raps.workloads`` and ``raps.live.twin.raps_job``. Replayed telemetry ids can be anything, so pick an
+        id above every id in ``engine.jobs``, ``queue`` and ``running`` (and ``Job._id_counter``).
 
-        TODO(intern): (1) under the replay policy the scheduler honours recorded start times and a
-        job with start_time=None may never start; check ``Engine.prepare_system_state`` and
-        ``raps/schedulers`` and make injected jobs schedule like a normal policy would. (2) The engine's
-        autoshutdown stops the run when the queue is empty, which can end the simulation before an
-        injected job is seen; keep it alive while the shell is open. (3) Times are in engine seconds;
-        check ``--downscale`` and ``time_delta`` handling. (4) ``spec.partition``/``account`` are unused.
+        Then (these are the hard parts, see README tasks 1 and 2): (1) under the replay policy the
+        scheduler honours recorded start times and a job with start_time=None may never start; check
+        ``Engine.prepare_system_state`` and ``raps/schedulers`` and make injected jobs schedule like a
+        normal policy would. (2) The engine's autoshutdown stops the run when the queue is empty, which can
+        end the simulation before an injected job is seen; keep it alive while the shell is open.
+        (3) Times are in engine seconds; check ``--downscale`` and ``time_delta`` handling.
+        (4) ``spec.partition``/``account`` are unused so far.
         """
-        runtime = spec.runtime if spec.runtime is not None else spec.time_limit
-        job = Job(job_dict(
-            nodes_required=spec.nodes, name=spec.name, account=spec.account, id=self._next_id(),
-            cpu_trace=spec.cpu_util, gpu_trace=spec.gpu_util, ntx_trace=0, nrx_trace=0,
-            submit_time=self.now(), time_limit=spec.time_limit, start_time=None, end_time=None,
-            expected_run_time=runtime, scheduled_nodes=[]))
-        self.engine.inject_job(job)
-        return job.id
+        raise NotImplementedError
 
     def queue(self):
-        e = self.engine
-        return [job_info(j) for j in list(e.running) + list(e.queue) + list(e.injected_jobs)]
+        """TODO(intern): ``[job_info(j) for j in list(e.running) + list(e.queue) + list(e.injected_jobs)]``
+        (copy the lists first: the engine thread mutates them). Include ``injected_jobs`` so a job shows up
+        in squeue before the next tick."""
+        raise NotImplementedError
 
     def finished(self):
         """TODO(intern): ``engine.job_history_dict`` holds ``JobStatistics.__dict__`` rows (raps/job.py)
@@ -136,8 +129,6 @@ class EngineAdapter(SimAdapter):
         raise NotImplementedError
 
     def nodes(self):
-        e = self.engine
-        total = int(e.config["TOTAL_NODES"])
-        down = len(e.resource_manager.down_nodes)
-        idle = len(e.resource_manager.available_nodes)
-        return NodeSummary(total=total, allocated=max(total - down - idle, 0), idle=idle, down=down)
+        """TODO(intern): build a ``NodeSummary`` from ``engine.config["TOTAL_NODES"]`` and
+        ``engine.resource_manager`` (``down_nodes``, ``available_nodes``); allocated is what is left."""
+        raise NotImplementedError

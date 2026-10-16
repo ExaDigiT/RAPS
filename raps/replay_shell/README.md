@@ -7,19 +7,20 @@ It is the replay-side counterpart of the Shell tab in `raps/live/` (where comman
 ## Try it
 
     raps run --system 40frontiers --ui textual --shell        # press 7 for the Shell tab
-    raps run ... --shell --sandbox-dir /some/dir              # default: ~/.raps/sandbox
+    raps run ... --shell --sandbox-dir /some/dir              # default: ~/.raps/sandbox (job.sh is seeded there)
 
-In the tab:
+In the tab, the file commands work today (`pwd cd ls cat mkdir echo`, `>` and `>>`, `help`, `exit`). The
+Slurm commands (`sbatch squeue sinfo scancel sacct srun`) are **stubs** that print "not implemented yet";
+implementing them is the project. The finished `sbatch demo` flow should look like this:
 
-    echo "#SBATCH -N 4 -t 30:00 -J demo" > demo.sh
-    sbatch demo.sh            # Submitted batch job N, appears in squeue and the Jobs tab
+    sbatch job.sh             # Submitted batch job N, appears in squeue and the Jobs tab
     squeue
     sinfo
-    help
 
-`sbatch --runtime 10:00 demo.sh` (or `#RAPS --runtime=10:00` in the script) sets how long the simulated job
-runs; by default it runs for its whole time limit. Tests: `tests/unit/test_replay_shell.py` and
-`test_shell_tab_runs_commands` in `tests/test_ui_app.py`.
+Tests: `tests/unit/test_replay_shell.py` (the stubs have strict xfail tests: when you implement one, the
+test starts failing with XPASS; remove its marker) and `test_shell_tab_runs_commands` in `tests/test_ui_app.py`.
+A first working version of `sbatch`, `squeue`, `sinfo` and `EngineAdapter.submit/queue/nodes` exists in git
+history (commit bc4017a on this branch) if you get stuck, but try the TODO notes first.
 
 ## Design
 
@@ -45,15 +46,18 @@ Rules that keep it safe and testable:
 
 - Sandbox with confinement and tests.
 - Registry, dispatcher, redirection; `pwd cd ls cat mkdir echo help exit`.
-- `#SBATCH` parsing (`-N/--nodes`, `-t/--time`, `-J/--job-name`, `-A`, `-p`, plus `--runtime`).
-- `sbatch` end to end: builds a `Job` and queues it at the current simulated time (tested on a real Engine).
-- `squeue`, `sinfo` (basic tables).
+- `#SBATCH` / `#RAPS` directive parsing (jobscript.py: `-N/--nodes`, `-t/--time`, `-J/--job-name`, `-A`, `-p`, plus
+  `--runtime`) and the example `job.sh` seeded into the sandbox.
 - Integration: `--shell` and `--sandbox-dir` flags on `raps run` (sim_config.py, run_sim.py), tab 7 in
   `raps/ui/app.py`, `Engine.inject_job` hook (engine.py, drained once per tick in `run_simulation`).
   The shell follows `<<` restarts (`_restart_worker` repoints the adapter).
+- Stubs with TODO notes: all six Slurm handlers (commands/slurm.py) and `EngineAdapter.submit/queue/nodes/
+  finished/cancel` (adapter.py). `sbatch` already does its argument and sandbox path checks.
 
 ## Task list for the intern (most valuable first)
 
+0. **Implement `sbatch`, `squeue`, `sinfo`** (handlers plus `EngineAdapter.submit/queue/nodes`). The TODO
+   notes spell out the steps; start with `squeue` and `sinfo` (read-only, easy to see working), then `sbatch`.
 1. **Make injected jobs schedule correctly in every policy** (`EngineAdapter.submit`). With the replay policy
    (`PolicyType.REPLAY`) the scheduler may expect recorded start times; check `Engine.prepare_system_state`,
    `raps/schedulers/` and confirm an `sbatch` job starts when nodes are free. Add a test with a replayed

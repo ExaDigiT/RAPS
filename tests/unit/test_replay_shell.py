@@ -196,6 +196,7 @@ def test_parse_job_script_defaults_and_nodes_range():
     assert parse_job_script("#SBATCH --nodes=2-4\n").nodes == 2
 
 
+@pytest.mark.xfail(reason="TODO(intern): sbatch", strict=True)
 def test_sbatch_submits_spec(shell):
     run(shell, "echo '#SBATCH -N 3 -t 30 -J mine' > j.sh")
     out, status = run(shell, "sbatch j.sh")
@@ -207,16 +208,27 @@ def test_sbatch_submits_spec(shell):
     assert (spec.nodes, spec.time_limit, spec.runtime) == (8, 1800, 300)
 
 
-def test_sbatch_errors(shell):
+def test_sbatch_argument_errors(shell):
+    """The stub already does the argument and sandbox checks; keep them when implementing sbatch."""
     assert run(shell, "sbatch")[1] == 1
-    assert run(shell, "sbatch missing.sh")[1] == 1
-    run(shell, "echo '#SBATCH -t xx' > bad.sh")
-    assert run(shell, "sbatch bad.sh")[1] == 1
-    run(shell, "echo hi > ok.sh")
-    assert run(shell, "sbatch --bogus ok.sh")[1] == 1
+    assert "usage" in run(shell, "sbatch")[0]
+    out, status = run(shell, "sbatch missing.sh")
+    assert status == 1 and "no such file" in out
     assert shell.adapter.specs == []
 
 
+@pytest.mark.xfail(reason="TODO(intern): sbatch", strict=True)
+def test_sbatch_bad_input(shell):
+    run(shell, "echo '#SBATCH -t xx' > bad.sh")
+    out, status = run(shell, "sbatch bad.sh")
+    assert status == 1 and "not implemented" not in out
+    run(shell, "echo hi > ok.sh")
+    out, status = run(shell, "sbatch --bogus ok.sh")
+    assert status == 1 and "not implemented" not in out
+    assert shell.adapter.specs == []
+
+
+@pytest.mark.xfail(reason="TODO(intern): squeue", strict=True)
 def test_squeue_and_sinfo(shell):
     out, _ = run(shell, "squeue")
     assert "JOBID" in out and "job" in out and "0:10:00" in out
@@ -243,6 +255,7 @@ def test_srun(shell):
 
 # -- against a real engine ------------------------------------------------------------------------
 
+@pytest.mark.xfail(reason="TODO(intern): sbatch", strict=True)
 def test_sbatch_into_a_real_engine(tmp_path):
     from raps.engine import Engine
     from raps.sim_config import SingleSimConfig
